@@ -58,6 +58,9 @@ def cmd_fetch(a):
     z.unlink()
     if p.get("voice_url") and a.voice:
         eio.download(p["voice_url"], work / "voice.wav", 50 * 1024 * 1024)
+        # WP11: the three selected reference clips sit beside voice.wav (voice/clips/); ref_clip picks one per language
+        for n, url in (p.get("voice_clip_urls") or {}).items():
+            eio.download(url, work / "clips" / f"clip{n}.wav", 20 * 1024 * 1024)
     if p.get("timing_url") and a.timing:
         eio.download(p["timing_url"], work / "timing_en.json", 5 * 1024 * 1024)
     load_bundle(work / "bundle")
@@ -134,6 +137,53 @@ def cmd_upload(a):
     return 0
 
 
+def cmd_voice_analyze(a):
+    import tempfile
+    from .voice import prepare as V
+    with tempfile.TemporaryDirectory() as t:
+        w = V.load_any(Path(a.file), Path(t))
+    r = V.analyze(w)
+    print(json.dumps({"verdict": r.verdict, "metrics": r.metrics, "reasons": r.reasons, "notes": r.notes}, indent=1))
+    return 0 if r.verdict != "RE_RECORD" else 1
+
+
+def cmd_voice_prepare(a):
+    """Local only. Writes ref.wav, clips/clip1..3.wav, qa.json (scalar metrics) under --out. Prints no audio data."""
+    import tempfile
+    from .voice import prepare as V
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as t:
+        raw = V.load_any(Path(a.file), Path(t))
+    qa = V.analyze(raw)
+    clean = V.preprocess(raw, sr=a.sr)
+    clean.save(out / "ref.wav")
+    clips = V.select_clips(clean)
+    V.write_clips(clean, clips, out / "clips")
+    (out / "qa.json").write_text(json.dumps({"verdict": qa.verdict, "metrics": qa.metrics, "reasons": qa.reasons,
+                                             "notes": qa.notes, "clips": clips}, indent=1))
+    print(f"verdict={qa.verdict} clips={len(clips)} out={out}")
+    for i, c in enumerate(clips, 1):
+        print(f"clip{i}: {c['start']}-{c['end']}s score={c['total']}")
+    return 0
+
+
+def cmd_voice_demo(a):
+    from .voice import demo as D
+    from .voice.narrate import narrate
+    idx = D.render_demo(Path(a.out), Path(a.refs) if a.refs else None, narrate,
+                        langs=a.langs.split(",") if a.langs else None, max_per_lang=a.max_per_lang)
+    print(f"demo written: {idx}")
+    return 0
+
+
+def cmd_voice_score(a):
+    from .voice import naturalness as N
+    from .audio import Wav
+    r = N.score(Wav.load(Path(a.file)))
+    print(json.dumps({"score": r.score, "passed": r.passed, "failures": r.failures, "metrics": r.metrics}, indent=1))
+    return 0 if r.passed else 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="ullaslab-engine")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -155,6 +205,11 @@ def main(argv=None) -> int:
     add("render", cmd_render, work=dict(required=True), variant=dict(default=None))
     add("qa", cmd_qa, work=dict(required=True), lang=dict(required=True), variant=dict(default=None), no_asr=dict(action="store_true"))
     add("upload", cmd_upload, payload=dict(required=True), work=dict(required=True), lang=dict(required=True))
+    add("voice-analyze", cmd_voice_analyze, file=dict(required=True))
+    add("voice-prepare", cmd_voice_prepare, file=dict(required=True), out=dict(required=True), sr=dict(type=int, default=24000))
+    add("voice-demo", cmd_voice_demo, out=dict(required=True), refs=dict(default=None), langs=dict(default=None),
+        max_per_lang=dict(type=int, default=None))
+    add("voice-score", cmd_voice_score, file=dict(required=True))
     a = ap.parse_args(argv)
     try:
         return a.fn(a) or 0

@@ -1,6 +1,6 @@
 """Audio helpers: Wav container, loudness normalisation (-14 LUFS), true peak, timeline assembly."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
 import pyloudnorm as pyln
@@ -17,6 +17,7 @@ class Wav:
     samples: np.ndarray  # float32 mono, shape (n,)
     sr: int
     engine: str | None = None  # which TTS engine produced it
+    flags: list = field(default_factory=list)  # QA flags (e.g. naturalness gate failures after one retry)
 
     @property
     def duration(self) -> float:

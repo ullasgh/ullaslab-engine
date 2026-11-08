@@ -111,3 +111,12 @@ def test_cli_rejects_bad_payload(tmp_path, capsys):
     f.write_text(json.dumps({"client_payload": payload(bundle_url="https://evil.example.com/x")}))
     assert cli.main(["plan", "--payload", str(f)]) == 2
     assert "evil" not in capsys.readouterr().err
+
+
+def test_voice_clip_urls_validated_and_masked():
+    clips = {"1": GOOD + "&c=1", "2": GOOD + "&c=2"}
+    eio.validate_payload(payload(voice_clip_urls=clips))
+    assert any("c=2" in l for l in eio.mask_lines(payload(voice_clip_urls=clips)))
+    for bad in ({"1": "https://169.254.169.254/x"}, {"9": GOOD}, ["x"]):
+        with pytest.raises(eio.TransferError):
+            eio.validate_payload(payload(voice_clip_urls=bad))

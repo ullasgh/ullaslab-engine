@@ -17,6 +17,7 @@ data, and it never will.** Inputs and outputs travel as presigned R2 URLs in a `
 | `src/ullaslab_engine/qa.py` | QA gates A1 to A5 plus duration from `config/quality.yaml`, writes numbers-only `qa.json` |
 | `.github/workflows/render.yml` | dispatch, TTS per language (matrix), render, QA, PUT |
 | `schema/` | JSON schemas for the bundle manifest and chart JSON |
+| `src/ullaslab_engine/voice/` | WP11 voice layer: recording QA and clip selection, number verbalisation, sentence-level narration, post-processing, naturalness gate, local demo (`docs/voice.md`) |
 | `config/` | vendored copies of `languages.yaml` and `quality.yaml` (thresholds are not secret); `safe_zones.json` |
 
 ## Quick start

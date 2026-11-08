@@ -31,6 +31,7 @@ class Engine(Protocol):
 
     def supports(self, lang: str) -> bool: ...
     def synth(self, text: str, lang: str, ref_wav: Path | None) -> Wav: ...
+    # Engines that set uses_settings = True also accept settings=<dict> (see voice/settings.py).
 
 
 _FACTORIES: dict[str, Callable[[], Engine]] = {}
@@ -75,7 +76,8 @@ def plan_engines(lang: str) -> list[str]:
     return [e for e in order if e and e != "none"]
 
 
-def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: bool = True, engine: str | None = None) -> Wav:
+def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: bool = True, engine: str | None = None,
+        settings: dict | None = None) -> Wav:
     """Synthesise text in lang. Clone engines use ref_wav; stock engines ignore it.
 
     Tries the primary engine then the fallback; raises NoVoiceAvailable when none works.
@@ -91,7 +93,7 @@ def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: b
                 raise EngineUnavailable(f"{name} does not support {lang}")
             if eng.clones_voice and ref is None:
                 raise EngineUnavailable(f"{name} needs a reference wav")
-            w = eng.synth(text, lang, ref)
+            w = eng.synth(text, lang, ref, settings=settings) if getattr(eng, "uses_settings", False) and settings else eng.synth(text, lang, ref)
             if w is None or len(w.samples) == 0:
                 raise EngineUnavailable(f"{name} returned empty audio")
             w.engine = name

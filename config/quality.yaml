@@ -21,6 +21,19 @@ A3_narration:
   loudness_lufs: -14
   loudness_tolerance_lu: 1
   true_peak_max_dbtp: -1
+# Naturalness gate (WP11): objective proxies, no learned MOS (no clearly commercial-OK model). A failing
+# narration is regenerated once, then flagged for the owner. Provisional; calibrate on approved videos.
+A3b_naturalness:
+  min_score: 70
+  pitch_std_min_st: 1.2
+  pitch_std_max_st: 6.0
+  voiced_ratio_min: 0.30
+  pause_ratio_max: 0.45
+  pause_max_s: 1.2
+  syllable_rate_min: 2.0
+  syllable_rate_max: 8.5
+  spectral_flatness_max: 0.25
+  clipping_pct_max: 0.05
 A4_visual_pacing:
   hook_visual_within_s: 3
   max_seconds_between_changes: 4

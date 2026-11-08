@@ -13,6 +13,7 @@ dependencies = [
   "requests>=2.31",
   "jsonschema>=4.20",
   "jiwer>=3.0",
+  "num2words>=0.5.13",  # LGPL-2.1, used unmodified via import (number verbalisation)
 ]
 
 [project.optional-dependencies]

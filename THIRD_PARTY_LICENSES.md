@@ -11,9 +11,10 @@ Only components usable commercially are included. Verified against package metad
 | Indic Parler-TTS (`ai4bharat/indic-parler-tts`, `parler-tts` library) | stock voice: hi, ta, te, kn, ml, mr, bn, gu | Apache-2.0 | No voice cloning. Library installed from a pinned commit (`scripts/install_parler.sh`). |
 | Kokoro-82M (`hexgrad/Kokoro-82M`, `kokoro`, `misaki`) | stock fallback: en, hi, es, pt, ja | Apache-2.0 | |
 | Whisper large-v3 via `faster-whisper` / CTranslate2 | caption alignment, WER re-transcription | MIT | |
+| `num2words` (library, not a model) | number verbalisation: en, es, pt, ar, ja, te, bn | LGPL-2.1 | Used unmodified via `import` (dynamic use is commercial-OK). Hindi uses our own rules. |
 | spaCy `en_core_web_sm` (pulled by misaki) | English G2P | MIT | |
 
-Not used on purpose: IndicF5 (commercial licence UNCLEAR, feasibility B1), NLLB-200 (CC-BY-NC), CosyVoice2 (no Indic/Arabic).
+Not used on purpose: learned MOS predictors UTMOS, TorchAudio-SQUIM and DNSMOS (weight licences not clearly commercial-OK; the naturalness gate uses objective proxies), IndicF5 (commercial licence UNCLEAR, feasibility B1), NLLB-200 (CC-BY-NC), CosyVoice2 (no Indic/Arabic).
 
 ## Software
 
