@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ullaslab.co.in/schema/manifest.schema.json",
+  "title": "UllasLab render bundle manifest",
+  "type": "object",
+  "required": ["version", "slug", "orientation", "format", "languages", "scenes", "segments", "disclaimer"],
+  "additionalProperties": false,
+  "$defs": {
+    "i18n": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string" } }
+      ]
+    }
+  },
+  "properties": {
+    "version": { "const": 1 },
+    "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "orientation": { "enum": ["vertical", "horizontal"] },
+    "format": { "type": "integer", "minimum": 1, "maximum": 10 },
+    "template": { "type": "string" },
+    "hook_style": { "enum": ["H1", "H2", "H3", "H4", "H5", "H6"] },
+    "source_lang": { "type": "string", "default": "en" },
+    "languages": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "voice_ref": { "type": ["string", "null"] },
+    "synthetic_voice": { "type": "boolean" },
+    "disclaimer": { "$ref": "#/$defs/i18n" },
+    "segments": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["id", "text"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "scenes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "enum": ["hook", "chart", "counter", "compare", "text", "grid", "myth", "qa", "disclaimer"] },
+          "segments": { "type": "array", "items": { "type": "string" } },
+          "chart": { "type": "string" },
+          "headline": { "$ref": "#/$defs/i18n" },
+          "body": { "$ref": "#/$defs/i18n" },
+          "items": {
+            "type": "array", "maxItems": 6,
+            "items": {
+              "type": "object", "required": ["label"], "additionalProperties": false,
+              "properties": {
+                "label": { "$ref": "#/$defs/i18n" },
+                "value": { "type": "string" },
+                "tag": { "enum": ["LIVE", "RECENT", "LAGGED", "EXPECTATION", "INFERRED"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["name", "lang", "orientation"], "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "lang": { "type": "string" },
+          "orientation": { "enum": ["vertical", "horizontal"] }
+        }
+      }
+    }
+  }
+}

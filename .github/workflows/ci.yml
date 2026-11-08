@@ -1,0 +1,27 @@
+# Tests only. Runs on pushes to main and by hand. Deliberately NOT on pull_request: this repo is public
+# and fork PRs must never execute workflow code. Review PRs locally (make test) before merging.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: {}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - run: uv sync --frozen --extra dev
+      - run: uv run --no-sync pytest -q
+      - run: cd remotion && npm ci --no-audit --no-fund && npm run typecheck && npm test

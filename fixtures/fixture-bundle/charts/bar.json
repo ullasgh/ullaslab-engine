@@ -1,0 +1,44 @@
+{
+ "type": "bar",
+ "title": "Example levels by year",
+ "unit": "%",
+ "decimals": 1,
+ "series": [
+  {
+   "name": "Series X",
+   "points": [
+    {
+     "x": "2020",
+     "y": 1.2
+    },
+    {
+     "x": "2021",
+     "y": 2.8
+    },
+    {
+     "x": "2022",
+     "y": 4.1
+    },
+    {
+     "x": "2023",
+     "y": 3.3
+    },
+    {
+     "x": "2024",
+     "y": 2.4
+    },
+    {
+     "x": "2025",
+     "y": 2.9
+    }
+   ]
+  }
+ ],
+ "source": {
+  "name": "Synthetic fixture data",
+  "as_of": "2026-01-01"
+ },
+ "freshness": "RECENT",
+ "claim_id": "fx-002",
+ "chart_hash": "3da0d9967fe974fa38e98ccbaae5f0a39316ee91dbaaf7080ad0a13b447ac508"
+}

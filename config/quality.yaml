@@ -1,0 +1,43 @@
+# Automated quality gates A1-A5 (blocking). Provisional defaults from
+# docs/blueprint/finance-os/QUALITY_GATES.md; calibrated on the first five approved videos.
+# Any threshold change is logged and needs owner approval.
+# Platform-dependent values (safe zones, loudness) to be verified in WP4.
+A1_financial_clarity:
+  figures_with_claim_id_pct: 100
+  chart_hash_must_match: true
+  takeaway_required: true
+  forbidden_language_lint: true
+A2_visual_storytelling:
+  original_data_visual_min: 1
+  stock_footage_allowed: false
+  max_template_overlap_pct: 60
+  overlap_window_videos: 10
+A3_narration:
+  wpm_min: 135
+  wpm_max: 175
+  max_silence_s: 1.2
+  max_sentence_words: 25
+  max_wer_pct: 3
+  loudness_lufs: -14
+  loudness_tolerance_lu: 1
+  true_peak_max_dbtp: -1
+A4_visual_pacing:
+  hook_visual_within_s: 3
+  max_seconds_between_changes: 4
+  max_static_frame_s: 5
+  scene_len_min_s: 2
+  scene_len_max_s: 12
+A5_mobile_readability:
+  width_px: 1080
+  height_px: 1920
+  preview_width_px: 390
+  min_body_text_px: 44
+  min_label_text_px: 36
+  min_contrast_ratio: 4.5
+  safe_zone_px:
+    top: 220
+    bottom: 420
+    sides: 60
+  max_non_caption_words_per_scene: 12
+  caption_max_lines: 2
+  caption_max_chars_per_line: 32

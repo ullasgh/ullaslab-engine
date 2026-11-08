@@ -3,6 +3,16 @@
 *.pem
 *.wav
 *.mp4
+*.mp3
+*.m4a
+*.srt
+*.vtt
 node_modules/
 .venv/
 __pycache__/
+.pytest_cache/
+out/
+work/
+remotion/public/fonts/
+remotion/out/
+*.egg-info/
