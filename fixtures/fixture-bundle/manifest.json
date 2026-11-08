@@ -1,0 +1,206 @@
+{
+ "version": 1,
+ "slug": "fixture-chart-of-the-week",
+ "orientation": "vertical",
+ "format": 1,
+ "template": "single-line",
+ "hook_style": "H1",
+ "source_lang": "en",
+ "languages": [
+  "en",
+  "hi",
+  "ar",
+  "ja"
+ ],
+ "voice_ref": null,
+ "synthetic_voice": true,
+ "disclaimer": {
+  "en": "Education only. Not investment advice. Not SEBI/SEC registered. Data may be delayed. Do your own research.",
+  "hi": "केवल शिक्षा के लिए। निवेश सलाह नहीं। SEBI या SEC में पंजीकृत नहीं। डेटा विलंबित हो सकता है।",
+  "ar": "للتعليم فقط. ليست نصيحة استثمارية. غير مسجل لدى الجهات التنظيمية. قد تتأخر البيانات.",
+  "ja": "教育目的のみです。投資助言ではありません。データは遅れる場合があります。"
+ },
+ "segments": [
+  {
+   "id": "a1",
+   "text": {
+    "en": "Here is a synthetic example series. Over two years it drifted higher, but the path was far from smooth.",
+    "hi": "यह एक कृत्रिम उदाहरण श्रृंखला है। दो वर्षों में यह ऊपर गई, लेकिन रास्ता सीधा नहीं था।",
+    "ar": "هذه سلسلة مثال اصطناعية. ارتفعت خلال عامين لكن المسار لم يكن سلسا.",
+    "ja": "これは合成された例のデータ系列です。二年間で上昇しましたが、道のりは平坦ではありませんでした。"
+   }
+  },
+  {
+   "id": "a2",
+   "text": {
+    "en": "The yearly view shows the level rising, peaking, and then easing back, which is a common shape for this kind of indicator.",
+    "hi": "वार्षिक दृश्य में स्तर बढ़ता है, शिखर पर पहुँचता है और फिर नीचे आता है।",
+    "ar": "العرض السنوي يظهر ارتفاع المستوى ثم بلوغ القمة ثم التراجع.",
+    "ja": "年次で見ると水準は上昇し、ピークを付け、その後やや低下しました。"
+   }
+  },
+  {
+   "id": "a3",
+   "text": {
+    "en": "Compare two fictional countries. Country A grew steadily, while Country B fell sharply once, then recovered quickly afterwards.",
+    "hi": "दो काल्पनिक देशों की तुलना करें। देश ए स्थिर रहा, जबकि देश बी एक बार तेजी से गिरा।",
+    "ar": "قارن بين بلدين افتراضيين. البلد أ نما بثبات بينما تراجع البلد ب بحدة مرة واحدة.",
+    "ja": "架空の二つの国を比べます。A国は安定して成長し、B国は一度大きく落ち込みました。"
+   }
+  },
+  {
+   "id": "a4",
+   "text": {
+    "en": "The latest reading for the example rate is 4.25 percent, down 0.25 from the prior reading.",
+    "hi": "उदाहरण दर का ताज़ा आँकड़ा 4.25 प्रतिशत है, जो पिछले आँकड़े से 0.25 कम है।",
+    "ar": "أحدث قراءة للمعدل المثالي هي 4.25 بالمئة، بانخفاض 0.25 عن القراءة السابقة.",
+    "ja": "例の金利の最新値は4.25パーセントで、前回より0.25低下しました。"
+   }
+  },
+  {
+   "id": "a5",
+   "text": {
+    "en": "Three numbers to keep in view: the level, the change, and how old the data is, because lagged data can mislead.",
+    "hi": "तीन बातें ध्यान में रखें: स्तर, बदलाव, और आँकड़ा कितना पुराना है।",
+    "ar": "ثلاثة أرقام يجب متابعتها: المستوى والتغير وعمر البيانات.",
+    "ja": "注目する三つの数字は、水準、変化、そしてデータの古さです。"
+   }
+  },
+  {
+   "id": "a6",
+   "text": {
+    "en": "The counter case matters. If conditions change, the same pattern has historically broken down, so treat any single chart with caution.",
+    "hi": "विपरीत पक्ष भी ज़रूरी है। परिस्थितियाँ बदलें तो यही पैटर्न टूट सकता है।",
+    "ar": "الحالة المعاكسة مهمة. إذا تغيرت الظروف قد ينكسر النمط نفسه.",
+    "ja": "反対の見方も重要です。状況が変われば同じパターンも崩れることがあります。"
+   }
+  },
+  {
+   "id": "a7",
+   "text": {
+    "en": "Education only. Not investment advice. Not SEBI/SEC registered. Data may be delayed. Do your own research.",
+    "hi": "केवल शिक्षा के लिए। निवेश सलाह नहीं। SEBI या SEC में पंजीकृत नहीं। डेटा विलंबित हो सकता है।",
+    "ar": "للتعليم فقط. ليست نصيحة استثمارية. غير مسجل لدى الجهات التنظيمية. قد تتأخر البيانات.",
+    "ja": "教育目的のみです。投資助言ではありません。データは遅れる場合があります。"
+   }
+  }
+ ],
+ "scenes": [
+  {
+   "id": "s1",
+   "kind": "chart",
+   "chart": "charts/line.json",
+   "segments": [
+    "a1"
+   ],
+   "headline": {
+    "en": "A synthetic example",
+    "hi": "एक कृत्रिम उदाहरण",
+    "ar": "مثال اصطناعي",
+    "ja": "合成の例"
+   }
+  },
+  {
+   "id": "s2",
+   "kind": "chart",
+   "chart": "charts/bar.json",
+   "segments": [
+    "a2"
+   ]
+  },
+  {
+   "id": "s3",
+   "kind": "compare",
+   "chart": "charts/compare.json",
+   "segments": [
+    "a3"
+   ]
+  },
+  {
+   "id": "s4",
+   "kind": "counter",
+   "chart": "charts/delta.json",
+   "segments": [
+    "a4"
+   ]
+  },
+  {
+   "id": "s5",
+   "kind": "grid",
+   "segments": [
+    "a5"
+   ],
+   "headline": {
+    "en": "Three numbers",
+    "hi": "तीन आँकड़े",
+    "ar": "ثلاثة أرقام",
+    "ja": "三つの数字"
+   },
+   "items": [
+    {
+     "label": {
+      "en": "Level",
+      "hi": "स्तर",
+      "ar": "المستوى",
+      "ja": "水準"
+     },
+     "value": "4.25%",
+     "tag": "LIVE"
+    },
+    {
+     "label": {
+      "en": "Change",
+      "hi": "बदलाव",
+      "ar": "التغير",
+      "ja": "変化"
+     },
+     "value": "-0.25",
+     "tag": "RECENT"
+    },
+    {
+     "label": {
+      "en": "Data age",
+      "hi": "आँकड़े की उम्र",
+      "ar": "عمر البيانات",
+      "ja": "データの古さ"
+     },
+     "value": "60",
+     "tag": "LAGGED"
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "kind": "text",
+   "segments": [
+    "a6"
+   ],
+   "headline": {
+    "en": "The counter case",
+    "hi": "विपरीत पक्ष",
+    "ar": "الحالة المعاكسة",
+    "ja": "反対の見方"
+   },
+   "body": {
+    "en": "Patterns can break when conditions change.",
+    "hi": "परिस्थितियाँ बदलें तो पैटर्न टूट सकता है।",
+    "ar": "قد ينكسر النمط إذا تغيرت الظروف.",
+    "ja": "状況が変われば、パターンは崩れることがあります。"
+   }
+  },
+  {
+   "id": "s7",
+   "kind": "disclaimer",
+   "segments": [
+    "a7"
+   ]
+  }
+ ],
+ "variants": [
+  {
+   "name": "hi_vertical",
+   "lang": "hi",
+   "orientation": "vertical"
+  }
+ ]
+}

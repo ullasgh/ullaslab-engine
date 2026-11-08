@@ -1,0 +1,152 @@
+# 13 languages. Source of truth for translator, TTS adapters, captions and dubbing.
+# TTS verdicts from docs/feasibility.md (verified 2026-11-08).
+#   tts_engine: chatterbox (MIT, voice clone), indic_parler (Apache-2.0, stock voice),
+#               kokoro (Apache-2.0, stock voice), none (captions only)
+#   voice_mode: clone | stock | none
+#   fallback_engine: used when the primary engine fails QA or is unavailable
+# IndicF5 is NOT used: commercial licence UNCLEAR (feasibility B1). Owner may opt in later.
+# number_format: western (1,234,567) | indian (12,34,567; lakh/crore) | arabic_western (Arabic text, Western digits)
+languages:
+  - code: en
+    name: English
+    script: Latin
+    tts_engine: chatterbox
+    voice_mode: clone
+    fallback_engine: kokoro
+    number_format: western
+    currency: USD
+    captions: true
+    dub: false          # master track
+    priority: 1
+  - code: hi
+    name: Hindi
+    script: Devanagari
+    tts_engine: chatterbox
+    voice_mode: clone
+    fallback_engine: indic_parler
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 2
+  - code: ta
+    name: Tamil
+    script: Tamil
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 5
+  - code: te
+    name: Telugu
+    script: Telugu
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 5
+  - code: kn
+    name: Kannada
+    script: Kannada
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 6
+  - code: ml
+    name: Malayalam
+    script: Malayalam
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 6
+  - code: mr
+    name: Marathi
+    script: Devanagari
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 4
+  - code: bn
+    name: Bengali
+    script: Bengali
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 4
+  - code: gu
+    name: Gujarati
+    script: Gujarati
+    tts_engine: indic_parler
+    voice_mode: stock
+    fallback_engine: none
+    number_format: indian
+    currency: INR
+    captions: true
+    dub: true
+    priority: 4
+  - code: es
+    name: Spanish
+    script: Latin
+    tts_engine: chatterbox
+    voice_mode: clone
+    fallback_engine: kokoro
+    number_format: western
+    currency: EUR
+    captions: true
+    dub: true
+    priority: 3
+  - code: pt
+    name: Portuguese
+    script: Latin
+    tts_engine: chatterbox
+    voice_mode: clone
+    fallback_engine: kokoro
+    number_format: western
+    currency: BRL
+    captions: true
+    dub: true
+    priority: 3
+  - code: ar
+    name: Arabic
+    script: Arabic
+    tts_engine: chatterbox
+    voice_mode: clone
+    fallback_engine: none     # no free commercial-OK stock voice found; degrade to captions-only
+    number_format: arabic_western
+    currency: USD
+    captions: true
+    dub: true
+    priority: 7
+  - code: ja
+    name: Japanese
+    script: Japanese
+    tts_engine: chatterbox
+    voice_mode: clone
+    fallback_engine: kokoro
+    number_format: western
+    currency: JPY
+    captions: true
+    dub: true
+    priority: 7

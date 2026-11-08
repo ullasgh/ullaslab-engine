@@ -1,0 +1,16 @@
+{
+ "type": "delta",
+ "title": "Example rate",
+ "unit": "%",
+ "decimals": 2,
+ "value": 4.25,
+ "prior": 4.5,
+ "label": "Example rate, latest",
+ "source": {
+  "name": "Synthetic fixture data",
+  "as_of": "2026-01-01"
+ },
+ "freshness": "LIVE",
+ "claim_id": "fx-004",
+ "chart_hash": "a7b1cf1e858293430687ef7258e67cb460fd317b5eecff638ea607f82f4ceb48"
+}

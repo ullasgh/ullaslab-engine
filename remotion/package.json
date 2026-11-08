@@ -1,0 +1,35 @@
+{
+  "name": "ullaslab-engine-remotion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fonts": "node scripts/sync-fonts.mjs",
+    "postinstall": "node scripts/sync-fonts.mjs",
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/*.test.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.541",
+    "@remotion/cli": "4.0.541",
+    "@remotion/renderer": "4.0.541",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.541"
+  },
+  "devDependencies": {
+    "@fontsource/noto-sans": "5.3.0",
+    "@fontsource/noto-sans-arabic": "5.3.0",
+    "@fontsource/noto-sans-bengali": "5.3.0",
+    "@fontsource/noto-sans-devanagari": "5.3.0",
+    "@fontsource/noto-sans-gujarati": "5.3.0",
+    "@fontsource/noto-sans-jp": "5.3.1",
+    "@fontsource/noto-sans-kannada": "5.3.0",
+    "@fontsource/noto-sans-malayalam": "5.3.0",
+    "@fontsource/noto-sans-tamil": "5.3.0",
+    "@fontsource/noto-sans-telugu": "5.3.0",
+    "@types/react": "19.2.0",
+    "typescript": "5.9.3"
+  }
+}
