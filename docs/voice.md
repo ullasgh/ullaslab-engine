@@ -18,3 +18,7 @@ Indic Parler-TTS: recommended speakers from the model card (hi Rohit/Divya, ta J
 
 CLI (local): `voice-analyze --file F`, `voice-prepare --file F --out DIR`, `voice-score --file W`, `voice-demo --out DIR [--refs DIR] [--langs a,b] [--max-per-lang N]`.
 The render dispatch may carry `voice_clip_urls` {"1","2","3"}; `fetch --voice` saves them to `work/clips/` and `narrate()` uses the clip chosen by `ref_clip`, falling back to `voice.wav`.
+
+
+## Indic Parler-TTS weights in CI (WP12)
+The gated `ai4bharat/indic-parler-tts` weights are not fetched from Hugging Face in CI. The `dub` job restores them from the owner's private R2 mirror through the `model` dispatch object (see `dispatch-protocol.md`), verifies the sha256, and the TTS step loads them offline from a dedicated `HF_HUB_CACHE`. No Hugging Face token exists in this repo, and `tests/test_workflows.py` still forbids `secrets.` and `HF_TOKEN`.

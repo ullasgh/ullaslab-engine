@@ -8,7 +8,7 @@ Only components usable commercially are included. Verified against package metad
 | Component | Use | Licence | Notes |
 |---|---|---|---|
 | Chatterbox-Multilingual (`chatterbox-tts` 0.1.7, ResembleAI weights) | voice clone: en, hi, es, pt, ar, ja | MIT | Output carries Resemble's PerTh watermark; keep it. Upstream retired Aug 2026, so the version is pinned. |
-| Indic Parler-TTS (`ai4bharat/indic-parler-tts`, `parler-tts` library) | stock voice: hi, ta, te, kn, ml, mr, bn, gu | Apache-2.0 | No voice cloning. Library installed from a pinned commit (`scripts/install_parler.sh`). |
+| Indic Parler-TTS (`ai4bharat/indic-parler-tts`, `parler-tts` library) | stock voice: hi, ta, te, kn, ml, mr, bn, gu | Apache-2.0 | No voice cloning. Library installed from a pinned commit (`scripts/install_parler.sh`). Weights are gated on Hugging Face; the owner accepts the terms and mirrors them (Apache-2.0 allows redistribution with the licence) into a private R2 bucket, never into this repo. |
 | Kokoro-82M (`hexgrad/Kokoro-82M`, `kokoro`, `misaki`) | stock fallback: en, hi, es, pt, ja | Apache-2.0 | |
 | Whisper large-v3 via `faster-whisper` / CTranslate2 | caption alignment, WER re-transcription | MIT | |
 | `num2words` (library, not a model) | number verbalisation: en, es, pt, ar, ja, te, bn | LGPL-2.1 | Used unmodified via `import` (dynamic use is commercial-OK). Hindi uses our own rules. |

@@ -32,7 +32,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -57,7 +57,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -119,7 +119,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -151,12 +151,25 @@ jobs:
           uv sync --frozen $args
           if [ "$parler" = 1 ]; then bash scripts/install_parler.sh; fi
           (cd remotion && npm ci --no-audit --no-fund)
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: contains(matrix.extras, 'parler') && github.event.client_payload.model.revision != ''
+        with:
+          path: ~/.cache/ullaslab-parler
+          key: parler-model-v1-${{ github.event.client_payload.model.revision }}
+      - name: Parler weights (private R2 mirror, sha256 verified; downloads only on a cache miss)
+        id: model
+        if: contains(matrix.extras, 'parler')
+        run: uv run --no-sync python -m ullaslab_engine fetch-model --payload "$GITHUB_EVENT_PATH" --dest "$HOME/.cache/ullaslab-parler" >> "$GITHUB_OUTPUT"
       - name: Fetch bundle, voice sample and master timing
         run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --timing
       - name: TTS (voice clone or stock voice per languages.yaml)
         id: tts
+        env:
+          PARLER_HUB: ${{ steps.model.outputs.hub }}
         run: |
           set -euo pipefail
+          # Parler loads only from the verified mirror: own hub cache, offline, no Hugging Face access
+          if [ -n "${PARLER_HUB:-}" ]; then export HF_HUB_CACHE="$PARLER_HUB" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1; fi
           uv run --no-sync python -m ullaslab_engine tts --work work --lang "$LANG_CODE" > tts.log
           out=$(tail -1 tts.log)
           case "$out" in voice|captions-only) ;; *) echo "unexpected tts result"; exit 1;; esac

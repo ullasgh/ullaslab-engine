@@ -120,3 +120,110 @@ def test_voice_clip_urls_validated_and_masked():
     for bad in ({"1": "https://169.254.169.254/x"}, {"9": GOOD}, ["x"]):
         with pytest.raises(eio.TransferError):
             eio.validate_payload(payload(voice_clip_urls=bad))
+
+
+# --- WP12: Parler weights from the private mirror ----------------------------------------------
+
+import hashlib  # noqa: E402
+import tarfile  # noqa: E402
+from ullaslab_engine import model as emodel  # noqa: E402
+
+REV = "a" * 40
+
+
+def make_archive(path, evil=False):
+    src = path.parent / "src"
+    snap = src / "models--ai4bharat--indic-parler-tts" / "snapshots" / REV
+    snap.mkdir(parents=True)
+    (snap / "config.json").write_text("{}")
+    (src / "models--ai4bharat--indic-parler-tts" / "refs").mkdir()
+    (src / "models--ai4bharat--indic-parler-tts" / "refs" / "main").write_text(REV)
+    with tarfile.open(path, "w") as t:
+        t.add(src / "models--ai4bharat--indic-parler-tts", arcname="models--ai4bharat--indic-parler-tts")
+        if evil:
+            (src / "x").write_text("x")
+            t.add(src / "x", arcname="../escape.txt")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def model_obj(tar, sha, url="http://127.0.0.1:1/m.tar"):
+    return {"url": url, "sha256": sha, "revision": REV, "size": tar.stat().st_size}
+
+
+def serve_file(tmp_path, name, hits):
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            data = (tmp_path / name).read_bytes()
+            self.send_response(200); self.send_header("Content-Length", str(len(data))); self.end_headers()
+            self.wfile.write(data)
+        def log_message(self, *a): pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+@pytest.fixture
+def local_hosts(monkeypatch):
+    monkeypatch.setenv("ULLASLAB_ALLOWED_HOSTS", "127.0.0.1")
+
+
+def test_model_payload_validated_and_masked():
+    good = {"url": GOOD + "&m=1", "sha256": "b" * 64, "revision": REV, "size": 10}
+    assert eio.validate_payload(payload(model=good))
+    assert "&m=1" in "\n".join(eio.mask_lines(payload(model=good)))
+    for bad in ({**good, "url": "https://evil.example.com/m"}, {**good, "sha256": "zz"}, {**good, "size": 10**12},
+                {**good, "extra": 1}, {**good, "revision": "main"}, "x"):
+        with pytest.raises(eio.TransferError) as e:
+            eio.validate_payload(payload(model=bad))
+        assert "evil" not in str(e.value)
+
+
+def test_fetch_model_verifies_extracts_and_marks(tmp_path, local_hosts):
+    tar = tmp_path / "m.tar"
+    sha = make_archive(tar)
+    hits = []
+    srv = serve_file(tmp_path, "m.tar", hits)
+    url = f"http://127.0.0.1:{srv.server_address[1]}/m.tar?sig=SECRETSIG"
+    p = {"model": model_obj(tar, sha, url)}
+    dest = tmp_path / "cache"
+    hub = emodel.fetch_model(p, dest)
+    assert (hub / "models--ai4bharat--indic-parler-tts/refs/main").read_text() == REV
+    assert (hub / "models--ai4bharat--indic-parler-tts/snapshots" / REV / "config.json").exists()
+    from ullaslab_engine.tts.parler_engine import MODEL
+    assert (hub / ("models--" + MODEL.replace("/", "--")) / "refs/main").exists()  # the name the engine loads offline
+    assert not (dest / "model.tar").exists() and (dest / f".ok-{sha}").exists()
+    assert emodel.fetch_model(p, dest) == hub and len(hits) == 1  # cache restored: no second download
+    srv.shutdown()
+
+
+def test_fetch_model_sha_mismatch_fails_and_cleans(tmp_path, local_hosts):
+    tar = tmp_path / "m.tar"
+    make_archive(tar)
+    hits = []
+    srv = serve_file(tmp_path, "m.tar", hits)
+    url = f"http://127.0.0.1:{srv.server_address[1]}/m.tar?sig=SECRETSIG"
+    dest = tmp_path / "cache"
+    with pytest.raises(eio.TransferError) as e:
+        emodel.fetch_model({"model": model_obj(tar, "0" * 64, url)}, dest)
+    assert "sha256" in str(e.value) and "SECRETSIG" not in str(e.value) and "127.0.0.1" not in str(e.value)
+    assert not dest.exists()
+    srv.shutdown()
+
+
+def test_fetch_model_rejects_traversal_archive(tmp_path, local_hosts):
+    tar = tmp_path / "m.tar"
+    sha = make_archive(tar, evil=True)
+    srv = serve_file(tmp_path, "m.tar", [])
+    url = f"http://127.0.0.1:{srv.server_address[1]}/m.tar"
+    with pytest.raises(eio.TransferError):
+        emodel.fetch_model({"model": model_obj(tar, sha, url)}, tmp_path / "cache")
+    assert not (tmp_path / "escape.txt").exists() and not (tmp_path / "cache").exists()
+    srv.shutdown()
+
+
+def test_fetch_model_cli_without_model_prints_empty_hub(tmp_path, capsys):
+    f = tmp_path / "e.json"
+    f.write_text(json.dumps({"client_payload": payload()}))
+    assert cli.main(["fetch-model", "--payload", str(f), "--dest", str(tmp_path / "c")]) == 0
+    assert capsys.readouterr().out.strip() == "hub="

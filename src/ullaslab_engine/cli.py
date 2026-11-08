@@ -67,6 +67,14 @@ def cmd_fetch(a):
     print("fetched")
 
 
+def cmd_fetch_model(a):
+    """Download + verify + extract the mirrored Parler weights. Prints `hub=<dir>` (empty if none) for GITHUB_OUTPUT."""
+    from .model import fetch_model
+    hub = fetch_model(_payload(a), Path(a.dest))
+    print(f"hub={hub or ''}")
+    return 0
+
+
 def cmd_tts(a):
     work = Path(a.work)
     m = load_bundle(work / "bundle")
@@ -204,6 +212,7 @@ def main(argv=None) -> int:
     add("captions", cmd_captions, work=dict(required=True), lang=dict(required=True), no_asr=dict(action="store_true"))
     add("render", cmd_render, work=dict(required=True), variant=dict(default=None))
     add("qa", cmd_qa, work=dict(required=True), lang=dict(required=True), variant=dict(default=None), no_asr=dict(action="store_true"))
+    add("fetch-model", cmd_fetch_model, payload=dict(required=True), dest=dict(required=True))
     add("upload", cmd_upload, payload=dict(required=True), work=dict(required=True), lang=dict(required=True))
     add("voice-analyze", cmd_voice_analyze, file=dict(required=True))
     add("voice-prepare", cmd_voice_prepare, file=dict(required=True), out=dict(required=True), sr=dict(type=int, default=24000))
