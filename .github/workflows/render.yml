@@ -155,8 +155,6 @@ jobs:
         run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --timing
       - name: TTS (voice clone or stock voice per languages.yaml)
         id: tts
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}  # Indic Parler-TTS is a free but gated Hugging Face model
         run: |
           set -euo pipefail
           uv run --no-sync python -m ullaslab_engine tts --work work --lang "$LANG_CODE" > tts.log
