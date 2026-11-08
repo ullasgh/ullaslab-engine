@@ -108,11 +108,19 @@ _BOUNDS = {
 }
 
 
+SHORT_S = 3.0
+_SHORT_SKIP = {"pitch_std_st", "voiced_ratio", "syllable_rate", "pause_ratio"}
+
+
 def score(w: Wav, cfg: dict | None = None, extra_scorer: Callable[[Wav], float] | None = None) -> NaturalnessReport:
     cfg = cfg or quality()["A3b_naturalness"]
     m = metrics(w)
     fails, ok = [], 0
+    short = m["duration_s"] < SHORT_S  # headings and one-word beats: rate/pitch statistics are meaningless
     for key, (lo, hi) in _BOUNDS.items():
+        if short and key in _SHORT_SKIP:
+            ok += 1
+            continue
         v = m[key]
         bad = (lo and v < cfg[lo]) or (hi and v > cfg[hi])
         if bad:

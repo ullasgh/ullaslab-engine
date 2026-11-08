@@ -108,16 +108,16 @@ _CUR_SYM = "|".join(re.escape(s) for s in sorted(_CUR, key=len, reverse=True))
 
 def _res(num: str) -> dict:
     return {
-        "cur": re.compile(rf"(?P<sym>{_CUR_SYM})\s?(?P<num>(?:{num}))(?:\s?(?P<mag>lakh|crore|million|billion|trillion|thousand|bn|mn|k|m|b|tn|लाख|करोड़|करोड)(?![A-Za-z0-9_]))?", re.I),
+        "cur": re.compile(rf"(?P<sym>{_CUR_SYM})\s?(?P<num>(?:{num}))(?:\s?(?P<mag>lakh|crore|million|billion|trillion|thousand|bn|mn|k|m|b|tn|लाख|करोड़|करोड|millones|millón|mil|milhões|milhão|bilhões)(?![A-Za-z0-9_]))?", re.I),
         "pct": re.compile(rf"(?P<num>(?:{num}))\s?%"),
-        "num": re.compile(rf"(?<![A-Za-z0-9_.,])(?:{num})(?![A-Za-z0-9_])"),
+        "num": re.compile(rf"(?<![A-Za-z0-9_.,])(?P<n>(?:{num}))(?P<suf>x|bn|mn|tn|k)?(?![A-Za-z0-9_])"),
     }
 
 
 _RES = {"west": _res(_NUM_WEST), "eu": _res(_NUM_EU)}
 _RE_ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _RE_DMY = re.compile(r"\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b")
-_MAG = {"लाख": "lakh", "करोड़": "crore", "करोड": "crore", "bn": "billion", "mn": "million", "tn": "trillion", "k": "thousand", "m": "million", "b": "billion"}
+_MAG = {"millones": "million", "millón": "million", "mil": "thousand", "milhões": "million", "milhão": "million", "bilhões": "billion", "लाख": "lakh", "करोड़": "crore", "करोड": "crore", "bn": "billion", "mn": "million", "tn": "trillion", "k": "thousand", "m": "million", "b": "billion"}
 _MAG_LOCAL = {  # magnitude word per language (only where the English word would sound wrong)
     "hi": {"lakh": "लाख", "crore": "करोड़", "thousand": "हज़ार", "million": "मिलियन", "billion": "बिलियन", "trillion": "ट्रिलियन"},
     "es": {"thousand": "mil", "million": "millones", "billion": "mil millones", "trillion": "billones", "lakh": "lakh", "crore": "crore"},
@@ -134,7 +134,7 @@ def _plain(num: str, lang: str = "en") -> str:
     return num.replace(",", "")
 
 
-def number_to_words(num: str, lang: str, indian: bool = False) -> str:
+def number_to_words(num: str, lang: str, indian: bool = False, money: bool = False) -> str:
     """'1,234.56' -> words. Decimals are read digit by digit. Unsupported language -> digits unchanged."""
     if lang not in VERBALIZED:
         return num
@@ -142,7 +142,12 @@ def number_to_words(num: str, lang: str, indian: bool = False) -> str:
     whole, _, frac = s.partition(".")
     out = int_words(int(whole), lang, indian)
     if frac:
-        out += f" {_POINT[lang]} " + " ".join(int_words(int(d), lang) for d in frac)
+        sp = "" if lang == "ja" else " "
+        if money and len(frac) == 2 and frac[0] != "0":  # cents read as one number: "fifty", not "five zero"
+            tail = int_words(int(frac), lang)
+        else:
+            tail = sp.join(int_words(int(d), lang) for d in frac)
+        out += f"{sp}{_POINT[lang]}{sp}" + tail
     return out
 
 
@@ -150,9 +155,11 @@ def _cur(m: re.Match, lang: str, indian: bool) -> str:
     iso = _CUR[next(k for k in _CUR if k.lower() == m["sym"].lower())]
     mag = (m["mag"] or "").lower()
     mag = _MAG.get(mag, mag)
-    words = number_to_words(m["num"], lang, indian)
+    words = number_to_words(m["num"], lang, indian, money=not mag)
     if mag:
         words += " " + _MAG_LOCAL.get(lang, _MAG_LOCAL["en"]).get(mag, mag)
+        if lang in ("es", "pt") and mag in ("million", "billion", "trillion"):
+            words += " de"
     cw = _CUR_WORD.get(lang, {}).get(iso)
     if not cw:
         return m.group(0)
@@ -196,7 +203,7 @@ def normalize_text(text: str, lang: str, number_format: str | None = None) -> st
     indian = number_format == "indian"
     rx = _RES["eu" if lang in _EU else "west"]
     text = rx["cur"].sub(lambda m: _cur(m, lang, indian), text)
-    text = rx["pct"].sub(lambda m: f"{number_to_words(m['num'], lang, indian)} {_PERCENT[lang]}", text)
+    text = rx["pct"].sub(lambda m: number_to_words(m['num'], lang, indian) + ("" if lang == "ja" else " ") + _PERCENT[lang], text)
 
     def iso(m):
         r = _date(int(m[1]), int(m[2]), int(m[3]), lang)
@@ -204,8 +211,20 @@ def normalize_text(text: str, lang: str, number_format: str | None = None) -> st
     text = _RE_ISO.sub(iso, text)
     if lang == "en":
         text = _RE_DMY.sub(lambda m: _date(int(m[3]), _EN_MONTH_IDX[m[2].lower()], int(m[1]), "en") or m.group(0), text)
-    text = rx["num"].sub(lambda m: _num_token(m.group(0), lang, indian), text)
+    text = rx["num"].sub(lambda m: _num_token(m["n"], lang, indian) + _suffix(m["suf"], lang), text)
     return text
+
+
+_SUF_EN = {"x": " times", "bn": " billion", "mn": " million", "tn": " trillion", "k": " thousand"}
+
+
+def _suffix(suf: str | None, lang: str) -> str:
+    if not suf:
+        return ""
+    if suf == "x":
+        return _SUF_EN["x"] if lang == "en" else " x"
+    key = {"bn": "billion", "mn": "million", "tn": "trillion", "k": "thousand"}[suf]
+    return " " + _MAG_LOCAL.get(lang, _MAG_LOCAL["en"]).get(key, key)
 
 
 def _num_token(tok: str, lang: str, indian: bool) -> str:

@@ -36,6 +36,7 @@ def test_every_render_job_masks_urls_first():
     d = load(ROOT / ".github/workflows/render.yml")
     for name, job in d["jobs"].items():
         assert "add-mask" in job["steps"][0]["run"], name
+        assert "voice_clip_urls" in job["steps"][0]["run"], name  # the owner's voice clips are presigned too
 
 
 def test_render_never_uploads_artifacts_or_echoes_payload():

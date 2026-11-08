@@ -94,7 +94,7 @@ def trim_silence(w: Wav, thresh_db: float = -50.0, keep_s: float = 0.08) -> Wav:
     if len(idx) == 0:
         return w
     k = int(keep_s * w.sr)
-    return Wav(w.samples[max(0, idx[0] - k): idx[-1] + k], w.sr)
+    return Wav(w.samples[max(0, idx[0] - k): idx[-1] + k], w.sr, w.engine, list(w.flags))
 
 
 def assemble(segments: list[tuple[float, Wav]], sr: int, total_s: float | None = None) -> Wav:

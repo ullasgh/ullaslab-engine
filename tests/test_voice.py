@@ -330,3 +330,43 @@ def test_no_audio_files_are_tracked():
     files = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split()
     assert not [f for f in files if f.lower().endswith((".wav", ".m4a", ".mp3", ".flac", ".aiff", ".npy", ".pt"))
                ]
+
+
+# ---------- critic round 1: expected behaviour written from the spec ----------
+def test_finance_suffixes_never_split_a_decimal():
+    assert textnorm.normalize_text("3.5x", "en") == "three point five times"
+    assert textnorm.normalize_text("up 10x and 2.5bn", "en") == "up ten times and two point five billion"
+    assert textnorm.normalize_text("Q3 and S&P 500", "en") == "Q3 and S&P five hundred"
+
+
+def test_es_pt_currency_magnitudes_and_cents():
+    assert textnorm.normalize_text("€3,5 millones", "es") == "tres coma cinco millones de euros"
+    assert textnorm.normalize_text("R$ 1.200,50", "pt") == "mil e duzentos vírgula cinquenta reais"
+
+
+def test_ja_has_no_spaces_in_numbers():
+    assert textnorm.normalize_text("2.5%", "ja") == "二点五パーセント"
+
+
+def test_short_clip_is_not_failed_for_rate_statistics():
+    sr = 24000
+    one_word = Wav(speechlike(1.2, sr).samples, sr)
+    assert not any("syllable_rate" in f or "pitch_std" in f for f in naturalness.score(one_word).failures)
+    clipped = Wav(np.clip(speechlike(1.2, sr).samples * 30, -1, 1), sr)
+    assert any("clipping" in f for f in naturalness.score(clipped).failures)  # hard defects still fail
+
+
+def test_gate_flags_survive_trim_and_reach_status(work):
+    from ullaslab_engine import pipeline as P
+    from ullaslab_engine.audio import trim_silence
+    e = RecEngine(good=False)
+    base.register_engine("kokoro", lambda: e)
+    w = trim_silence(narrate("One sentence here.", "en", engine="kokoro"))
+    assert w.flags and w.engine == "kokoro"
+    base._FACTORIES.clear(); base._CACHE.clear()
+    def bad_tts(text, lang, ref, normalize=True, engine=None):
+        x = speechlike(1.0); x.flags = ["naturalness: test"]; return x
+    (work / "timing_en.json").write_text("{}")
+    r = P.stage_tts(work, "en", bad_tts)
+    assert r["naturalness_flags"] and r["naturalness_flags"][0].startswith("seg0: naturalness")
+    assert json.loads((work / "en" / "status.json").read_text())["naturalness_flags"]
