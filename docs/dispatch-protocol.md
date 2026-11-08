@@ -17,6 +17,8 @@ Contents: write on this repo only (held by the private repo).
     "voice_url": "https://...  (GET, optional reference wav; only on the runner, never uploaded)",
     "voice_clip_urls": {"1": "https://...", "2": "...", "3": "..."},  (GET, optional: the 3 reference clips; ref_clip in languages.yaml picks one, voice_url is the fallback)
     "timing_url": "https://...  (GET timing_en.json written by the master job; needed by dub jobs)",
+    "model": {"url": "https://...  (GET, tar of the Indic Parler-TTS Hugging Face cache; only when a language needs it)",
+              "sha256": "<64 hex of the tar>", "revision": "<40 hex model commit>", "size": 3900000000},
     "languages": ["en", "hi", "ta"],
     "outputs": {
       "master.mp4": "PUT url", "timing_en.json": "PUT url",
@@ -37,6 +39,21 @@ Rules enforced in code (`ullaslab_engine/io.py`, `tests/test_io_cli.py`):
   payload is never echoed, never put in an artifact, and transport errors never include a URL.
 - Outputs missing from `outputs` are simply not uploaded. `qa_*.json` is uploaded even when QA fails
   (`if: always()`), so the private repo can see which gate broke. It contains numbers only.
+
+## Parler weights (`model`, optional)
+
+The seven Indic stock-voice languages (ta, te, kn, ml, mr, bn, gu) use `ai4bharat/indic-parler-tts`, which is gated on Hugging Face. This repo holds
+no Hugging Face token. The owner mirrors a pinned revision into his private R2 bucket (`ops/owner/parler-mirror.sh` in the private repo) and the
+private repo adds `model` (one presigned GET URL plus non-secret `sha256`, `revision`, `size`) only when a job language uses Parler as its primary engine.
+It is one nested property, so the payload stays at 8 of GitHub's 10 `client_payload` properties.
+
+- Every `dub` job whose matrix `extras` contain `parler` restores `actions/cache` keyed `parler-model-v1-<revision>` (path `~/.cache/ullaslab-parler`),
+  then runs `fetch-model`: on a cache hit (marker `.ok-<sha256>`) it downloads nothing; otherwise it downloads, checks size and sha256, rejects any
+  tar entry outside `models--*` (or links leaving the cache), extracts and deletes the tar. A sha256 mismatch fails the job and removes everything.
+- The TTS step exports `HF_HUB_CACHE=<that hub>`, `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` for Parler only, so it cannot reach Hugging Face. Other steps are unchanged.
+- The URL is masked first in every job like the others. Without `model` the Parler languages degrade to captions only, as before.
+- Tar layout: a Hugging Face hub cache (`models--ai4bharat--indic-parler-tts` and `models--google--flan-t5-large`, tokenizer files only, each with `refs/main`).
+- Cost: R2 egress is free; the cache entry (about 4 GB) counts against the repo's 10 GB cache limit, so a download happens at most once per cache lifetime.
 
 ## Bundle (zip)
 

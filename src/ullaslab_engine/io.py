@@ -14,6 +14,7 @@ import requests
 ALLOWED_SUFFIX = ".r2.cloudflarestorage.com"
 MAX_BUNDLE_BYTES = 200 * 1024 * 1024
 MAX_UNZIPPED_BYTES = 500 * 1024 * 1024
+MAX_MODEL_BYTES = 6 * 1024**3  # Parler weights archive (about 4 GB)
 _NAME = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 
 
@@ -43,7 +44,15 @@ def validate_payload(p: dict) -> dict:
     clips = p.get("voice_clip_urls") or {}
     if not isinstance(clips, dict) or not all(k in ("1", "2", "3") for k in clips):
         raise TransferError("bad voice_clip_urls")
-    urls = [p["bundle_url"], p.get("voice_url"), p.get("timing_url")] + list(p["outputs"].values()) + list(clips.values())
+    model = p.get("model")
+    if model is not None:  # WP12: {url, sha256, revision, size} for the Parler weights archive
+        if not (isinstance(model, dict) and set(model) == {"url", "sha256", "revision", "size"}
+                and re.fullmatch(r"[0-9a-f]{64}", str(model["sha256"]))
+                and re.fullmatch(r"[0-9a-f]{40}", str(model["revision"]))
+                and isinstance(model["size"], int) and 0 < model["size"] <= MAX_MODEL_BYTES):
+            raise TransferError("bad model")
+    urls = ([p["bundle_url"], p.get("voice_url"), p.get("timing_url")] + list(p["outputs"].values())
+            + list(clips.values()) + [(model or {}).get("url")])
     for name in p["outputs"]:
         if not _NAME.match(name):
             raise TransferError("bad output name")
@@ -58,7 +67,7 @@ def validate_payload(p: dict) -> dict:
 def mask_lines(p: dict) -> list[str]:
     """GitHub Actions ::add-mask:: commands for every URL in the payload and its query/path parts."""
     vals = ([p.get("bundle_url"), p.get("voice_url"), p.get("timing_url")] + list(p.get("outputs", {}).values())
-            + list((p.get("voice_clip_urls") or {}).values()))
+            + list((p.get("voice_clip_urls") or {}).values()) + [(p.get("model") or {}).get("url")])
     out = []
     for v in vals:
         if not v:

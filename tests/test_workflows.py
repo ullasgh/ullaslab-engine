@@ -61,3 +61,24 @@ def test_repo_ignores_media_and_secrets():
     ig = (ROOT / ".gitignore").read_text()
     for pat in (".env", "*.wav", "*.mp4", "*.pem", "out/", "work/"):
         assert pat in ig, pat
+
+
+def test_dub_job_wires_parler_mirror_without_secrets():
+    """WP12: weights come from the verified private-R2 mirror, cached by revision, loaded offline; no HF token."""
+    d = load(ROOT / ".github/workflows/render.yml")
+    steps = d["jobs"]["dub"]["steps"]
+    names = [s.get("name", s.get("uses", "")) for s in steps]
+    ci = next(i for i, s in enumerate(steps) if str(s.get("uses", "")).startswith("actions/cache") and "parler" in str(s["with"]["path"]))
+    fi = next(i for i, s in enumerate(steps) if s.get("id") == "model")
+    ti = next(i for i, s in enumerate(steps) if s.get("id") == "tts")
+    assert ci < fi < ti, names
+    assert "client_payload.model.revision" in steps[ci]["with"]["key"] and "parler" in steps[ci]["if"]
+    assert "fetch-model" in steps[fi]["run"] and "parler" in steps[fi]["if"]
+    tts = steps[ti]
+    assert "steps.model.outputs.hub" in tts["env"]["PARLER_HUB"]
+    assert "HF_HUB_CACHE" in tts["run"] and "HF_HUB_OFFLINE=1" in tts["run"]
+    txt = (ROOT / ".github/workflows/render.yml").read_text()
+    assert "secrets." not in txt and "HF_TOKEN" not in txt and "HUGGING_FACE_HUB_TOKEN" not in txt
+    assert txt.count(".model.url") == 3  # every job masks the model URL first
+    for p in WF:
+        assert "HF_TOKEN" not in p.read_text()
