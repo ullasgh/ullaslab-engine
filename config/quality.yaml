@@ -54,3 +54,21 @@ A5_mobile_readability:
   max_non_caption_words_per_scene: 12
   caption_max_lines: 2
   caption_max_chars_per_line: 32
+# WP14 Instagram Story gates (blocking for the story file only; never blocks the Reel).
+S_story:
+  duration_min_s: 10
+  duration_max_s: 15
+  loudness_lufs: -15
+  loudness_tolerance_lu: 1        # -16..-14 LUFS
+  true_peak_max_dbtp: -1
+  duck_db: -12                    # music level under voice
+  duck_attack_s: 0.08
+  duck_release_s: 0.35
+  fade_in_s: 0.6
+  fade_out_s: 1.2
+  voice_max_s: 12.5               # longest narration window carried into the story
+  max_text_chars: 60
+  max_sub_chars: 90
+  min_text_px: 44
+  min_label_px: 36
+  min_contrast_ratio: 4.5

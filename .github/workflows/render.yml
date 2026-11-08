@@ -32,7 +32,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -57,7 +57,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -90,7 +90,7 @@ jobs:
           if [ "$parler" = 1 ]; then bash scripts/install_parler.sh; fi
           (cd remotion && npm ci --no-audit --no-fund)
       - name: Fetch bundle (voice sample stays on the runner)
-        run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice
+        run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --music
       - name: TTS (English master)
         run: uv run --no-sync python -m ullaslab_engine tts --work work --lang en
       - name: Captions
@@ -100,6 +100,9 @@ jobs:
       - name: QA gates (fails the job on breach)
         id: qa
         run: uv run --no-sync python -m ullaslab_engine qa --work work --lang en
+      - name: Story (WP14, best effort; the optional music bed stays on the runner)
+        continue-on-error: true
+        run: uv run --no-sync python -m ullaslab_engine story --work work --lang en
       - name: Upload outputs
         if: always()
         run: uv run --no-sync python -m ullaslab_engine upload --payload "$GITHUB_EVENT_PATH" --work work --lang en
@@ -119,7 +122,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -161,7 +164,7 @@ jobs:
         if: contains(matrix.extras, 'parler')
         run: uv run --no-sync python -m ullaslab_engine fetch-model --payload "$GITHUB_EVENT_PATH" --dest "$HOME/.cache/ullaslab-parler" >> "$GITHUB_OUTPUT"
       - name: Fetch bundle, voice sample and master timing
-        run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --timing
+        run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --timing --music
       - name: TTS (voice clone or stock voice per languages.yaml)
         id: tts
         env:
@@ -186,6 +189,9 @@ jobs:
             uv run --no-sync python -m ullaslab_engine render --work work --variant "$v"
             uv run --no-sync python -m ullaslab_engine qa --work work --lang "$LANG_CODE" --variant "$v"
           done
+      - name: Story (WP14, best effort; only languages with story text)
+        continue-on-error: true
+        run: uv run --no-sync python -m ullaslab_engine story --work work --lang "$LANG_CODE"
       - name: Upload outputs
         if: always()
         run: uv run --no-sync python -m ullaslab_engine upload --payload "$GITHUB_EVENT_PATH" --work work --lang "$LANG_CODE"
