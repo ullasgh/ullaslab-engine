@@ -1,4 +1,23 @@
 {
-  "vertical":   { "top": 220, "bottom": 420, "sides": 60, "width": 1080, "height": 1920 },
-  "horizontal": { "top": 54,  "bottom": 54,  "sides": 96, "width": 1920, "height": 1080 }
+  "vertical": {
+    "top": 220,
+    "bottom": 420,
+    "sides": 60,
+    "width": 1080,
+    "height": 1920
+  },
+  "horizontal": {
+    "top": 54,
+    "bottom": 54,
+    "sides": 96,
+    "width": 1920,
+    "height": 1080
+  },
+  "story": {
+    "top": 250,
+    "bottom": 340,
+    "sides": 60,
+    "width": 1080,
+    "height": 1920
+  }
 }

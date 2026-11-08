@@ -61,6 +61,8 @@ def cmd_fetch(a):
         # WP11: the three selected reference clips sit beside voice.wav (voice/clips/); ref_clip picks one per language
         for n, url in (p.get("voice_clip_urls") or {}).items():
             eio.download(url, work / "clips" / f"clip{n}.wav", 20 * 1024 * 1024)
+    if p.get("music_url") and getattr(a, "music", False):  # WP14: optional story music bed (never logged)
+        eio.download(p["music_url"], work / "music.bin", eio.MAX_MUSIC_BYTES)
     if p.get("timing_url") and a.timing:
         eio.download(p["timing_url"], work / "timing_en.json", 5 * 1024 * 1024)
     load_bundle(work / "bundle")
@@ -102,6 +104,19 @@ def cmd_render(a):
     return 0
 
 
+def cmd_story(a):
+    """WP14: render story_<lang>.mp4 for a language that has story text. Best effort: a story failure never fails the Reel."""
+    from . import story as ST
+    work = Path(a.work)
+    mp = work / "music.bin"
+    qa = ST.stage_story(work, a.lang, mp if mp.exists() else None)
+    if qa is None:
+        print("no story for this language")
+        return 0
+    print("story", "PASS" if qa["passed"] else "FAIL", [c["name"] for c in qa["checks"] if not c["passed"]], "music" if qa["music"] else "no-music")
+    return 0 if qa["passed"] else 1
+
+
 def cmd_qa(a):
     work = Path(a.work)
     m = load_bundle(work / "bundle")
@@ -132,6 +147,12 @@ def cmd_upload(a):
     if lang == m["source_lang"]:
         items += [("master.mp4", work / lang / "master" / "video.mp4", "video/mp4"),
                   ("timing_en.json", work / "timing_en.json", "application/json")]
+    sdir = work / lang / "story"
+    if (sdir / "qa.json").exists():  # WP14: the story file only ships when its own QA passed
+        ok = json.loads((sdir / "qa.json").read_text()).get("passed")
+        items += [(f"qa_story_{lang}.json", sdir / "qa.json", "application/json")]
+        if ok:
+            items += [(f"story_{lang}.mp4", sdir / "video.mp4", "video/mp4")]
     for v in m.get("variants", []):
         if v["lang"] == lang:
             items += [(f"{v['name']}.mp4", work / lang / v["name"] / "video.mp4", "video/mp4"),
@@ -207,10 +228,11 @@ def main(argv=None) -> int:
     add("plan", cmd_plan, payload=dict(required=True))
     add("variants", cmd_variants, work=dict(required=True), lang=dict(required=True))
     add("fetch", cmd_fetch, payload=dict(required=True), work=dict(required=True),
-        voice=dict(action="store_true"), timing=dict(action="store_true"))
+        voice=dict(action="store_true"), timing=dict(action="store_true"), music=dict(action="store_true"))
     add("tts", cmd_tts, work=dict(required=True), lang=dict(required=True))
     add("captions", cmd_captions, work=dict(required=True), lang=dict(required=True), no_asr=dict(action="store_true"))
     add("render", cmd_render, work=dict(required=True), variant=dict(default=None))
+    add("story", cmd_story, work=dict(required=True), lang=dict(required=True))
     add("qa", cmd_qa, work=dict(required=True), lang=dict(required=True), variant=dict(default=None), no_asr=dict(action="store_true"))
     add("fetch-model", cmd_fetch_model, payload=dict(required=True), dest=dict(required=True))
     add("upload", cmd_upload, payload=dict(required=True), work=dict(required=True), lang=dict(required=True))
