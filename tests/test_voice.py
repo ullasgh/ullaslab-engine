@@ -178,6 +178,8 @@ def test_narrate_sentence_level_with_verbalised_text(rec):
     w = narrate("Rates rose 3.2%. Then they fell.", "en", ref_wav="x.wav", engine="kokoro", gate=False)
     assert [c[0] for c in rec.calls] == ["Rates rose three point two percent.", "Then they fell."]
     assert rec.calls[0][1]["effective_cfg_weight"] == 0.5 and w.flags == []
+    assert w.engine == "kokoro"  # kept through post-processing so synth_segments can pin one engine per track
+    assert narrate("Hello there.", "en", engine="kokoro", gate=False, normalize=False).engine == "kokoro"
 
 
 def test_narrate_regenerates_once_then_flags(monkeypatch):

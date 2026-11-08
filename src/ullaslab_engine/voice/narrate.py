@@ -55,6 +55,7 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
             break
         log.warning("naturalness gate failed (%s) attempt %d: %s", lang, attempt, "; ".join(rep.failures))
         flags = [f"naturalness: {f}" for f in rep.failures]
+    used = w.engine
     w = normalize_loudness(w) if normalize else w
-    w.flags = flags
+    w.engine, w.flags = used, flags  # normalize_loudness builds a new Wav: keep the engine so synth_segments can pin it
     return w
