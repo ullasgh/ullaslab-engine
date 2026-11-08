@@ -38,3 +38,14 @@ def test_chart_path_cannot_escape(bundle_dir):
 
 def test_wer_normaliser():
     assert normalise_for_wer("Up 4.5%, and 1,234!") == normalise_for_wer("up 4.5 percent and 1234")
+
+
+def test_schema_errors_never_echo_values(bundle_dir):
+    import json
+    p = bundle_dir / "manifest.json"
+    m = json.loads(p.read_text())
+    m["slug"] = "SECRET SCRIPT TEXT"
+    p.write_text(json.dumps(m))
+    with pytest.raises(BundleError) as e:
+        load_bundle(bundle_dir)
+    assert "SECRET" not in str(e.value)

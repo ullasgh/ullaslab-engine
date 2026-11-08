@@ -156,7 +156,10 @@ jobs:
       - name: TTS (voice clone or stock voice per languages.yaml)
         id: tts
         run: |
-          out=$(uv run --no-sync python -m ullaslab_engine tts --work work --lang "$LANG_CODE" | tail -1)
+          set -euo pipefail
+          uv run --no-sync python -m ullaslab_engine tts --work work --lang "$LANG_CODE" > tts.log
+          out=$(tail -1 tts.log)
+          case "$out" in voice|captions-only) ;; *) echo "unexpected tts result"; exit 1;; esac
           echo "mode=$out" >> "$GITHUB_OUTPUT"
       - name: Captions (translated, timed from segment mapping)
         run: uv run --no-sync python -m ullaslab_engine captions --work work --lang "$LANG_CODE" --no-asr

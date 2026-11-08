@@ -38,7 +38,7 @@ def work(bundle_dir) -> Path:
 
 def fake_tts_factory(words_per_s: float = 2.6):
     """tts_fn stand-in: duration proportional to word count, deterministic."""
-    def fake(text, lang, ref, normalize=True):
+    def fake(text, lang, ref, normalize=True, engine=None):
         w = speechlike(max(0.8, len(text.split()) / words_per_s), seed=len(text))
         return w
     return fake

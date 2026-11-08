@@ -79,3 +79,10 @@ Dub tracks are WAV (PCM 16-bit, 48 kHz): there is no ffmpeg on the Python side.
   configured. Calibrate on the first approved videos (threshold changes need owner approval).
 - CPU real-time factors for Chatterbox and Indic Parler on a 4 vCPU runner are not measured yet. Each TTS job
   logs `rtf=<x>` (a number); read the first CI runs. Kokoro measured 0.21 on a 10-core laptop.
+
+## Notes for the private repo
+- The private repo must gate on `qa_*.json` (`passed: true`) and `status_<lang>.json` (`voice: false` means that
+  language is captions only); `master.mp4` is uploaded even when QA fails.
+- `job_id` appears in the public Actions UI (concurrency group): use an opaque id, not a topic slug.
+- A4 checks the planned visual beats the renderer animates, not measured frame differences.
+- Schema errors in logs show only the path and validator, never values.

@@ -16,6 +16,7 @@ TRUE_PEAK_CEILING_DBTP = -1.0
 class Wav:
     samples: np.ndarray  # float32 mono, shape (n,)
     sr: int
+    engine: str | None = None  # which TTS engine produced it
 
     @property
     def duration(self) -> float:

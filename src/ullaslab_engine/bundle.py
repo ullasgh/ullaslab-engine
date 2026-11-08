@@ -23,7 +23,7 @@ def validate_chart(chart: dict) -> None:
     try:
         jsonschema.validate(chart, _schema("chart.schema.json"))
     except jsonschema.ValidationError as e:
-        raise BundleError(f"chart invalid at {list(e.absolute_path)}: {e.message[:120]}") from None
+        raise BundleError(f"chart invalid at {list(e.absolute_path)} ({e.validator})") from None
 
 
 def load_bundle(root: Path) -> dict:
@@ -35,7 +35,7 @@ def load_bundle(root: Path) -> dict:
     except FileNotFoundError:
         raise BundleError("manifest.json missing") from None
     except jsonschema.ValidationError as e:
-        raise BundleError(f"manifest invalid at {list(e.absolute_path)}: {e.message[:120]}") from None
+        raise BundleError(f"manifest invalid at {list(e.absolute_path)} ({e.validator})") from None
     seg_ids = {s["id"] for s in m["segments"]}
     if len(seg_ids) != len(m["segments"]):
         raise BundleError("duplicate segment ids")

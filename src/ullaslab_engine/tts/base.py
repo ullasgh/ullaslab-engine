@@ -75,7 +75,7 @@ def plan_engines(lang: str) -> list[str]:
     return [e for e in order if e and e != "none"]
 
 
-def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: bool = True) -> Wav:
+def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: bool = True, engine: str | None = None) -> Wav:
     """Synthesise text in lang. Clone engines use ref_wav; stock engines ignore it.
 
     Tries the primary engine then the fallback; raises NoVoiceAvailable when none works.
@@ -84,7 +84,7 @@ def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: b
     """
     ref = Path(ref_wav) if ref_wav else None
     errors = []
-    for name in plan_engines(lang):
+    for name in ([engine] if engine else plan_engines(lang)):
         try:
             eng = get_engine(name)
             if not eng.supports(lang):
@@ -94,6 +94,7 @@ def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: b
             w = eng.synth(text, lang, ref)
             if w is None or len(w.samples) == 0:
                 raise EngineUnavailable(f"{name} returned empty audio")
+            w.engine = name
             return normalize_loudness(w) if normalize else w
         except EngineUnavailable as e:
             log.warning("tts engine %s unusable for %s: %s", name, lang, e)

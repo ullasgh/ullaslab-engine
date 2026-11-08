@@ -116,6 +116,7 @@ def cmd_upload(a):
     items = [(f"audio_{lang}.wav", work / lang / "audio.wav", "audio/wav"),
              (f"captions_{lang}.srt", work / lang / "captions.srt", "application/x-subrip"),
              (f"captions_{lang}.vtt", work / lang / "captions.vtt", "text/vtt"),
+             (f"status_{lang}.json", work / lang / "status.json", "application/json"),
              (f"qa_{lang}.json", work / lang / ("master/qa.json" if lang == m["source_lang"] else "qa.json"), "application/json")]
     if lang == m["source_lang"]:
         items += [("master.mp4", work / lang / "master" / "video.mp4", "video/mp4"),

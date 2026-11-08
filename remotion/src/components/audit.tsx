@@ -41,7 +41,7 @@ export const Audit: React.FC<{ enabled: boolean; sceneId: string }> = ({ enabled
         const cs = getComputedStyle(el);
         const text = (el.textContent ?? "").trim();
         els.push({ role, x: r.x, y: r.y, w: r.width, h: r.height, fontPx: parseFloat(cs.fontSize), fg: hex(cs.color), bg: bgOf(el),
-          words: text ? text.split(/\s+/).length : 0 });
+          words: text ? Math.max(text.split(/\s+/).length, Math.ceil((text.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) ?? []).length / 2)) : 0 });
       });
       console.log("[[AUDIT]]" + JSON.stringify({ frame, scene: sceneId, elements: els }));
       continueRender(handle);

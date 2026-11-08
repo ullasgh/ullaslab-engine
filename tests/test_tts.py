@@ -86,3 +86,14 @@ def test_engine_contract_declared_for_builtin_languages():
     for code, cfg in languages().items():
         assert cfg["tts_engine"] in ("chatterbox", "indic_parler", "kokoro", "none")
         assert cfg["tts_engine"] != "indicf5"   # licence UNCLEAR, never default
+
+
+def test_engine_pinned_per_track(bundle_dir):
+    from ullaslab_engine.bundle import load_bundle
+    from ullaslab_engine.synth import synth_segments
+    calls = []
+    def tts_fn(text, lang, ref, normalize=True, engine=None):
+        calls.append(engine)
+        w = speechlike(1.0); w.engine = "kokoro"; return w
+    synth_segments(load_bundle(bundle_dir), "en", None, tts_fn)
+    assert calls[0] is None and set(calls[1:]) == {"kokoro"}

@@ -21,7 +21,15 @@ DISCLAIMER_S = 3.0
 
 def synth_segments(m: dict, lang: str, ref_wav: Path | None,
                    tts_fn: Callable[..., Wav] = default_tts) -> list[Wav]:
-    return [trim_silence(tts_fn(seg_text(m, s, lang), lang, ref_wav, normalize=False)) for s in m["segments"]]
+    """One engine per track: the first segment picks it (primary, else fallback); later segments must
+    use the same engine, so a transient failure cannot splice a stock voice into a cloned track."""
+    out, pin = [], None
+    for s in m["segments"]:
+        kw = {"engine": pin} if pin else {}
+        w = tts_fn(seg_text(m, s, lang), lang, ref_wav, normalize=False, **kw)
+        pin = pin or getattr(w, "engine", None)
+        out.append(trim_silence(w))
+    return out
 
 
 def beats_for(start: float, end: float) -> list[float]:
