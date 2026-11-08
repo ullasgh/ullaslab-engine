@@ -32,7 +32,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -57,7 +57,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -119,7 +119,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"

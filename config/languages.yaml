@@ -6,6 +6,20 @@
 #   fallback_engine: used when the primary engine fails QA or is unavailable
 # IndicF5 is NOT used: commercial licence UNCLEAR (feasibility B1). Owner may opt in later.
 # number_format: western (1,234,567) | indian (12,34,567; lakh/crore) | arabic_western (Arabic text, Western digits)
+# Voice settings (WP11). voice_defaults apply to every language; a language entry may override any key.
+#   accent: native | mine   native = target-language prosody (Chatterbox cfg_weight forced to 0 for non-English
+#                           targets, per upstream README); mine = keep the reference speaker's accent
+#   ref_clip: 1..3          which of the three selected reference clips (voice/clips/clipN.wav) to clone
+#   speakers / speaker      Indic Parler recommended speakers (model card) and the chosen index
+#   exaggeration, temperature, cfg_weight   Chatterbox sampling, tuned for calm narration
+# Owner choices are applied with: uv run ullaslab voice apply-choices <choices.json>
+voice_defaults:
+  accent: native
+  ref_clip: 1
+  speaker: 0
+  exaggeration: 0.4
+  temperature: 0.7
+  cfg_weight: 0.5
 languages:
   - code: en
     name: English
@@ -18,6 +32,8 @@ languages:
     captions: true
     dub: false          # master track
     priority: 1
+    accent: mine
+    ref_clip: 1
   - code: hi
     name: Hindi
     script: Devanagari
@@ -29,6 +45,10 @@ languages:
     captions: true
     dub: true
     priority: 2
+    accent: native
+    ref_clip: 1
+    speakers: [Rohit, Divya]
+    speaker: 0
   - code: ta
     name: Tamil
     script: Tamil
@@ -40,6 +60,8 @@ languages:
     captions: true
     dub: true
     priority: 5
+    speakers: [Jaya, Kavitha]
+    speaker: 0
   - code: te
     name: Telugu
     script: Telugu
@@ -51,6 +73,8 @@ languages:
     captions: true
     dub: true
     priority: 5
+    speakers: [Prakash, Lalitha]
+    speaker: 0
   - code: kn
     name: Kannada
     script: Kannada
@@ -62,6 +86,8 @@ languages:
     captions: true
     dub: true
     priority: 6
+    speakers: [Suresh, Anu]
+    speaker: 0
   - code: ml
     name: Malayalam
     script: Malayalam
@@ -73,6 +99,8 @@ languages:
     captions: true
     dub: true
     priority: 6
+    speakers: [Anjali, Harish]
+    speaker: 0
   - code: mr
     name: Marathi
     script: Devanagari
@@ -84,6 +112,8 @@ languages:
     captions: true
     dub: true
     priority: 4
+    speakers: [Sanjay, Sunita]
+    speaker: 0
   - code: bn
     name: Bengali
     script: Bengali
@@ -95,6 +125,8 @@ languages:
     captions: true
     dub: true
     priority: 4
+    speakers: [Arjun, Aditi]
+    speaker: 0
   - code: gu
     name: Gujarati
     script: Gujarati
@@ -106,6 +138,8 @@ languages:
     captions: true
     dub: true
     priority: 4
+    speakers: [Yash, Neha]
+    speaker: 0
   - code: es
     name: Spanish
     script: Latin
@@ -117,6 +151,8 @@ languages:
     captions: true
     dub: true
     priority: 3
+    accent: native
+    ref_clip: 1
   - code: pt
     name: Portuguese
     script: Latin
@@ -128,6 +164,8 @@ languages:
     captions: true
     dub: true
     priority: 3
+    accent: native
+    ref_clip: 1
   - code: ar
     name: Arabic
     script: Arabic
@@ -139,6 +177,8 @@ languages:
     captions: true
     dub: true
     priority: 7
+    accent: native
+    ref_clip: 1
   - code: ja
     name: Japanese
     script: Japanese
@@ -150,3 +190,5 @@ languages:
     captions: true
     dub: true
     priority: 7
+    accent: native
+    ref_clip: 1

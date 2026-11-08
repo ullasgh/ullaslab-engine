@@ -11,7 +11,7 @@ from typing import Callable
 from .audio import Wav, assemble, trim_silence
 from .bundle import seg_text
 from .config import quality
-from .tts import tts as default_tts
+from .voice.narrate import narrate as default_tts
 
 SR = 48000
 GAP_S = 0.3

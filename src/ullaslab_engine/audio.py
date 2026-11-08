@@ -1,6 +1,6 @@
 """Audio helpers: Wav container, loudness normalisation (-14 LUFS), true peak, timeline assembly."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
 import pyloudnorm as pyln
@@ -17,6 +17,7 @@ class Wav:
     samples: np.ndarray  # float32 mono, shape (n,)
     sr: int
     engine: str | None = None  # which TTS engine produced it
+    flags: list = field(default_factory=list)  # QA flags (e.g. naturalness gate failures after one retry)
 
     @property
     def duration(self) -> float:
@@ -93,7 +94,7 @@ def trim_silence(w: Wav, thresh_db: float = -50.0, keep_s: float = 0.08) -> Wav:
     if len(idx) == 0:
         return w
     k = int(keep_s * w.sr)
-    return Wav(w.samples[max(0, idx[0] - k): idx[-1] + k], w.sr)
+    return Wav(w.samples[max(0, idx[0] - k): idx[-1] + k], w.sr, w.engine, list(w.flags))
 
 
 def assemble(segments: list[tuple[float, Wav]], sr: int, total_s: float | None = None) -> Wav:

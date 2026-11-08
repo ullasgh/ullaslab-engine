@@ -40,7 +40,10 @@ def validate_payload(p: dict) -> dict:
             raise TransferError(f"payload missing field {k}")
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(p["job_id"])):
         raise TransferError("bad job_id")
-    urls = [p["bundle_url"], p.get("voice_url"), p.get("timing_url")] + list(p["outputs"].values())
+    clips = p.get("voice_clip_urls") or {}
+    if not isinstance(clips, dict) or not all(k in ("1", "2", "3") for k in clips):
+        raise TransferError("bad voice_clip_urls")
+    urls = [p["bundle_url"], p.get("voice_url"), p.get("timing_url")] + list(p["outputs"].values()) + list(clips.values())
     for name in p["outputs"]:
         if not _NAME.match(name):
             raise TransferError("bad output name")
@@ -54,7 +57,8 @@ def validate_payload(p: dict) -> dict:
 
 def mask_lines(p: dict) -> list[str]:
     """GitHub Actions ::add-mask:: commands for every URL in the payload and its query/path parts."""
-    vals = [p.get("bundle_url"), p.get("voice_url"), p.get("timing_url")] + list(p.get("outputs", {}).values())
+    vals = ([p.get("bundle_url"), p.get("voice_url"), p.get("timing_url")] + list(p.get("outputs", {}).values())
+            + list((p.get("voice_clip_urls") or {}).values()))
     out = []
     for v in vals:
         if not v:

@@ -67,8 +67,9 @@ def stage_tts(work: Path, lang: str, tts_fn=default_tts, want_natural: bool = Fa
             normalize_loudness(a2).save(out / "audio_natural.wav")
             jdump(t2, out / "timeline_natural.json")
     rtf = (time.monotonic() - t0) / max(1e-6, sum(w.duration for w in wavs))  # CPU realtime factor (feasibility item 2)
-    jdump({"lang": lang, "voice": True, "rtf": round(rtf, 2)}, out / "status.json")
-    return {"voice": True, "overruns": tl.get("overruns", []), "rtf": round(rtf, 2)}
+    flags = [f"seg{i}: {f}" for i, w in enumerate(wavs) for f in w.flags]  # naturalness gate failures after one retry
+    jdump({"lang": lang, "voice": True, "rtf": round(rtf, 2), "naturalness_flags": flags}, out / "status.json")
+    return {"voice": True, "overruns": tl.get("overruns", []), "rtf": round(rtf, 2), "naturalness_flags": flags}
 
 
 def stage_captions(work: Path, lang: str, use_asr: bool = True) -> dict:

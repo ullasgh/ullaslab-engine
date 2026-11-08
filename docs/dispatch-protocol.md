@@ -15,6 +15,7 @@ Contents: write on this repo only (held by the private repo).
     "job_id": "2026-11-08-chart-of-the-week",
     "bundle_url": "https://<acct>.r2.cloudflarestorage.com/...  (GET, zip of the bundle)",
     "voice_url": "https://...  (GET, optional reference wav; only on the runner, never uploaded)",
+    "voice_clip_urls": {"1": "https://...", "2": "...", "3": "..."},  (GET, optional: the 3 reference clips; ref_clip in languages.yaml picks one, voice_url is the fallback)
     "timing_url": "https://...  (GET timing_en.json written by the master job; needed by dub jobs)",
     "languages": ["en", "hi", "ta"],
     "outputs": {

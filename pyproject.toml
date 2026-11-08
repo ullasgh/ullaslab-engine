@@ -13,6 +13,7 @@ dependencies = [
   "requests>=2.31",
   "jsonschema>=4.20",
   "jiwer>=3.0",
+  "num2words>=0.5.13",  # LGPL-2.1, used unmodified via import (number verbalisation)
 ]
 
 [project.optional-dependencies]
@@ -20,7 +21,8 @@ dependencies = [
 # and pins transformers 4.46, which conflicts with chatterbox-tts 0.1.7: never in the same job).
 # Heavy engines are extras so each CI matrix job installs only what its language needs.
 kokoro = ["kokoro>=0.9.4", "misaki[en]>=0.9.4"]
-chatterbox = ["chatterbox-tts==0.1.7"]
+# setuptools<81: resemble-perth (watermarker) imports pkg_resources, removed in setuptools 81; without it chatterbox fails to load
+chatterbox = ["chatterbox-tts==0.1.7", "setuptools>=69,<81"]
 asr = ["faster-whisper>=1.1.0"]
 dev = ["pytest>=8"]
 

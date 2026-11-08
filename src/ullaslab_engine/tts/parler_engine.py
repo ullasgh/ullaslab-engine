@@ -8,16 +8,28 @@ from ..audio import Wav
 from .base import EngineUnavailable
 
 MODEL = "ai4bharat/indic-parler-tts"
-SPEAKERS = {
-    "hi": "Rohit", "ta": "Jaya", "te": "Prakash", "kn": "Suresh",
-    "ml": "Anjali", "mr": "Sunita", "bn": "Aditi", "gu": "Neha",
+# Recommended speakers from the model card (checked 2026-11-08); index 0 is the default, 1 the alternative.
+RECOMMENDED = {
+    "hi": ["Rohit", "Divya"], "ta": ["Jaya", "Kavitha"], "te": ["Prakash", "Lalitha"], "kn": ["Suresh", "Anu"],
+    "ml": ["Anjali", "Harish"], "mr": ["Sanjay", "Sunita"], "bn": ["Arjun", "Aditi"], "gu": ["Yash", "Neha"],
 }
-_DESC = "{spk}'s voice is calm, clear and steady, at a moderate pace, recorded very close with no background noise."
+SPEAKERS = {k: v[0] for k, v in RECOMMENDED.items()}
+# Calm, close-mic narration. "very clear audio" is the card's highest-quality cue; commas add small breaks.
+_DESC = ("{spk}'s voice is calm, clear and steady, at a moderate pace with a neutral narration tone, "
+         "very clear audio, recorded very close with almost no background noise.")
+
+
+def pick_speaker(lang: str, settings: dict | None) -> str:
+    st = settings or {}
+    names = st.get("speakers") or RECOMMENDED[lang]
+    i = int(st.get("speaker", 0))
+    return names[i] if 0 <= i < len(names) else names[0]
 
 
 class IndicParlerEngine:
     name = "indic_parler"
     clones_voice = False
+    uses_settings = True
 
     def __init__(self):
         import torch
@@ -31,11 +43,12 @@ class IndicParlerEngine:
     def supports(self, lang: str) -> bool:
         return lang in SPEAKERS
 
-    def synth(self, text: str, lang: str, ref_wav: Path | None) -> Wav:
+    def synth(self, text: str, lang: str, ref_wav: Path | None, settings: dict | None = None) -> Wav:
         t = self._torch
         try:
-            d = self._dtok(_DESC.format(spk=SPEAKERS[lang]), return_tensors="pt")
+            d = self._dtok(_DESC.format(spk=pick_speaker(lang, settings)), return_tensors="pt")
             p = self._tok(text, return_tensors="pt")
+            t.manual_seed(1000 + int((settings or {}).get("seed", 0)))
             with t.no_grad():
                 out = self._model.generate(
                     input_ids=d.input_ids, attention_mask=d.attention_mask,
