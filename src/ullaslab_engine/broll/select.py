@@ -1,5 +1,6 @@
 """Per-scene candidate search, pre-score, download of the top few, ranking and selection."""
 from __future__ import annotations
+import re
 import shutil
 from datetime import date
 from pathlib import Path
@@ -7,6 +8,9 @@ from pathlib import Path
 from .base import BrollError, Candidate, Http, ProviderDisabled, keep_candidate, probe, res_score, tokens
 from .ledger import sha256_file
 from .scenes import Scene
+
+
+LOGO_META = re.compile(r"\b(logo|watermark|watermarked|insignia)\b", re.I)
 
 
 def queries(scene: Scene) -> list[str]:
@@ -31,7 +35,7 @@ def prescore(c: Candidate, scene: Scene, min_res: int) -> tuple:
 
 
 def select_scene(scene: Scene, providers: list, ranker, *, orientation: str, min_res: int, top_n: int, blocked: set[str],
-                 used: dict[str, str], frames_dir: Path, log: list[str]) -> dict | None:
+                 used: dict[str, str], frames_dir: Path, log: list[str], max_text_penalty: float = 0.7) -> dict | None:
     """Returns {candidate, path, rank, ...} or None. `used` maps clip key/sha -> scene id (episode dedupe)."""
     dur = scene.duration_range()
     pool: dict[str, Candidate] = {}
@@ -74,6 +78,9 @@ def select_scene(scene: Scene, providers: list, ranker, *, orientation: str, min
         from .rank import sample_frames
         frames = sample_frames(path, frames_dir / scene.id)
         r = ranker.score(c, frames, texts)
+        if LOGO_META.search(c.text()) or r.get("text_penalty", 0.0) > max_text_penalty:
+            log.append(f"{scene.id}: {c.key} rejected (logo/text/watermark)")
+            continue
         # resolution preference: >= min_res clips beat sub-1080 ones, then similarity
         scored.append(((1 if min(c.width, c.height) >= min_res else 0), r["score"], c, path, r, sha, frames))
     if not scored:

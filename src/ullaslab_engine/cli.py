@@ -267,7 +267,7 @@ def main(argv=None) -> int:
     bf.add_argument("--out", required=True)
     bf.add_argument("--channel", default="default")
     bf.add_argument("--episode", default=None)
-    bf.add_argument("--orientation", choices=["landscape", "portrait"], default="landscape")
+    bf.add_argument("--orientation", choices=["landscape", "portrait"], default=None, help="override; default per output aspect")
     bf.add_argument("--cache-dir", default=None)
     bf.add_argument("--fallback-ranker", action="store_true")
     a = ap.parse_args(argv)

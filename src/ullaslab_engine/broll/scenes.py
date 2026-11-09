@@ -18,6 +18,12 @@ class Scene:
     end: float | None = None
     narration: str = ""
     type: str = "footage"
+    output: str = "main"
+    aspect: str = ""
+
+    @property
+    def orientation(self) -> str | None:
+        return {"16:9": "landscape", "9:16": "portrait"}.get(self.aspect)
 
     @property
     def duration(self) -> float | None:
@@ -38,7 +44,7 @@ def _num(v):
         return None
 
 
-def _scene(d: dict, i: int) -> Scene:
+def _scene(d: dict, i: int, output: str = "main", aspect: str = "") -> Scene:
     span = d.get("narration_span") or d.get("narration") or d.get("span") or {}
     if not isinstance(span, dict):
         span = {}
@@ -54,13 +60,20 @@ def _scene(d: dict, i: int) -> Scene:
         text = d["narration"]
     return Scene(id=str(d.get("id", f"s{i + 1}")), visual_objective=str(d.get("visual_objective") or d.get("objective") or ""),
                  search_terms=[str(t) for t in terms if str(t).strip()], illustrative=bool(d.get("illustrative", True)),
-                 start=start, end=end, narration=str(text or ""), type=str(d.get("type", "footage")).lower())
+                 start=start, end=end, narration=str(text or ""), type=str(d.get("type", "footage")).lower(), output=output, aspect=aspect)
 
 
 def load_scenes(path: Path, include_all_types: bool = False) -> list[Scene]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    raw = data.get("scenes") if isinstance(data, dict) else data
-    if not isinstance(raw, list):
-        raise ValueError("scenes.json: expected a list or an object with a 'scenes' list")
-    scenes = [_scene(d, i) for i, d in enumerate(raw) if isinstance(d, dict)]
+    scenes: list[Scene] = []
+    if isinstance(data, dict) and isinstance(data.get("outputs"), list):   # schemas/scenes.schema.json (v1)
+        for o in data["outputs"]:
+            if isinstance(o, dict):
+                scenes += [_scene(d, i, str(o.get("output", "main")), str(o.get("aspect", "")))
+                           for i, d in enumerate(o.get("scenes") or []) if isinstance(d, dict)]
+    else:   # tolerant fallback: flat list or {"scenes": [...]}
+        raw = data.get("scenes") if isinstance(data, dict) else data
+        if not isinstance(raw, list):
+            raise ValueError("scenes.json: expected 'outputs[].scenes[]', a 'scenes' list, or a list")
+        scenes = [_scene(d, i) for i, d in enumerate(raw) if isinstance(d, dict)]
     return scenes if include_all_types else [s for s in scenes if s.type in FOOTAGE_TYPES]

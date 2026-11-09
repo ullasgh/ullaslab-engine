@@ -20,11 +20,11 @@ def write_ledger(out: Path, entries: list[dict], meta: dict) -> None:
     lines = ["# Asset ledger", ""]
     for k, v in meta.items():
         lines.append(f"- {k}: {v}")
-    lines += ["", "| File | Scene | Source | Creator | Licence | Downloaded | Footage | sha256 |", "|---|---|---|---|---|---|---|---|"]
+    lines += ["", "| File | Output | Scene | Source | Creator | Licence | Downloaded | Footage | sha256 |", "|---|---|---|---|---|---|---|---|---|"]
     esc = lambda s: str(s).replace("|", "/").replace("\n", " ")
     for e in entries:
         lic = f"[{esc(e['licence']['name'])}]({e['licence']['url']})" if e["licence"].get("url") else esc(e["licence"]["name"])
-        lines.append(f"| {esc(e['filename'])} | {esc(e['scene'])} | {e['source_url']} | {esc(e['creator'])} | {lic} | "
+        lines.append(f"| {esc(e['filename'])} | {esc(e.get('output', ''))} | {esc(e['scene'])} | {e['source_url']} | {esc(e['creator'])} | {lic} | "
                      f"{e['download_date']} | {'illustrative' if e['illustrative'] else 'actual'} | `{e['sha256'][:16]}` |")
     notes = [e for e in entries if e["licence"].get("attribution") or e["licence"].get("notice")]
     if notes:

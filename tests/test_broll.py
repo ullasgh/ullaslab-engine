@@ -279,8 +279,52 @@ def test_end_to_end_dedupe_ledger_and_history(tmp_path):
         assert k in e
     assert e["licence"]["name"] and e["licence"]["url"] and ents[1]["illustrative"] is False
     assert "Pixabay Content License" in (out / "assets.md").read_text()
-    assert (out / "footage" / "a.mp4").exists()
+    assert (out / "footage" / "main" / "a.mp4").exists()
     # next episode: both clips blocked by channel history
     r2 = run_fetch(scenes, tmp_path / "out2", channel="ch", episode="next", config=cfgf, env={"PIXABAY_API_KEY": "k"}, http=http,
                    ranker=FallbackRanker(), history_dir=tmp_path / "hist")
     assert [x["status"] for x in r2["report"]] == ["no-candidate", "no-candidate"]
+
+
+FIX = Path(__file__).parent / "fixtures" / "scenes"
+
+
+def test_real_scenes_schema_fixture_loads_and_validates():
+    import jsonschema
+    data = json.loads((FIX / "valid.json").read_text())
+    jsonschema.validate(data, json.loads((FIX / "scenes.schema.json").read_text()))
+    all_sc = load_scenes(FIX / "valid.json", include_all_types=True)
+    assert {s.output for s in all_sc} >= {"long"} and all_sc[0].aspect == "16:9" and all_sc[0].orientation == "landscape"
+    assert all_sc[0].narration.startswith("Why did") and all_sc[0].start is None
+    foot = load_scenes(FIX / "valid.json")
+    assert all(s.type == "footage" for s in foot)
+
+
+def test_multi_output_orientation_filenames_and_dedupe(tmp_path):
+    land = make_video(tmp_path / "l.mp4", 1920, 1080)
+    port = make_video(tmp_path / "p.mp4", 1080, 1920)
+    land2 = make_video(tmp_path / "l2.mp4", 1920, 1080, secs=3)
+    hits = {"hits": [
+        {"id": 1, "pageURL": "https://pixabay.com/videos/1/", "tags": "ship", "duration": 5, "user": "a", "videos": {"large": {"url": "https://cdn/1", "width": 1920, "height": 1080}}},
+        {"id": 2, "pageURL": "https://pixabay.com/videos/2/", "tags": "ship", "duration": 5, "user": "a", "videos": {"large": {"url": "https://cdn/2", "width": 1080, "height": 1920}}},
+        {"id": 3, "pageURL": "https://pixabay.com/videos/3/", "tags": "ship", "duration": 5, "user": "a", "videos": {"large": {"url": "https://cdn/3", "width": 1920, "height": 1080}}}]}
+    http, _, _ = mkhttp(tmp_path, {PixabayProvider.URL: Resp(data=hits), "https://cdn/1": Resp(body=land.read_bytes()),
+                                   "https://cdn/2": Resp(body=port.read_bytes()), "https://cdn/3": Resp(body=land2.read_bytes())})
+    sc = lambda i: {"id": i, "role": "setup", "type": "footage", "search_terms": ["ship"], "visual_objective": "ship",
+                    "narration": {"text": "x", "start_s": None, "end_s": None}, "illustrative": True}
+    f = tmp_path / "ep" / "scenes.json"
+    f.parent.mkdir()
+    f.write_text(json.dumps({"schema_version": 1, "item": "2026-11-10-x", "outputs": [
+        {"output": "long", "aspect": "16:9", "scenes": [sc("s01"), sc("s02")]},
+        {"output": "short", "aspect": "9:16", "scenes": [sc("s01")]}]}))
+    c = load_config()
+    c["providers"] = [e for e in c["providers"] if e["name"] == "pixabay"]
+    (tmp_path / "b.yaml").write_text(yaml.safe_dump(c))
+    out = tmp_path / "o"
+    run_fetch(f, out, config=tmp_path / "b.yaml", env={"PIXABAY_API_KEY": "k"}, http=http, ranker=FallbackRanker(), history_dir=tmp_path / "h")
+    ents = json.loads((out / "assets.json").read_text())["assets"]
+    got = {(e["output"], e["scene"]): e for e in ents}
+    assert set(got) == {("long", "s01"), ("long", "s02"), ("short", "s01")}
+    assert got[("long", "s01")]["sha256"] != got[("long", "s02")]["sha256"]       # no repeat within an output
+    assert got[("short", "s01")]["height"] > got[("short", "s01")]["width"]       # portrait from aspect 9:16
+    assert (out / "footage" / "long" / "s01.mp4").exists() and (out / "footage" / "short" / "s01.mp4").exists()
