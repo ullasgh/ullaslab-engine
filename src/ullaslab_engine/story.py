@@ -127,11 +127,25 @@ def edu_line(disclaimer: dict | str, lang: str) -> str:
     return (mm.group(1) if mm else d.strip()).rstrip(".।") or "Education only"
 
 
+_SOURCE_PREFIX = re.compile(r"^\s*(?:sources?|fuente|fonte|स्रोत|ஆதாரம்|మూలం|ಮೂಲ|ഉറവിടം|সূত্র|સ્ત્રોત|المصدر|出典)\s*[:：\-–—]\s*", re.I)
+
+
+def clean_source_name(name: str) -> str:
+    """Drop a leading 'Source:' so the stamp does not read 'Source: Source: X'."""
+    out = name.strip()
+    for _ in range(3):
+        nxt = _SOURCE_PREFIX.sub("", out, count=1)
+        if nxt == out:
+            break
+        out = nxt
+    return out or name.strip()
+
+
 def source_stamp(m: dict, lang: str) -> str:
     for sc in m["scenes"]:
         cd = sc.get("chart_data")
         if cd:
-            return f"{story_strings(lang)['source']}: {cd['source']['name']}"
+            return f"{story_strings(lang)['source']}: {clean_source_name(cd['source']['name'])}"
     return ""
 
 
