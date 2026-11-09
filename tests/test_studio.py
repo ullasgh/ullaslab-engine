@@ -483,3 +483,55 @@ def test_real_music_ledger_is_valid_and_preferred_over_the_generated_pad(tmp_pat
     assert A.pick_track(stub, mood="no-such-mood", music_dir=tmp_path)["id"] == ledger[0]["id"]
     assert A.pick_track(stub, music_dir=tmp_path / "absent") is None     # only then does the studio fall back to the CC0 pad
     assert A.mix_cfg()["music_below_voice_db"] >= 20                     # ducking target unchanged
+
+
+# ---------------------------------------------------------------- private R2 music fetch (mocked, no network)
+def _r2_track(tmp_path, data=b"abc"):
+    import hashlib
+    return {"id": "t1", "file": "a.mp3", "title": "T", "artist": "A", "source": "pixabay", "licence": "L", "licence_url": "u",
+            "source_url": "u", "downloaded": "2026-11-09", "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def test_fetch_missing_track_verifies_sha_and_installs(tmp_path):
+    t = _r2_track(tmp_path)
+    calls = []
+
+    def getter(key, dst, env):
+        calls.append(key)
+        dst.write_bytes(b"abc")
+    out = A.fetch_missing_tracks([t], tmp_path, env={}, getter=getter)
+    assert out == {"fetched": ["t1"], "failed": {}} and calls == ["assets/music/a.mp3"]
+    assert (tmp_path / "a.mp3").read_bytes() == b"abc"
+    assert A.fetch_missing_tracks([t], tmp_path, env={}, getter=lambda *a: 1 / 0)["fetched"] == []   # present: no fetch
+
+
+def test_fetch_sha_mismatch_and_errors_are_reported_not_installed(tmp_path):
+    t = _r2_track(tmp_path)
+    out = A.fetch_missing_tracks([t], tmp_path, env={}, getter=lambda k, d, e: d.write_bytes(b"tampered"))
+    assert "sha256" in out["failed"]["t1"] and not (tmp_path / "a.mp3").exists()
+
+    def boom(k, d, e):
+        raise RuntimeError("no creds")
+    out = A.fetch_missing_tracks([t], tmp_path, env={}, getter=boom)
+    assert "no creds" in out["failed"]["t1"] and not list(tmp_path.glob("*.part"))
+
+
+def test_fetch_picks_s3_when_env_keys_set_else_wrangler(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(A, "_r2_get_s3", lambda k, d, e: (seen.append("s3"), d.write_bytes(b"abc")))
+    monkeypatch.setattr(A, "_r2_get_wrangler", lambda k, d, e: (seen.append("wr"), d.write_bytes(b"abc")))
+    env = {"R2_ACCOUNT_ID": "a", "R2_ACCESS_KEY_ID": "b", "R2_SECRET_ACCESS_KEY": "c"}
+    A.fetch_missing_tracks([_r2_track(tmp_path)], tmp_path / "x", env=env)
+    A.fetch_missing_tracks([_r2_track(tmp_path)], tmp_path / "y", env={})
+    assert seen == ["s3", "wr"]
+
+
+def test_qc_warns_when_pad_used_while_ledger_has_tracks(tmp_path):
+    from ullaslab_engine.studio import qc
+    w = tmp_path / "work" / "final"
+    w.mkdir(parents=True)
+    (w / "audio.json").write_text(json.dumps({"short": {"music": {"id": "generated-pad", "fallback": {"fetch_failed": {"t1": "x"}}}}}))
+    c = qc.check_music_fallback(tmp_path, "final")
+    assert c.status == qc.WARN and "short" in c.detail
+    (w / "audio.json").write_text(json.dumps({"short": {"music": {"id": "t1"}}}))
+    assert qc.check_music_fallback(tmp_path, "final").status == qc.PASS

@@ -248,6 +248,11 @@ class Studio:
         def go():
             lib = A.make_sfx_library(self.work / "sfx_lib")
             ledger = A.load_music_ledger()
+            fetch = A.fetch_missing_tracks(ledger)
+            if fetch["fetched"]:
+                self.log(f"  music: fetched from private R2: {', '.join(fetch['fetched'])}")
+            for tid, why in fetch["failed"].items():
+                self.log(f"  WARNING: licensed music '{tid}' could not be fetched from R2 ({why})")
             meta = {}
             for o, final in zip(doc["outputs"], outs):
                 n = o["output"]
@@ -263,6 +268,10 @@ class Studio:
                     src = A.MUSIC_DIR / track["file"]
                 else:
                     track = A.generated_track()
+                    if ledger:
+                        track["fallback"] = {"reason": "ledger tracks exist but none is available locally or from R2", "fetch_failed": fetch["failed"]}
+                        self.log(f"  WARNING: {n} is using the generated CC0 pad although {len(ledger)} licensed track(s) are in the ledger "
+                                 f"(R2 fetch failed: {fetch['failed'] or 'not attempted'}). Set R2_* env or run `wrangler login`.")
                     src = A.generate_pad(st / "pad_source.wav", min(total, 60.0))
                 A.run(A.music_stem_cmd(src, total, st / "music.wav"), "music stem")
                 duck = A.apply_duck(st / "narration.wav", st / "music.wav", st / "music_ducked.wav")
