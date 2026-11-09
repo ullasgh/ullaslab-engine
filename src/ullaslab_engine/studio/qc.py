@@ -390,13 +390,9 @@ def check_phash(path: Path, dur: float, scenes: list[dict] | None, T: dict) -> C
 
 # ---------------------------------------------------------------- 5. captions
 def safe_box(orient: str) -> dict:
-    """Safe box in px, parsed from the render's layout.ts (SAFE_BOX) so QC follows the renderer."""
-    src = (ROOT / "remotion" / "src" / "studio" / "layout.ts").read_text(encoding="utf-8")
-    m = re.search(rf"{orient}:\s*\{{\s*top:\s*(\d+),\s*bottom:\s*(\d+),\s*left:\s*(\d+),\s*right:\s*(\d+)", src)
-    if not m:
-        z = json.loads((ROOT / "config" / "safe_zones.json").read_text())[orient]
-        return {"top": z["top"], "bottom": z["bottom"], "left": z["sides"], "right": z["sides"]}
-    return dict(zip(("top", "bottom", "left", "right"), map(int, m.groups())))
+    """Safe box in px, read from the render's layout.ts (via layout_check) so QC follows the renderer."""
+    from .layout_check import layout_numbers
+    return layout_numbers()[0][orient]
 
 
 def frame_rgb(path: Path, t: float, w: int, h: int) -> np.ndarray:
@@ -434,6 +430,8 @@ def check_caption_layout(props: dict | None, orient: str, T: dict) -> Check:
                 bad.append(f"cue {i + 1}: line over {per_line} chars")
         if c["end"] - c["start"] > 3.6 + T["caption_hold_s"] + 0.05:
             bad.append(f"cue {i + 1}: {c['end'] - c['start']:.1f}s on screen")
+    from .layout_check import check as layout_problems
+    bad += layout_problems(orient, props["captions"])      # caption plate inside the safe box, above the content box, lines fit the width
     box = safe_box(orient)
     return Check("captions", "layout limits", FAIL if bad else PASS,
                  "; ".join(bad[:5]) if bad else f"{len(props['captions'])} cues <= {max_lines} lines x {per_line} chars; renderer safe box {box}")
