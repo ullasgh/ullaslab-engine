@@ -120,8 +120,8 @@ const TextScene: React.FC<{ scene: Scene; tl: TlScene }> = ({ scene, tl }) => {
   const wb = tpl.textStyle === "whiteboard";
   return (
     <Content style={{ ...enter, justifyContent: "center" }}>
-      <Card style={{ padding: 44, background: wb ? "#F2F5F9" : C.panel, color: wb ? "#0E1726" : C.text, display: "flex", flexDirection: "column", gap: 28 }}>
-        <Headline text={t(scene.headline, p.lang)} style={{ color: wb ? "#0E1726" : tpl.accent }} />
+      <Card style={{ padding: 44, background: wb ? "#FFFFFF" : C.panel, color: wb ? "#0B1424" : C.text, display: "flex", flexDirection: "column", gap: 28 }}>
+        <Headline text={t(scene.headline, p.lang)} style={{ color: wb ? "#0B1424" : tpl.accent }} />
         {scene.body && <Body text={t(scene.body, p.lang)} style={{ color: wb ? "#1E293B" : C.text }} />}
         <Rail tl={tl} />
       </Card>

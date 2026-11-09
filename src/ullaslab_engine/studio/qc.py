@@ -392,10 +392,11 @@ def check_phash(path: Path, dur: float, scenes: list[dict] | None, T: dict) -> C
 
 
 # ---------------------------------------------------------------- 5. captions
-def safe_box(orient: str) -> dict:
-    """Safe box in px, read from the render's layout.ts (via layout_check) so QC follows the renderer."""
-    from .layout_check import layout_numbers
-    return layout_numbers()[0][orient]
+def safe_box(orient: str, platform: str = "both") -> dict:
+    """Safe box in px. 'both' is read from the render's layout.ts (via layout_check) so QC follows the renderer; a named platform
+    ('youtube_shorts' / 'instagram_reels') checks against that platform's template in config/safe_zones.json."""
+    from .layout_check import platform_box
+    return platform_box(orient, platform)
 
 
 def frame_rgb(path: Path, t: float, w: int, h: int) -> np.ndarray:
@@ -417,7 +418,7 @@ def margin_text_pixels(img: np.ndarray, box: tuple[float, float, float, float]) 
     return int((white & ~inside).sum()), int((~inside).sum())
 
 
-def check_caption_layout(props: dict | None, orient: str, T: dict) -> Check:
+def check_caption_layout(props: dict | None, orient: str, T: dict, platform: str = "both") -> Check:
     if not props or not props.get("captions"):
         return Check("captions", "layout limits", WARN, "no caption metadata (work/<mode>/props.<output>.json)")
     a5 = quality()["A5_mobile_readability"]
@@ -434,17 +435,17 @@ def check_caption_layout(props: dict | None, orient: str, T: dict) -> Check:
         if c["end"] - c["start"] > 3.6 + T["caption_hold_s"] + 0.05:
             bad.append(f"cue {i + 1}: {c['end'] - c['start']:.1f}s on screen")
     from .layout_check import check as layout_problems
-    bad += layout_problems(orient, props["captions"])      # caption plate inside the safe box, above the content box, lines fit the width
-    box = safe_box(orient)
+    bad += layout_problems(orient, props["captions"], platform=platform)      # caption plate inside the safe box, above the content box, lines fit the width
+    box = safe_box(orient, platform)
     return Check("captions", "layout limits", FAIL if bad else PASS,
                  "; ".join(bad[:5]) if bad else f"{len(props['captions'])} cues <= {max_lines} lines x {per_line} chars; renderer safe box {box}")
 
 
-def check_caption_frames(path: Path, props: dict | None, scenes: list[dict] | None, size: tuple[int, int], orient: str, T: dict) -> Check:
+def check_caption_frames(path: Path, props: dict | None, scenes: list[dict] | None, size: tuple[int, int], orient: str, T: dict, platform: str = "both") -> Check:
     """OCR-free safe-area check on sampled frames: caption-cue midpoints and the midpoint of every non-footage scene (footage
     art may bleed to the edge by design). Near-white pixels outside the renderer's safe box are text-like content in the UI zone."""
     name = "safe area (sampled frames)"
-    sb = safe_box(orient)
+    sb = safe_box(orient, platform)
     full_w = (props or {}).get("width", size[0])
     k = size[0] / full_w                                    # preview renders are half size
     box = (sb["left"] * k, sb["top"] * k, size[0] - sb["right"] * k, size[1] - sb["bottom"] * k)
@@ -843,7 +844,7 @@ def latest_version(dirp: Path, stem: str, ext: str) -> Path | None:
 
 
 def qc_output(video: Path, *, size: tuple[int, int], orient: str, voice: Path | None, scenes: list[dict] | None, props: dict | None,
-              srt: Path | None, item: Path, name: str, T: dict | None = None, sheet_to: Path | None = None) -> tuple[list[Check], Path | None]:
+              srt: Path | None, item: Path, name: str, T: dict | None = None, sheet_to: Path | None = None, platform: str = "both") -> tuple[list[Check], Path | None]:
     """All per-output checks for one rendered file. Each detector is guarded so one failure cannot hide the others."""
     T = T or thresholds()
     checks: list[Check] = []
@@ -867,8 +868,8 @@ def qc_output(video: Path, *, size: tuple[int, int], orient: str, voice: Path | 
         checks.append(Check("audio", "narration silence", WARN, "no voice track to check; see the mix silence check"))
     guard("audio", "mix silence", lambda: check_silence(video, dur, "mix silence", T))
     guard("audio", "loudness", lambda: check_loudness(video, T))
-    guard("captions", "layout limits", lambda: check_caption_layout(props, orient, T))
-    guard("captions", "safe area", lambda: check_caption_frames(video, props, scenes, size, orient, T))
+    guard("captions", "layout limits", lambda: check_caption_layout(props, orient, T, platform))
+    guard("captions", "safe area", lambda: check_caption_frames(video, props, scenes, size, orient, T, platform))
     guard("captions", "SRT sync", lambda: check_caption_sync(srt, scenes, T))
     sheet = None
     if sheet_to is not None:
@@ -879,7 +880,7 @@ def qc_output(video: Path, *, size: tuple[int, int], orient: str, voice: Path | 
     return checks, sheet
 
 
-def qc_item(item: Path, *, preview: bool = False) -> Report:
+def qc_item(item: Path, *, preview: bool = False, platform: str = "both") -> Report:
     item = Path(item).resolve()
     mode = "preview" if preview else "final"
     timed = item / "work" / "scenes.timed.json"
@@ -915,7 +916,7 @@ def qc_item(item: Path, *, preview: bool = False) -> Report:
         pp = item / "work" / mode / f"props.{n}.json"
         props = json.loads(pp.read_text(encoding="utf-8")) if pp.is_file() else None
         checks, sheet = qc_output(video, size=size, orient=orient, voice=voice, scenes=o["scenes"], props=props, srt=srt, item=item, name=n, T=T,
-                                  sheet_to=item / (f"contact_sheet.{n}.png"))
+                                  sheet_to=item / (f"contact_sheet.{n}.png"), platform=platform)
         rep.outputs[n] = checks
         if sheet:
             rep.sheets[n] = sheet.name
@@ -949,7 +950,7 @@ def cmd_studio_qc(a) -> int:
             print(f"qc: {tool} not found")
             return 2
     try:
-        rep = qc_item(Path(a.item), preview=a.preview)
+        rep = qc_item(Path(a.item), preview=a.preview, platform=getattr(a, "platform", "both"))
     except QCError as e:
         print(f"qc: {e}")
         return 2

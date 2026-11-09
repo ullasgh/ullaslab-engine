@@ -1,0 +1,145 @@
+# Pronunciation lexicon: applied to the script text before TTS (voice/textnorm.py, via voice/lexicon.py).
+# Edit freely; no code change needed. Order of precedence: language section, then `common`; longer matches win.
+#
+# Entry: {match: <text>, say: <spoken form>}
+#   regex: true        match is a regular expression (say may use \1 backrefs)
+#   ci: true           case-insensitive (default is case-sensitive, whole-token match)
+#
+# Keep `say` as real, plain words or spaced letters ("G D P"): the A3 WER gate compares the ASR transcript with the
+# script after canonicalisation, so phonetic respellings ("en-VID-ee-uh") would count as mispronunciations.
+# Per-language sections replace English wording; entries with no match change nothing. Non-English sections are
+# machine-seeded and need native review before first publication in each language.
+version: 1
+
+common:            # every language: company names, tickers, symbols
+  - {match: "M&A", say: "M and A"}
+  - {match: "P&L", say: "P and L"}
+  - {match: "Q&A", say: "Q and A"}
+  - {match: "NVDA", say: "Nvidia"}
+  - {match: "AAPL", say: "Apple"}
+  - {match: "MSFT", say: "Microsoft"}
+  - {match: "TSLA", say: "Tesla"}
+  - {match: "AMZN", say: "Amazon"}
+  - {match: "GOOGL", say: "Alphabet"}
+  - {match: "TSMC", say: "T S M C"}
+  - {match: "HDFC", say: "H D F C"}
+  - {match: "ICICI", say: "I C I C I"}
+  - {match: "SBI", say: "S B I"}
+  - {match: "OPEC+", say: "OPEC plus"}
+  - {match: "WTI", say: "W T I"}
+  - {match: "VIX", say: "the VIX"}
+  - {match: "DXY", say: "D X Y"}
+  - {match: "MCX", say: "M C X"}
+  - {match: "NSE", say: "N S E"}
+  - {match: "BSE", say: "B S E"}
+  - {match: "SEBI", say: "SEBI"}
+  - {match: "SOFR", say: "S O F R"}
+  - {match: "ETF", say: "E T F"}
+  - {match: "ETFs", say: "E T Fs"}
+
+en:
+  # finance terms and ratios
+  - {match: "GDP", say: "G D P"}
+  - {match: "CPI", say: "C P I"}
+  - {match: "PPI", say: "P P I"}
+  - {match: "PMI", say: "P M I"}
+  - {match: "PCE", say: "P C E"}
+  - {match: "FOMC", say: "F O M C"}
+  - {match: "ECB", say: "E C B"}
+  - {match: "BoE", say: "B O E"}
+  - {match: "BoJ", say: "B O J"}
+  - {match: "IMF", say: "I M F"}
+  - {match: "EIA", say: "E I A"}
+  - {match: "FRED", say: "FRED"}
+  - {match: "FII", say: "F I I"}
+  - {match: "FIIs", say: "F I Is"}
+  - {match: "DII", say: "D I I"}
+  - {match: "FX", say: "F X"}
+  - {match: "EM", say: "emerging market"}
+  - {match: "QE", say: "Q E"}
+  - {match: "QT", say: "Q T"}
+  - {match: "YoY", say: "year over year", ci: true}
+  - {match: "QoQ", say: "quarter over quarter", ci: true}
+  - {match: "MoM", say: "month over month", ci: true}
+  - {match: "y/y", say: "year over year"}
+  - {match: "q/q", say: "quarter over quarter"}
+  - {match: "m/m", say: "month over month"}
+  - {match: "P/E", say: "P E"}
+  - {match: "EPS", say: "E P S"}
+  - {match: "ROE", say: "R O E"}
+  - {match: "CAGR", say: "C A G R"}
+  - {match: "vs", say: "versus"}
+  - {match: "vs.", say: "versus"}
+  - {match: "approx.", say: "approximately"}
+  # units (the number is verbalised afterwards: "25 bps" -> "twenty-five basis points")
+  - {match: "bps", say: "basis points"}
+  - {match: "bp", say: "basis point"}
+  - {match: "mb/d", say: "million barrels per day"}
+  - {match: "mbd", say: "million barrels per day"}
+  - {match: "bbl/d", say: "barrels per day"}
+  - {match: "bpd", say: "barrels per day"}
+  - {match: "/bbl", say: " per barrel"}
+  - {match: "bbl", say: "barrels"}
+  - {match: "/oz", say: " per ounce"}
+  - {match: "oz", say: "ounces"}
+  - {match: "mmbtu", say: "million B T U", ci: true}
+  - {match: "/MMBtu", say: " per million B T U"}
+  - {match: "Mt", say: "million tonnes"}
+  - {match: "kg", say: "kilograms"}
+  - {match: "km", say: "kilometres"}
+  - {match: "GW", say: "gigawatts"}
+  - {match: "TWh", say: "terawatt hours"}
+  - {match: "pp", say: "percentage points"}
+  - {match: "ppt", say: "percentage points"}
+  # currency codes and pairs
+  - {match: "USD/INR", say: "dollar rupee"}
+  - {match: "EUR/USD", say: "euro dollar"}
+  - {match: "USD/JPY", say: "dollar yen"}
+  - {match: "GBP/USD", say: "pound dollar"}
+  - {match: "INR", say: "rupees"}
+  - {match: "USD", say: "U S dollars"}
+  - {match: "EUR", say: "euros"}
+  - {match: "GBP", say: "pounds"}
+  - {match: "JPY", say: "yen"}
+  - {match: "CNY", say: "yuan"}
+  - {match: "BRL", say: "reais"}
+  # number formats (regexes run before the literal entries above)
+  - {match: '\bUSD\s?(?=\d)', say: '$', regex: true}                           # "USD 5bn" -> "$5bn", then read as money
+  - {match: '\bINR\s?(?=\d)', say: '₹', regex: true}
+  - {match: '\bEUR\s?(?=\d)', say: '€', regex: true}
+  - {match: '\bGBP\s?(?=\d)', say: '£', regex: true}
+  - {match: '\b(\d{1,2})[- ]?(?:Y|yr)\b', say: '\1 year', regex: true}          # 10Y / 10-yr yield
+  - {match: '\bFY[- ]?(\d{2})\b', say: 'fiscal year 20\1', regex: true}          # FY26 -> fiscal year twenty twenty-six
+  - {match: '\bH([12])\s?(20\d{2})\b', say: 'half \1 of \2', regex: true}
+
+hi:
+  - {match: "bps", say: "बेसिस पॉइंट्स"}
+  - {match: "GDP", say: "जीडीपी"}
+  - {match: "CPI", say: "सीपीआई"}
+  - {match: "RBI", say: "आरबीआई"}
+  - {match: "vs", say: "बनाम"}
+  - {match: "bbl", say: "बैरल"}
+
+es:
+  - {match: "bps", say: "puntos básicos"}
+  - {match: "GDP", say: "P I B"}
+  - {match: "PIB", say: "P I B"}
+  - {match: "IPC", say: "I P C"}
+  - {match: "vs", say: "contra"}
+  - {match: "bbl", say: "barriles"}
+
+pt:
+  - {match: "bps", say: "pontos-base"}
+  - {match: "PIB", say: "P I B"}
+  - {match: "GDP", say: "P I B"}
+  - {match: "IPCA", say: "I P C A"}
+  - {match: "vs", say: "contra"}
+  - {match: "bbl", say: "barris"}
+
+ar:
+  - {match: "bps", say: "نقطة أساس"}
+  - {match: "bbl", say: "برميل"}
+
+ja:
+  - {match: "bps", say: "ベーシスポイント"}
+  - {match: "bbl", say: "バレル"}

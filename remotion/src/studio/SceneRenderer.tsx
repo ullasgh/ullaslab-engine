@@ -7,7 +7,7 @@ import { FlowDiagram, Timeline, type FlowData, type TimelineData } from "./Diagr
 import { FootageScene, type FootageData } from "./Footage";
 import { GlobeScene, MapScene, type GlobeData, type MapData } from "./geo";
 import { KineticText } from "./Kinetic";
-import type { Orientation } from "./layout";
+import type { Orientation, Platform } from "./layout";
 import { normalizeScenes, type DirectorScene } from "./director";
 import { overlapAfter, resolveData, transitionProgress, validateScenes, type StudioScene, type TransitionKind } from "./scenes";
 
@@ -20,6 +20,7 @@ export type SceneRendererProps = {
   refs: Record<string, unknown>;   // resolves each scene's data_ref
   lang?: string;
   numberLocale?: string;
+  platform?: Platform;      // safe-area template: "both" (stricter union, default) or one platform
   reserveBottom?: number;   // px held back at the bottom of the safe box (burned-in captions)
 };
 
@@ -75,7 +76,7 @@ const Enter: React.FC<{ kind: TransitionKind; first: boolean; accent: string; ch
   return <AbsoluteFill style={{ opacity: p }}>{children}</AbsoluteFill>;
 };
 
-export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale, reserveBottom }) => {
+export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale, reserveBottom, platform }) => {
   const scenes = normalizeScenes(raw);
   const errs = validateScenes(scenes, refs);
   if (errs.length) throw new Error(`scenes.json invalid:\n${errs.join("\n")}`);
@@ -85,7 +86,7 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scene
         const data = resolveData(s, refs);
         return (
           <Sequence key={s.id} from={s.start} durationInFrames={s.end - s.start + overlapAfter(scenes, i)} name={`${s.type}:${s.id}`}>
-            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom}>
+            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom} platform={platform}>
               <SceneEnter scene={s} first={i === 0}><Art scene={s} data={data} /></SceneEnter>
             </StudioProvider>
           </Sequence>
