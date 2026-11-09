@@ -1,0 +1,226 @@
+{
+ "schema_version": 1,
+ "item": "2026-11-10-tokyo-texas",
+ "outputs": [
+  {
+   "output": "long",
+   "aspect": "16:9",
+   "hook_type": "mystery",
+   "scenes": [
+    {
+     "id": "s01",
+     "role": "hook",
+     "narration": {
+      "text": "Why did a bond auction in Tokyo move rates in Texas?",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "kinetic",
+     "on_screen_text": "Tokyo to Texas?",
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    },
+    {
+     "id": "s02",
+     "role": "setup",
+     "narration": {
+      "text": "Follow the money from Japan to the United States.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "map",
+     "on_screen_text": null,
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "zoom_to_region",
+     "transition": "crossfade",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    },
+    {
+     "id": "s03",
+     "role": "evidence",
+     "narration": {
+      "text": "Here is the ten-year yield over three years.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "chart",
+     "on_screen_text": null,
+     "data_ref": {
+      "kind": "chart",
+      "ref": "c1"
+     },
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut",
+     "sfx": "tick",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    },
+    {
+     "id": "s04",
+     "role": "mechanism",
+     "narration": {
+      "text": "Cargo moves through a port while rates reprice borrowing costs.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "footage",
+     "on_screen_text": null,
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Illustrative port footage, labelled as such, to carry the trade idea",
+     "search_terms": [
+      "container ship crane port dusk",
+      "stacked shipping containers aerial",
+      "harbour crane loading cargo"
+     ],
+     "illustrative": true
+    },
+    {
+     "id": "s05",
+     "role": "interrupt",
+     "narration": {
+      "text": "But here is the part most explainers skip.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "kinetic",
+     "on_screen_text": null,
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "pattern_interrupt",
+     "sfx": "hit",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    },
+    {
+     "id": "s06",
+     "role": "payoff",
+     "narration": {
+      "text": "So the answer to the opening question is a chain, not a single cause.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "chart",
+     "on_screen_text": null,
+     "data_ref": {
+      "kind": "chart",
+      "ref": "c1"
+     },
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot",
+     "callback_to": "s01"
+    },
+    {
+     "id": "s07",
+     "role": "disclaimer",
+     "narration": {
+      "text": "General education, not personal advice.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "kinetic",
+     "on_screen_text": "Education, not advice",
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    }
+   ]
+  },
+  {
+   "output": "short",
+   "aspect": "9:16",
+   "hook_type": "shock",
+   "scenes": [
+    {
+     "id": "s01",
+     "role": "hook",
+     "narration": {
+      "text": "One auction in Tokyo, and rates moved in Texas.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "kinetic",
+     "on_screen_text": null,
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    },
+    {
+     "id": "s02",
+     "role": "evidence",
+     "narration": {
+      "text": "The ten-year yield tells the story.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "chart",
+     "on_screen_text": null,
+     "data_ref": {
+      "kind": "chart",
+      "ref": "c1"
+     },
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    },
+    {
+     "id": "s03",
+     "role": "disclaimer",
+     "narration": {
+      "text": "General education, not personal advice.",
+      "start_s": null,
+      "end_s": null,
+      "words": null
+     },
+     "visual_objective": "Show the idea described by the narration clearly",
+     "type": "kinetic",
+     "on_screen_text": null,
+     "data_ref": null,
+     "palette": "policy",
+     "camera_move": "slow_push",
+     "transition": "cut",
+     "sfx": "none",
+     "rationale": "Matches the narration beat and keeps one idea per shot"
+    }
+   ]
+  }
+ ]
+}

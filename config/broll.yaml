@@ -1,0 +1,16 @@
+# B-roll provider registry. Order = search priority. Keys come from .env (PIXABAY_API_KEY, PEXELS_API_KEY), never this file.
+# Nothing here may point at a paid service; the AI provider cannot be enabled from config.
+run:
+  total_request_budget: 200      # hard cap on HTTP requests (metadata + downloads) per run
+  retries: 3                     # on 429/5xx/network error, exponential backoff
+  backoff_s: 1.0
+  min_res: 1080                  # short side, preferred (highest >= this wins)
+  rank_top_n: 4                  # candidates downloaded and CLIP-ranked per scene
+  history_recent_episodes: 10    # per-channel: do not reuse a clip used in the last N episodes
+providers:
+  - {name: manual,    enabled: true,  inbox: footage/inbox}
+  - {name: pixabay,   enabled: true,  min_interval_s: 0.7, max_requests: 80}   # primary; API limit 100 req/min
+  - {name: nasa,      enabled: true,  min_interval_s: 0.5, max_requests: 60}
+  - {name: wikimedia, enabled: true,  min_interval_s: 0.5, max_requests: 40}
+  - {name: pexels,    enabled: false, min_interval_s: 1.0, max_requests: 40}   # key issuance paused; needs PEXELS_API_KEY
+  - {name: ai,        enabled: false}                                           # hard-disabled stub (WP9 + owner approval)
