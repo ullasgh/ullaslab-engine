@@ -44,10 +44,10 @@ export const DEMO_REFS: Record<string, unknown> = {
   } satisfies ChartSceneData,
   map_routes: {
     meta: MAP_META, focus: { center: [62, 24], zoom: 1.75 }, focusVertical: { center: [52, 15], zoom: 2.7 },
-    highlights: [{ id: "356", color: "accent2", label: { text: "India", at: [79, 22], anchor: "middle", delay: 30, dot: false } }, { id: "682", color: "accent", label: { text: "Saudi Arabia", at: [42.5, 20.5], anchor: "start", delay: 24, dot: false, vertical: { at: [44.5, 17.2] } } }],
+    highlights: [{ id: "356", color: "accent2", label: { text: "India", at: [79, 22], anchor: "middle", delay: 30, dot: false } }, { id: "682", color: "accent", label: { text: "Saudi Arabia", at: [43, 17], anchor: "start", delay: 24, dot: false, vertical: { at: [42.5, 16.3] } } }],
     routes: [
       { id: "gulf-india", points: [[50.1, 26.6], [52, 26.9], [56.3, 26.5], [58.5, 24.5], [64, 21.5], [72.8, 19]], color: "accent2", delay: 10, duration: 60, markers: 2 },
-      { id: "asia-europe", points: [[103.8, 1.4], [98, 5.5], [80, 5.5], [60, 12], [45, 12.5], [43.3, 12.6], [41, 17], [37.5, 22], [34.5, 27.5], [32.5, 30], [29, 33.5], [18, 36], [5, 37], [-5.5, 36], [-9, 38.5], [-5, 48.5], [4.4, 51.9]], color: "accent", delay: 28, duration: 90, markers: 3 },
+      { id: "asia-europe", points: [[103.8, 1.4], [98, 5.5], [80, 5.5], [60, 12], [45, 12.5], [43.3, 12.6], [41.8, 15], [39.8, 19], [37, 22.5], [35.2, 26.3], [33.6, 28.6], [32.6, 30], [29, 33.5], [18, 36], [5, 37], [-5.5, 36], [-9, 38.5], [-5, 48.5], [4.4, 51.9]], color: "accent", delay: 28, duration: 90, markers: 3 },
     ],
     labels: [
       { text: "Hormuz", at: [56.3, 26.5], dx: 14, dy: -14, delay: 36, color: "accent2" },
