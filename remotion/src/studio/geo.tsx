@@ -132,8 +132,8 @@ const Highlights: React.FC<{ items: GeoHighlight[]; path: ReturnType<typeof geoP
 // Soft bottom scrim so the stamp stays legible over land and glow.
 const Scrim: React.FC = () => {
   const { L, pal } = useStudio();
-  const hh = L.h - L.y1 + 230;
-  return <div style={{ position: "absolute", left: 0, bottom: 0, width: L.w, height: hh, background: `linear-gradient(to bottom, transparent 0%, ${pal.bg}e6 62%, ${pal.bg} 100%)` }} />;
+  const hh = (L.reserve ? 0 : L.h - L.y1) + 230;
+  return <div style={{ position: "absolute", left: 0, bottom: L.reserve ? L.h - L.y1 : 0, width: L.w, height: hh, background: `linear-gradient(to bottom, transparent 0%, ${pal.bg}e6 62%, ${pal.bg} 100%)` }} />;
 };
 
 export const MapScene: React.FC<{ data: MapData; headline?: string; camera?: CameraMove }> = ({ data, headline, camera }) => {
@@ -143,7 +143,7 @@ export const MapScene: React.FC<{ data: MapData; headline?: string; camera?: Cam
   const fSel = (L.vertical && data.focusVertical) || data.focus;
   const focus = typeof fSel === "string" || !fSel ? FOCUS[(fSel as string) ?? "world"] ?? FOCUS.world : fSel;
   const top = L.vertical ? L.y0 + 230 : 0;
-  const boxW = L.w, boxH = L.h - top - (L.vertical ? 0 : 0);
+  const boxW = L.w, boxH = (L.reserve ? L.y1 : L.h) - top;   // with captions reserved the map ends above the caption zone
   const { project, path, size } = useMemo(() => {
     const base = geoNaturalEarth1().fitSize([boxW * 0.98, boxH * 0.92], { type: "Sphere" } as any);
     const k = base.scale() * focus.zoom;
@@ -182,9 +182,9 @@ export const GlobeScene: React.FC<{ data: GlobeData; headline?: string; camera?:
   const font = useFont();
   const f = useCurrentFrame();
   const cam = useCameraStyle(camera);
-  const r = L.vertical ? L.cw * 0.44 : 420;
+  const r = L.vertical ? L.cw * 0.44 : L.reserve ? Math.min(420, L.ch * 0.5 - 40) : 420;
   const cx = L.vertical ? L.x0 + L.cw / 2 : L.w * 0.66;
-  const cy = L.vertical ? L.y0 + 270 + (L.ch - 270 - 190) / 2 : L.h * 0.5;
+  const cy = L.vertical ? L.y0 + 270 + (L.ch - 270 - 190) / 2 : L.reserve ? (L.y0 + L.y1) / 2 : L.h * 0.5;
   const lon = (data.lon0 ?? 20) + f * (data.lonSpeed ?? 0.45);
   const lat = data.lat ?? 18;
   const proj = geoOrthographic().scale(r).translate([cx, cy]).rotate([-lon, -lat]).clipAngle(90);

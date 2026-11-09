@@ -19,7 +19,7 @@ from ..config import ROOT
 from . import FPS, audio as A, pack as K
 from .assemble import ASPECT_SIZE, AssembleError, build_props, load_assets
 from .captions import cues_to_srt
-from .timings import CoverageError, time_output, transcribe_words
+from .timings import UNSPACED, CoverageError, time_output, transcribe_words
 
 STAGES = ["timings", "broll", "assemble", "render", "mix", "package"]
 REMOTION = ROOT / "remotion"
@@ -145,6 +145,8 @@ class Studio:
 
     def s_timings(self) -> None:
         doc = self.scenes_doc()
+        if self.lang in UNSPACED:
+            raise StudioError(f"language '{self.lang}' is written without spaces: studio word alignment does not support it yet (known limit, docs/studio.md)")
         voices = [self.voice_for(o["output"]) for o in doc["outputs"]]
         out = self.work / "scenes.timed.json"
 
@@ -154,7 +156,7 @@ class Studio:
                 words, used = self.cached_asr(v)
                 (self.work / f"words.{o['output']}.json").write_text(json.dumps(words))
                 dur = sf.info(str(v)).duration
-                stats[o["output"]] = {**time_output(o["scenes"], words, dur, label=o["output"]), "asr": used}
+                stats[o["output"]] = {**time_output(o["scenes"], words, dur, label=o["output"], lang=self.lang), "asr": used}
                 self.log(f"  {o['output']}: coverage {stats[o['output']]['coverage']:.1%} via {used}, {stats[o['output']]['total_s']}s")
             out.write_text(json.dumps(doc, indent=1, ensure_ascii=False), encoding="utf-8")
             return {"timing": stats}
@@ -232,7 +234,7 @@ class Studio:
             head = head[:67].rsplit(" ", 1)[0] + "..."
         hook["on_screen_text"] = None     # the thumbnail carries the headline; the art keeps no duplicate text
         tp = {"orientation": "horizontal", "scenes": [hook], "refs": props["refs"], "lang": props["lang"], "numberLocale": props["numberLocale"],
-              "headline": head}
+              "headline": head, "art": hook["type"] != "kinetic"}
         p = self.wmode / "props.thumb.json"
         p.write_text(json.dumps(tp, ensure_ascii=False))
         self.render(p, pub, dst, comp="StudioThumb", frame=45)

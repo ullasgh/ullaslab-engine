@@ -51,7 +51,7 @@ def cost_md(item: Path, usage: dict) -> str:
         ("Headless Chrome (via Remotion)", "Free", "local"),
         ("ffmpeg / ffprobe", "Free (open source)", "local: clip prep, stems, ducking, loudnorm, mux"),
         (f"Word timings: {usage.get('asr', 'whisper')}", "Free, open weights (MIT); mlx-whisper locally, faster-whisper in CI", "local, no API"),
-        ("Chatterbox TTS (owner voice clone)", "Free, MIT, local", "synthetic voice flag stays ON"),
+        ("Narration voice file", "Supplied by the pipeline (Chatterbox clone of the owner, free, MIT, local); the studio runs no TTS", "synthetic-voice flag stays ON"),
         ("Pixabay API / NASA Image Library / Wikimedia Commons", "Free; Pixabay 100 requests/min", f"{http.get('requests_used', 0)} requests, {http.get('cache_hits', 0)} cache hits"),
         ("Pexels API", "Free but off (key issuance paused)", "0 requests"),
         ("open_clip ranking (CPU)", "Free, MIT", "local"),

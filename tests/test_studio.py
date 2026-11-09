@@ -350,3 +350,22 @@ def test_e2e_preview_all_three_outputs(tmp_path):
     s.run()
     for o, (w, h) in {"long": (960, 540), "short": (540, 960), "reel": (540, 960)}.items():
         assert check_spec(item / "preview" / f"{o}.mp4", w, h) == []
+
+
+# ---------------------------------------------------------------- caption layout (long, short, reel)
+@pytest.mark.parametrize("output,orientation", [("long", "horizontal"), ("short", "vertical"), ("reel", "vertical")])
+def test_captions_inside_safe_area_and_clear_of_content(output, orientation):
+    from ullaslab_engine.studio import layout_check as LC
+    doc = timed_doc()
+    o = next(x for x in doc["outputs"] if x["output"] == output)
+    assert LC.check(orientation, build_cues(o["scenes"])) == []
+    b = LC.caption_boxes(orientation)
+    assert b["caption"][1] >= b["content"][3] and b["content"][3] < b["safe"][3]
+
+
+def test_unspaced_language_is_refused_clearly(studio_item):
+    from ullaslab_engine.studio.run import StudioError
+    with pytest.raises(StudioError, match="without spaces"):
+        Studio(studio_item, lang="ja", asr=lambda p, l: ([], "x"), log=lambda m: None).run(until="timings")
+    with pytest.raises(CoverageError, match="without spaces"):
+        time_output(scenes_doc()["outputs"][0]["scenes"], fake_asr_words("zzz qqq"), 5.0, "long", lang="ja")

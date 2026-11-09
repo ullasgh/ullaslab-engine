@@ -181,7 +181,10 @@ def script_words(text: str) -> list[str]:
     return text.split()
 
 
-def time_output(scenes: list[dict], asr: list[Word], total_s: float | None = None, label: str = "") -> dict:
+UNSPACED = {"ja", "zh"}
+
+
+def time_output(scenes: list[dict], asr: list[Word], total_s: float | None = None, label: str = "", lang: str = "en") -> dict:
     """Fill narration.start_s/end_s/words on one output's scenes (in place). Returns a stats dict.
     Scene boundaries are contiguous: a scene starts at its first word and runs to the next scene's first word."""
     words: list[str] = []
@@ -196,7 +199,8 @@ def time_output(scenes: list[dict], asr: list[Word], total_s: float | None = Non
     if al.coverage < MIN_COVERAGE:
         miss = [words[i] for i, m in enumerate(al.matched) if not m][:12]
         raise CoverageError(f"{label}: word coverage {al.coverage:.1%} below {MIN_COVERAGE:.0%} "
-                            f"({sum(not m for m in al.matched)}/{len(words)} unmatched, e.g. {miss})")
+                            f"({sum(not m for m in al.matched)}/{len(words)} unmatched, e.g. {miss})"
+                            + (f"; '{lang}' is written without spaces and word alignment does not support it yet (known limit, docs/studio.md)" if lang in UNSPACED else ""))
     last_end = max(b for _, b in al.times)
     total = max(total_s or 0.0, last_end + TAIL_S)
     for k, (sc, (a, b)) in enumerate(zip(scenes, span)):

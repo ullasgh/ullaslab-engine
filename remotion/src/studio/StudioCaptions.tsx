@@ -15,7 +15,7 @@ export const StudioCaptions: React.FC<{ cues: CaptionCue[]; orientation: Orienta
   const L = studioLayout(orientation);
   const cue = cues.find((c) => t >= c.start && t < c.end);
   if (!cue) return null;
-  const size = L.vertical ? 52 : 50;
+  const size = L.vertical ? 48 : 50;
   return (
     <div style={{ position: "absolute", left: L.x0, width: L.cw, bottom: SAFE_BOX[orientation].bottom, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
       <div data-audit="caption" style={{ background: "rgba(10,18,32,0.82)", color: C.text, fontFamily: fontFor(lang), fontWeight: 700, fontSize: size, lineHeight: 1.28,

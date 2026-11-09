@@ -23,5 +23,5 @@ Music: `config/music_ledger.yaml` + `assets/music/` (Pixabay Music with licence 
 refused. With no track the studio generates a CC0 pad. SFX are synthesised in-house with ffmpeg.
 
 Tests: `pytest tests/test_studio.py`; real dry-run `make studio-e2e` (needs macOS `say`, mlx-whisper, node + Chrome).
-Known limits: alignment assumes space-delimited languages (not ja); non-English "Illustrative footage" strings are machine-seeded
+Known limits: word alignment assumes space-delimited languages. ja (and zh) are not supported: `studio run --lang ja` stops with a clear message instead of failing silently; non-English "Illustrative footage" strings are machine-seeded
 and need native review before first publication.
