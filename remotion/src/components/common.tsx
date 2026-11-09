@@ -19,7 +19,7 @@ export const Header: React.FC = () => {
   return (
     <div data-audit="stamp" style={{ position: "absolute", left: L.x0, top: L.y0, height: 60, display: "flex", alignItems: "center", gap: 14, fontSize: L.type.label, fontWeight: 700, color: C.muted, letterSpacing: 1 }}>
       <span style={{ width: 14, height: 14, borderRadius: 7, background: tpl.accent, display: "inline-block" }} />
-      UllasLab Macro
+      UllasLab
     </div>
   );
 };

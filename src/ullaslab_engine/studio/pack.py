@@ -84,17 +84,22 @@ def _chart_sources(item: Path, doc: dict) -> list[str]:
     return out
 
 
+_BANNED = re.compile(r"\bmacro|(?<=[a-z])macro", re.I)  # owner rule 2026-11-09: never audience-facing
+
+
 def publishing_pack(item: Path, doc: dict, meta: dict, assets: list[dict], audio: dict) -> str:
     longo = next((o for o in doc["outputs"] if o["output"] == "long"), doc["outputs"][0])
     titles = list(meta.get("title_options") or [])
     if meta.get("title"):
         titles.insert(0, meta["title"])
+    titles = [t for t in titles if not _BANNED.search(t)]
     if not titles:
-        titles = [_hook_title(longo), f"{_hook_title(longo)}: the macro explained", "A macro question, answered with data"]
-    titles = list(dict.fromkeys(t[:100] for t in titles))[:5]
+        titles = [_hook_title(longo), f"{_hook_title(longo)}: the economics explained", "An economics question, answered with data"]
+    titles = [t for t in dict.fromkeys(t[:100] for t in titles) if not _BANNED.search(t)][:5]
     credits = sorted({(a.get("licence", {}).get("attribution") or f"{a.get('creator', '')} / {a.get('provider', '')}") for a in assets})
     music = sorted({f"Music: {m['music']['title']} - {m['music']['artist']} ({m['music']['licence']})" for m in audio.values()})
-    tags = list(dict.fromkeys(["#macro", "#economics", "#markets", "#finance", "#investingbasics", "#education"] + list(meta.get("hashtags") or [])))
+    tags = list(dict.fromkeys(["#economics", "#finance", "#markets", "#investingbasics", "#education"] + list(meta.get("hashtags") or [])))
+    tags = [h for h in tags if not _BANNED.search(h)]
     L = ["# Publishing pack", "", f"Item: {item.name}", "", "## Title options", ""]
     L += [f"{i}. {t}" for i, t in enumerate(titles, 1)]
     for o in doc["outputs"]:
