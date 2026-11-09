@@ -16,7 +16,7 @@ from typing import Any, Callable
 import requests
 
 USER_AGENT = "ullaslab-engine/0.1 (+https://learn.ullaslab.co.in; educational macro videos)"
-MAX_DOWNLOAD_BYTES = 400 * 1024 * 1024
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 SECRET_PARAMS = {"key", "api_key", "apikey", "token"}
 
 
@@ -97,7 +97,7 @@ class Http:
         self.retries = retries
         self.backoff = backoff
         self.session = session or requests.Session()
-        self.session.headers.setdefault("User-Agent", USER_AGENT)
+        self.session.headers["User-Agent"] = USER_AGENT   # requests default UA is blocked by Wikimedia (403)
         self.sleep = sleep
         self.clock = clock
         self.used = 0

@@ -135,13 +135,13 @@ NASA_SEARCH = {"collection": {"items": [
 
 def test_nasa_excludes_logos_and_records_no_endorsement(tmp_path):
     http, s, _ = mkhttp(tmp_path, {NasaProvider.URL: Resp(data=NASA_SEARCH), "https://c/a.json":
-                                   Resp(data=["http://x/a~orig.mp4", "http://x/a~large.mp4", "http://x/a.srt"])})
+                                   Resp(data=["http://x/a~orig.mp4", "http://x/a~medium.mp4", "http://x/a.srt"])})
     p = NasaProvider(http=http)
     out = p.search("ship")
     assert [c.id for c in out] == ["A1"]
     assert "no endorsement" in out[0].licence.notice and out[0].licence.attribution == "NASA"
     p._resolve(out[0])
-    assert out[0].download_url == "https://x/a~large.mp4"
+    assert out[0].download_url == "https://x/a~medium.mp4"
 
 
 def commons_page(pid, title, short, w=1920, h=1080, artist="Jane", mime="video/webm", terms=""):

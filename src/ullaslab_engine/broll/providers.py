@@ -131,8 +131,8 @@ class NasaProvider(BrollProvider):
             return
         files = self.http.get_json(self.name, c.extra["collection"])
         mp4 = [u for u in files if isinstance(u, str) and u.lower().endswith(".mp4")]
-        # ~orig is often hundreds of MB to GB: prefer ~large (HD proxy), then ~medium; orig only if nothing else
-        rank = {"~large": 0, "~medium": 1, "~small": 2, "~mobile": 3, "~preview": 4, "~orig": 5}
+        # ~orig is often hundreds of MB to GB: prefer ~medium (720p, small), then ~large; orig only if nothing else
+        rank = {"~medium": 0, "~large": 1, "~small": 2, "~mobile": 3, "~preview": 4, "~orig": 5}
 
         def r(u):
             return next((v for k, v in rank.items() if k in u), 6)
