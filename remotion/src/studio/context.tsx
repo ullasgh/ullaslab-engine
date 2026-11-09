@@ -8,9 +8,9 @@ import { cameraTransform, type CameraMove } from "./scenes";
 export type StudioCtx = { L: StudioLayout; pal: Palette; lang: string; numberLocale: string };
 const Ctx = createContext<StudioCtx | null>(null);
 
-export const StudioProvider: React.FC<{ orientation: Orientation; topic?: string; lang?: string; numberLocale?: string; children: React.ReactNode }> = ({
-  orientation, topic, lang = "en", numberLocale = "en-US", children,
-}) => <Ctx.Provider value={{ L: studioLayout(orientation), pal: paletteFor(topic), lang, numberLocale }}>{children}</Ctx.Provider>;
+export const StudioProvider: React.FC<{ orientation: Orientation; topic?: string; lang?: string; numberLocale?: string; reserveBottom?: number; children: React.ReactNode }> = ({
+  orientation, topic, lang = "en", numberLocale = "en-US", reserveBottom = 0, children,
+}) => <Ctx.Provider value={{ L: studioLayout(orientation, reserveBottom), pal: paletteFor(topic), lang, numberLocale }}>{children}</Ctx.Provider>;
 
 export const useStudio = (): StudioCtx => {
   const c = useContext(Ctx);

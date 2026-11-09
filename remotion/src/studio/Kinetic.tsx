@@ -20,16 +20,28 @@ export const KineticText: React.FC<{ text: string }> = ({ text }) => {
   const f = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const lines = parseKinetic(text);
-  const size = L.type.display * (lines.reduce((m, l) => Math.max(m, l.words.length), 0) > 4 ? 0.8 : 1);
+  const size = L.type.display * (L.vertical ? 1.2 : 1) * (lines.reduce((m, l) => Math.max(m, l.words.length), 0) > 4 ? 0.8 : 1);
   const per = Math.max(14, Math.min(26, Math.floor((durationInFrames - 30) / Math.max(1, lines.length))));
   const drift = f * 0.15;
   let wi = 0;
   return (
     <div style={{ position: "absolute", left: L.x0, top: L.y0, width: L.cw, height: L.ch, fontFamily: font, display: "flex", flexDirection: "column", justifyContent: "center", gap: size * 0.1 }}>
-      <svg width={L.cw * 0.9} height={L.vertical ? 420 : 520} style={{ position: "absolute", right: -L.cw * 0.12, top: L.vertical ? 0 : L.ch * 0.05, opacity: 0.55, overflow: "visible" }}>
-        <circle cx={L.cw * 0.5 - drift} cy={L.vertical ? 110 : 200} r={L.vertical ? 220 : 280} fill="none" stroke={pal.accent} strokeWidth={2} opacity={0.5} />
-        <circle cx={L.cw * 0.5 - drift} cy={L.vertical ? 110 : 200} r={L.vertical ? 150 : 190} fill="none" stroke={pal.grid} strokeWidth={2} />
+      {L.vertical ? (
+        <>
+          {/* vertical composition: glow and concentric rings centred behind the type, accent rail on the left */}
+          <div style={{ position: "absolute", left: -L.x0, top: -L.y0, width: L.w, height: L.h, background: `radial-gradient(ellipse 70% 38% at 50% ${((L.y0 + L.ch / 2) / L.h) * 100}%, ${pal.accent}30 0%, transparent 70%)` }} />
+          <svg width={L.cw} height={L.ch} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+            <circle cx={L.cw * 0.5 + drift} cy={L.ch * 0.5} r={L.cw * 0.62} fill="none" stroke={pal.accent} strokeWidth={2} opacity={0.28} />
+            <circle cx={L.cw * 0.5 + drift} cy={L.ch * 0.5} r={L.cw * 0.42} fill="none" stroke={pal.grid} strokeWidth={2} opacity={0.9} />
+            <line x1={-24} y1={L.ch * 0.18} x2={-24} y2={L.ch * 0.82} stroke={pal.accent} strokeWidth={6} strokeLinecap="round" opacity={0.8} />
+          </svg>
+        </>
+      ) : (
+      <svg width={L.cw * 0.9} height={520} style={{ position: "absolute", right: -L.cw * 0.12, top: L.ch * 0.05, opacity: 0.55, overflow: "visible" }}>
+        <circle cx={L.cw * 0.5 - drift} cy={200} r={280} fill="none" stroke={pal.accent} strokeWidth={2} opacity={0.5} />
+        <circle cx={L.cw * 0.5 - drift} cy={200} r={190} fill="none" stroke={pal.grid} strokeWidth={2} />
       </svg>
+      )}
       <div style={{ width: ease(f / 22) * 120, height: 8, background: pal.accent, borderRadius: 4, marginBottom: size * 0.2 }} />
       {lines.map((line, li) => (
         <div key={li} data-audit="headline" style={{ display: "flex", flexWrap: "wrap", gap: `0 ${size * 0.26}px`, fontSize: size, fontWeight: 700, lineHeight: 1.08, letterSpacing: -1.5, color: pal.ink }}>

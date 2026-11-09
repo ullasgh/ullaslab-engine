@@ -24,6 +24,7 @@ kokoro = ["kokoro>=0.9.4", "misaki[en]>=0.9.4"]
 # setuptools<81: resemble-perth (watermarker) imports pkg_resources, removed in setuptools 81; without it chatterbox fails to load
 chatterbox = ["chatterbox-tts==0.1.7", "setuptools>=69,<81"]
 asr = ["faster-whisper>=1.1.0"]
+asr-mlx = ["mlx-whisper>=0.4.2; sys_platform == 'darwin' and platform_machine == 'arm64'"]  # local word timings (large-v3-turbo); CI/Linux use faster-whisper
 rank = ["open_clip_torch>=2.24", "torch>=2.2", "pillow>=10"]  # B-roll CLIP ranking (CPU); fallback keyword ranker without it
 dev = ["pytest>=8"]
 

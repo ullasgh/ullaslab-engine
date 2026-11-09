@@ -13,14 +13,17 @@ export const SAFE_BOX = {
 
 export type StudioLayout = {
   o: Orientation; vertical: boolean; w: number; h: number;
-  x0: number; x1: number; y0: number; y1: number; cw: number; ch: number; type: TypeScale;
+  reserve: number; x0: number; x1: number; y0: number; y1: number; cw: number; ch: number; type: TypeScale;
 };
 
-export const studioLayout = (o: Orientation): StudioLayout => {
+// Bottom band (px) held back for burned-in captions: scene content stays above it, captions sit at the safe-box bottom.
+export const CAPTION_RESERVE = 176;
+
+export const studioLayout = (o: Orientation, reserveBottom = 0): StudioLayout => {
   const { w, h } = SIZES[o];
   const s = SAFE_BOX[o];
-  const x0 = s.left, x1 = w - s.right, y0 = s.top, y1 = h - s.bottom;
-  return { o, vertical: o === "vertical", w, h, x0, x1, y0, y1, cw: x1 - x0, ch: y1 - y0, type: STUDIO_TYPE[o] };
+  const x0 = s.left, x1 = w - s.right, y0 = s.top, y1 = h - s.bottom - reserveBottom;
+  return { o, vertical: o === "vertical", w, h, reserve: reserveBottom, x0, x1, y0, y1, cw: x1 - x0, ch: y1 - y0, type: STUDIO_TYPE[o] };
 };
 
 export const inSafeBox = (L: StudioLayout, r: { x: number; y: number; w: number; h: number }) =>

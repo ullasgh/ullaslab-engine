@@ -68,3 +68,11 @@ export const cleanSourceName = (name: string): string => {
 };
 export const stampText = (lang: string, name: string, asOf: string): string =>
   `${SOURCE_WORD[lang] ?? SOURCE_WORD.en}: ${cleanSourceName(name)}${asOf ? ` · ${asOf}` : ""}`;
+
+// Footage disclosure tag in the 13 launch languages (machine-seeded; native review owed before first publication in each).
+export const ILLUSTRATIVE_FOOTAGE: Record<string, string> = {
+  en: "Illustrative footage", hi: "प्रतीकात्मक फ़ुटेज", ta: "விளக்கக் காட்சிகள்", te: "ఉదాహరణ దృశ్యాలు", kn: "ವಿವರಣಾತ್ಮಕ ದೃಶ್ಯಗಳು",
+  ml: "ചിത്രീകരണ ദൃശ്യങ്ങൾ", mr: "प्रातिनिधिक फुटेज", bn: "উদাহরণমূলক ফুটেজ", gu: "દર્શાવવા માટેનું ફૂટેજ",
+  es: "Imágenes ilustrativas", pt: "Imagens ilustrativas", ar: "لقطات توضيحية", ja: "イメージ映像",
+};
+export const illustrativeTag = (lang: string): string => ILLUSTRATIVE_FOOTAGE[lang] ?? ILLUSTRATIVE_FOOTAGE.en;

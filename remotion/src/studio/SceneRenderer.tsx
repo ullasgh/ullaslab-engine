@@ -20,6 +20,7 @@ export type SceneRendererProps = {
   refs: Record<string, unknown>;   // resolves each scene's data_ref
   lang?: string;
   numberLocale?: string;
+  reserveBottom?: number;   // px held back at the bottom of the safe box (burned-in captions)
 };
 
 const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) => {
@@ -74,7 +75,7 @@ const Enter: React.FC<{ kind: TransitionKind; first: boolean; accent: string; ch
   return <AbsoluteFill style={{ opacity: p }}>{children}</AbsoluteFill>;
 };
 
-export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale }) => {
+export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale, reserveBottom }) => {
   const scenes = normalizeScenes(raw);
   const errs = validateScenes(scenes, refs);
   if (errs.length) throw new Error(`scenes.json invalid:\n${errs.join("\n")}`);
@@ -84,7 +85,7 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scene
         const data = resolveData(s, refs);
         return (
           <Sequence key={s.id} from={s.start} durationInFrames={s.end - s.start + overlapAfter(scenes, i)} name={`${s.type}:${s.id}`}>
-            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale}>
+            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom}>
               <SceneEnter scene={s} first={i === 0}><Art scene={s} data={data} /></SceneEnter>
             </StudioProvider>
           </Sequence>

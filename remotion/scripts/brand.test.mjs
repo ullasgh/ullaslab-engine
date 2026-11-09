@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { C, FONT, TAG_COLOR, SAFE, TYPE, SOURCE_WORD } from "../src/brand.ts";
+import { C, FONT, TAG_COLOR, SAFE, TYPE, SOURCE_WORD, ILLUSTRATIVE_FOOTAGE } from "../src/brand.ts";
 const tplSrc = fs.readFileSync(new URL("../src/templates.ts", import.meta.url), "utf8");
 
 const lum = (h) => {
@@ -19,7 +19,7 @@ test("palette pairs meet 4.5:1 contrast", () => {
 
 test("fonts cover all 13 languages", () => {
   const langs = "en hi ta te kn ml mr bn gu es pt ar ja".split(" ");
-  for (const l of langs) { assert.ok(FONT[l], l); assert.ok(SOURCE_WORD[l], l); }
+  for (const l of langs) { assert.ok(FONT[l], l); assert.ok(SOURCE_WORD[l], l); assert.ok(ILLUSTRATIVE_FOOTAGE[l], l); }
   assert.match(FONT.ar, /Arabic/); assert.match(FONT.ja, /JP/);
 });
 
