@@ -72,3 +72,17 @@ S_story:
   min_text_px: 44
   min_label_px: 36
   min_contrast_ratio: 4.5
+
+# Studio music bed (owner decision 2026-11-09): light, calm, never competes with the voice.
+MIX:
+  music_below_voice_db: 23        # target gap voice-to-bed while narration is active (K-weighted); measured stems land at 20 dB or more (see mix test)
+  rise_db: 9                      # gentle lift of the bed in the intro, the outro and pauses longer than pause_min_s
+  pause_min_s: 1.0                # narration gaps shorter than this stay ducked (no pumping between words)
+  intro_s: 2.0                    # the bed rises over the first seconds before / under the first words only until speech starts
+  outro_s: 3.0                    # and over the end card
+  attack_s: 0.30                  # time to duck when speech starts (lookahead makes the duck complete before the first word)
+  release_s: 1.20                 # time to rise back after speech ends (slow, smooth)
+  lookahead_s: 0.25
+  speech_floor_db: -42            # narration frame RMS above this counts as speech
+  lufs: -14
+  true_peak_max_dbtp: -1

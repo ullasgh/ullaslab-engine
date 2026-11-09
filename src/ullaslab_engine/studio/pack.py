@@ -78,7 +78,7 @@ def _chart_sources(item: Path, doc: dict) -> list[str]:
     for r in sorted(refs):
         try:
             m = to_kit_chart(r, specs[r])["meta"]
-            out.append(f"{m['source']['name']} ({m['source']['as_of']}), tag {m['freshness']}")
+            out.append(f"{m['source']['name']} ({m['source']['as_of']})")
         except Exception:
             pass
     return out
@@ -105,12 +105,17 @@ def publishing_pack(item: Path, doc: dict, meta: dict, assets: list[dict], audio
     for o in doc["outputs"]:
         if o["output"] != "long":
             L += ["", f"{o['output']} hook title: {_hook_title(o)}"]
+    # The full disclaimer is the FIRST line of the YouTube description and the Instagram caption (the video itself ends
+    # with "Follow UllasLab. Education only." instead; owner decision 2026-11-09).
     L += ["", "## Description (long)", "", DISCLAIMER, "", longo["scenes"][0]["narration"]["text"], ""]
     src = _chart_sources(item, doc)
     if src:
         L += ["Data sources:"] + [f"- {s}" for s in src] + [""]
     if credits or music:
         L += ["Credits:"] + [f"- {c}" for c in credits if c] + [f"- {m}" for m in music] + [""]
+    shorts = [o for o in doc["outputs"] if o["output"] != "long"]
+    if shorts:
+        L += ["## Caption (Instagram Reel / YouTube Short)", "", DISCLAIMER, "", shorts[0]["scenes"][0]["narration"]["text"], ""]
     L += ["Stock footage is illustrative and labelled on screen. Charts and maps are original animated graphics.", "",
           "## Hashtags", "", " ".join(tags), "", "## AI disclosure recommendation", "",
           "- Narration is a synthetic clone of the owner's voice: set the YouTube altered/synthetic content flag (containsSyntheticMedia) ON and the Instagram AI label ON.",

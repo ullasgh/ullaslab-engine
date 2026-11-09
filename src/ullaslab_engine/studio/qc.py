@@ -11,7 +11,9 @@ Checks per output
   captions   layout limits, no text-like content outside the safe box in sampled frames, SRT cues vs word timings (drift > 150 ms)
 Checks per item
   data       chart data_ref resolves, chart hash vs ledger, number tags, footage ledger entries, deny-listed names
-  platform   disclaimer, synthetic-voice flag, AI label recommendation
+  platform   full disclaimer is the first line of the description / caption, in-video end line ("Follow UllasLab. Education only.")
+             spoken last and on the end card, no freshness tag words or SEBI / delayed read-outs on screen or in captions,
+             synthetic-voice flag, AI label recommendation
 The default thresholds live in DEFAULTS and can be overridden by a `QC:` block in config/quality.yaml."""
 from __future__ import annotations
 import hashlib
@@ -30,6 +32,7 @@ from ..config import ROOT, quality
 from ..qa import chart_hash
 from . import FPS
 from .assemble import AssembleError, load_assets, load_chart_specs, to_kit_chart
+from ..endline import END_LINES, ends_with_end_line
 from .pack import DISCLAIMER
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
@@ -707,19 +710,89 @@ def check_banned_word(item: Path, mode: str, doc: dict, srts: dict, T: dict) -> 
                  f"not found in {len(src)} audience-facing source(s)" + (f" (allowed: {', '.join(T['brand_allow'])})" if T["brand_allow"] else ""))
 
 
+# ---------------------------------------------------------------- 6b. end line + on-screen freshness labels
+TAG_WORD = re.compile(r"(?<![A-Za-z])(?:LIVE|RECENT|LAGGED|EXPECTATION|INFERRED)(?![A-Za-z])")
+READOUT = re.compile(r"not\s+sebi|sebi\s*/\s*sec|data\s+may\s+be\s+delayed|\blagged\b|\bdata\s+is\s+delayed\b", re.I)
+_LEDGER_KEYS = {"freshness", "tag", "claim_id", "chart_hash", "id", "kind", "type", "palette", "transition", "sfx", "camera_move", "role"}
+
+
+def _text_layers(o, skip=_LEDGER_KEYS):
+    """Strings a viewer can see: every string in the props except ledger / structural keys (freshness stays in the data)."""
+    if isinstance(o, str):
+        yield o
+    elif isinstance(o, dict):
+        for k, v in o.items():
+            if k not in skip:
+                yield from _text_layers(v, skip)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _text_layers(v, skip)
+
+
+def check_end_line(item: Path, mode: str, doc: dict, lang: str = "en") -> Check:
+    """Every output: the last narration ends with the end line, and the rendered props carry the end card."""
+    bad = []
+    for o in doc["outputs"]:
+        n = o["output"]
+        last = o["scenes"][-1]["narration"]["text"]
+        if not ends_with_end_line(last, lang):
+            bad.append(f"{n}: narration does not end with '{END_LINES.get(lang, END_LINES['en'])}'")
+        p = item / "work" / mode / f"props.{n}.json"
+        if p.is_file():
+            pr = json.loads(p.read_text(encoding="utf-8"))
+            ec = pr.get("endCard")
+            if not ec or ec.get("durationInFrames", 0) < 1:
+                bad.append(f"{n}: props have no endCard (the end line must be on screen)")
+            elif ec["fromFrame"] + ec["durationInFrames"] < pr.get("durationInFrames", 0):
+                bad.append(f"{n}: end card does not run to the last frame")
+    return Check("platform", "end line spoken and on screen", FAIL if bad else PASS,
+                 "; ".join(bad) or f"all {len(doc['outputs'])} output(s) end with the end line and carry the end card")
+
+
+def check_onscreen_labels(item: Path, mode: str, doc: dict, srts: dict) -> Check:
+    """FAIL if a freshness tag word (LIVE / RECENT / LAGGED / EXPECTATION / INFERRED) appears in on-screen text, rendered text
+    layers, captions or SRT, or if narration / captions still read out the old disclaimer parts (Not SEBI/SEC registered,
+    Data may be delayed / lagged). The tags stay in the data ledgers only."""
+    hits = []
+    for o in doc["outputs"]:
+        n = o["output"]
+        src = {f"{n}/on_screen_text": " ".join(str(sc.get("on_screen_text") or "") for sc in o["scenes"]),
+               f"{n}/narration": " ".join(sc["narration"]["text"] for sc in o["scenes"])}
+        p = item / "work" / mode / f"props.{n}.json"
+        if p.is_file():
+            pr = json.loads(p.read_text(encoding="utf-8"))
+            src[f"{n}/rendered text"] = "\n".join(_text_layers({k: v for k, v in pr.items() if k in ("scenes", "refs", "captions")}))
+        if srts.get(n) and srts[n].is_file():
+            src[f"{n}/srt"] = srts[n].read_text(encoding="utf-8")
+        for k, t in src.items():
+            hits += [f"{k}: tag '{m.group(0)}'" for m in TAG_WORD.finditer(t)][:2]
+            hits += [f"{k}: '{m.group(0)}' read-out" for m in READOUT.finditer(t)][:2]
+    return Check("platform", "no freshness labels or disclaimer read-out on screen", FAIL if hits else PASS,
+                 "; ".join(dict.fromkeys(hits))[:400] or "no tag words, SEBI/SEC or delayed read-out in on-screen text, captions or narration")
+
+
 # ---------------------------------------------------------------- 7. platform readiness (item level)
+def _first_description_line(pub: str) -> str:
+    """First non-blank line after the '## Description' heading of publish.md (or of the whole file when it has no such heading)."""
+    m = re.search(r"^## Description[^\n]*\n", pub, re.M)
+    body = pub[m.end():] if m else pub
+    return next((ln.strip() for ln in body.splitlines() if ln.strip() and not ln.startswith("#")), "")
+
+
 def check_platform(item: Path, preview: bool = False) -> list[Check]:
     meta = json.loads((item / "meta.json").read_text(encoding="utf-8")) if (item / "meta.json").is_file() else {}
     pub = (item / "publish.md").read_text(encoding="utf-8") if (item / "publish.md").is_file() else ""
     out = []
     if preview and not (item / "publish.md").is_file():     # previews are not packaged: the pack comes with the final run
-        return [Check("platform", n, WARN, "publish.md is written by the final run (preview has no pack)") for n in ("disclaimer", "AI label recommendation")] + [
+        return [Check("platform", n, WARN, "publish.md is written by the final run (preview has no pack)") for n in ("disclaimer first line of description / caption", "AI label recommendation")] + [
             Check("platform", "synthetic-voice disclosure", PASS if meta.get("synthetic_voice") is True else FAIL,
                   "meta.json synthetic_voice is true" if meta.get("synthetic_voice") is True else "meta.json synthetic_voice is not true")]
-    in_pub = DISCLAIMER in pub or "Not investment advice" in pub
-    in_meta = "not investment advice" in str(meta.get("description", "")).lower()
-    out.append(Check("platform", "disclaimer", PASS if in_pub or in_meta else FAIL,
-                     "disclaimer text present in " + ("publish.md" if in_pub else "meta.json description") if in_pub or in_meta else "disclaimer missing from publish.md and meta.json description"))
+    in_pub = _first_description_line(pub) == DISCLAIMER
+    desc = str(meta.get("description", "")).strip()
+    in_meta = bool(desc) and desc.splitlines()[0].strip() == DISCLAIMER
+    out.append(Check("platform", "disclaimer first line of description / caption", PASS if in_pub or in_meta else FAIL,
+                     "full disclaimer is the first description line in " + ("publish.md" if in_pub else "meta.json") if in_pub or in_meta
+                     else "the full disclaimer is not the first line of the description in publish.md or meta.json"))
     out.append(Check("platform", "synthetic-voice disclosure", PASS if meta.get("synthetic_voice") is True else FAIL,
                      "meta.json synthetic_voice is true" if meta.get("synthetic_voice") is True else "meta.json synthetic_voice is not true (YouTube altered/synthetic flag would be unset)"))
     ai_pub = "AI disclosure recommendation" in pub
@@ -858,6 +931,12 @@ def qc_item(item: Path, *, preview: bool = False) -> Report:
         rep.item_checks.append(check_banned_word(item, mode, doc, srts, T))
     except Exception as e:
         rep.item_checks.append(Check("platform", "banned word 'macro'", FAIL, f"check could not run: {e}"))
+    for name, fn in (("end line spoken and on screen", lambda: check_end_line(item, mode, doc)),
+                     ("no freshness labels or disclaimer read-out on screen", lambda: check_onscreen_labels(item, mode, doc, srts))):
+        try:
+            rep.item_checks.append(fn())
+        except Exception as e:
+            rep.item_checks.append(Check("platform", name, FAIL, f"check could not run: {e}"))
     rep.item_checks += check_platform(item, preview)
     (item / "qc.json").write_text(json.dumps(rep.as_dict(), indent=1, ensure_ascii=False), encoding="utf-8")
     (item / "qc.md").write_text(rep.markdown(), encoding="utf-8")

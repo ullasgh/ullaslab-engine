@@ -14,7 +14,7 @@ Inputs in the queue item: `scenes.json` (director, schema v1), `voice.<output>.w
 - broll: WP2 `broll fetch` unless the asset ledger already covers every footage scene.
 - assemble/render: one Remotion `StudioVideo` per output (long 1920x1080, short/reel 1080x1920), burned-in word-highlight captions
   inside the safe box, localised "Illustrative footage" tag. `--preview` renders at half resolution into `preview/<output>.mp4`.
-- mix: narration, music and SFX stems stay in `work/<mode>/stems/<output>/`; music ducked by sidechain; ffmpeg loudnorm two-pass to
+- mix: narration, music and SFX stems stay in `work/<mode>/stems/<output>/`; the music bed is light and calm (piano/ambient, no vocals) and is ducked by an envelope (`apply_duck`): about 20 dB or more below the voice while narration is active (K-weighted), a gentle rise (+9 dB) only in the intro, the outro and pauses longer than 1 s, smooth attack/release with lookahead. Levels live in the `MIX:` block of `config/quality.yaml`. ffmpeg loudnorm two-pass to
   -14 LUFS, true peak <= -1 dBTP (target -1.5); mux AAC 48 kHz, faststart.
 - package: `long.mp4 short.mp4 reel.mp4 thumb.png captions.<output>.srt cost.md assets.md publish.md`. Finals are versioned
   (`long.v2.mp4`, ...) and never overwritten.
@@ -43,6 +43,9 @@ thresholds are `DEFAULTS` there and can be overridden in a `QC:` block of `confi
 | audio | loudness | integrated outside -14 +-1 LUFS, true peak above -1 dBTP, or any run of >= 3 samples at full scale |
 | captions | layout limits, safe area, SRT sync | cue over 2 lines / 32 chars; caption plate located outside the renderer safe box in sampled frames (OCR-free colour locator; WARN when the plate cannot be told from the backdrop); SRT start/end drift over 150 ms from the aligned word timings (the deliberate 0.35 s hold after a cue is allowed) |
 | data | data_ref, chart hash, tags, footage ledger, deny-list | chart `data_ref` not in chart specs; `chart_hash` (spec or sources.md) differs from the computed hash (WARN when none recorded); chart without a LIVE/RECENT/LAGGED/EXPECTATION/INFERRED tag or on-screen number without a tagged sources.md row; footage scene without a complete ledger entry or `illustrative` flag; Schwab / FYERS / NSE feed / Atlas / yfinance / investing.com in on-screen text, refs or captions |
-| platform | disclaimer, synthetic voice, AI label | disclaimer missing from publish.md; `synthetic_voice` not true in meta.json; no AI disclosure recommendation (publish.md or `ai_label`) |
+| platform | disclaimer first line, end line, on-screen labels, synthetic voice, AI label | full disclaimer not the first description line in publish.md / meta.json; a video does not end with "Follow UllasLab. Education only." (spoken) or lacks the end card; a freshness tag word (LIVE / RECENT / LAGGED / EXPECTATION / INFERRED) or a "Not SEBI/SEC registered" / "Data may be delayed" read-out in on-screen text, captions or narration; `synthetic_voice` not true in meta.json; no AI disclosure recommendation (publish.md or `ai_label`) |
 
 QC reads the render's own props (`work/<mode>/props.<output>.json`) and `work/scenes.timed.json`, so what it checks is what was rendered.
+
+## Video ending and on-screen labels (owner decision 2026-11-09)
+Every video (Short, Reel, long-form, all 13 languages) ends with "Follow UllasLab. Education only." spoken and on the end card (`remotion/src/studio/EndCard.tsx`, last 3 s, inside the safe area; strings in `src/ullaslab_engine/endline.py` and `remotion/src/brand.ts`). The full disclaimer is the first line of the YouTube description and the Instagram caption (`publish.md`). Freshness tags are never drawn: charts show only "Source: <name> · <as-of>"; the tags stay in the data ledgers and QC still requires every number to be tagged there.

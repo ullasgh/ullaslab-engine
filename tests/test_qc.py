@@ -211,7 +211,10 @@ def test_caption_layout_limits():
 
 
 # ---------------------------------------------------------------- data integrity + platform
-def _item(tmp_path, chart_extra=None, meta=None, publish="# Pack\n\nEducation only. Not investment advice. Not SEBI/SEC registered. Data may be delayed. Do your own research.\n\n## AI disclosure recommendation\n"):
+PACK = "# Pack\n\n## Description (long)\n\nEducation only. Not investment advice. Not SEBI/SEC registered. Data may be delayed. Do your own research.\n\nBody.\n\n## AI disclosure recommendation\n"
+
+
+def _item(tmp_path, chart_extra=None, meta=None, publish=PACK):
     from studio_fixture import chart, scenes_doc
     item = tmp_path / "2026-11-10-x"
     item.mkdir()
@@ -290,6 +293,63 @@ def test_platform_readiness(tmp_path):
     (item / "meta.json").write_text(json.dumps({"synthetic_voice": False}))
     (item / "publish.md").write_text("# Pack\n")
     assert [c.status for c in Q.check_platform(item)] == [Q.FAIL] * 3
+
+
+def test_disclaimer_must_be_first_description_line(tmp_path):
+    item, _ = _item(tmp_path)
+    c = [x for x in Q.check_platform(item) if x.name.startswith("disclaimer")][0]
+    assert c.status == Q.PASS
+    (item / "publish.md").write_text(PACK.replace("Education only. Not investment", "Hello there.\n\nEducation only. Not investment"))
+    c = [x for x in Q.check_platform(item) if x.name.startswith("disclaimer")][0]
+    assert c.status == Q.FAIL                       # present but not the first line
+
+
+def test_end_line_check(tmp_path):
+    item, doc = _item(tmp_path)
+    assert Q.check_end_line(item, "final", doc).status == Q.PASS
+    doc["outputs"][1]["scenes"][-1]["narration"]["text"] = "Education only. Not investment advice. Not SEBI/SEC registered."
+    c = Q.check_end_line(item, "final", doc)
+    assert c.status == Q.FAIL and "short" in c.detail
+    doc["outputs"][1]["scenes"][-1]["narration"]["text"] = "Done. Follow UllasLab. Education only."
+    wm = item / "work" / "final"
+    wm.mkdir(parents=True)
+    (wm / "props.long.json").write_text(json.dumps({"durationInFrames": 600}))
+    assert Q.check_end_line(item, "final", doc).status == Q.FAIL            # props carry no endCard
+    (wm / "props.long.json").write_text(json.dumps({"durationInFrames": 600, "endCard": {"fromFrame": 510, "durationInFrames": 90}}))
+    assert Q.check_end_line(item, "final", doc).status == Q.PASS
+
+
+@pytest.mark.parametrize("where,text", [("on_screen", "Yield 4.5% LAGGED"), ("on_screen", "RECENT"), ("props", "INFERRED"), ("caption", "LIVE data"),
+                                        ("srt", "EXPECTATION"), ("narration", "Not SEBI/SEC registered"), ("narration", "Data may be delayed")])
+def test_freshness_tag_words_and_old_readouts_fail_on_screen(tmp_path, where, text):
+    item, doc = _item(tmp_path)
+    sc = doc["outputs"][0]["scenes"][0]
+    wm = item / "work" / "final"
+    wm.mkdir(parents=True)
+    srts = {}
+    if where == "on_screen":
+        sc["on_screen_text"] = text
+    elif where == "narration":
+        sc["narration"]["text"] = text
+    elif where == "props":
+        (wm / "props.long.json").write_text(json.dumps({"scenes": [], "refs": {"c1": {"meta": {"badge": text}}}, "captions": []}))
+    elif where == "caption":
+        (wm / "props.long.json").write_text(json.dumps({"scenes": [], "refs": {}, "captions": [{"lines": [[{"w": text}]]}]}))
+    elif where == "srt":
+        (item / "c.srt").write_text(f"1\n00:00:00,000 --> 00:00:01,000\n{text}\n\n")
+        srts = {"long": item / "c.srt"}
+    assert Q.check_onscreen_labels(item, "final", doc, srts).status == Q.FAIL
+
+
+def test_freshness_tags_in_ledger_fields_do_not_fail_on_screen_check(tmp_path):
+    item, doc = _item(tmp_path)
+    wm = item / "work" / "final"
+    wm.mkdir(parents=True)
+    (wm / "props.long.json").write_text(json.dumps({"scenes": [{"id": "s1", "type": "chart", "on_screen_text": "Ten year yield"}],
+                                                    "refs": {"c1": {"meta": {"freshness": "LAGGED", "source": {"name": "FRED", "as_of": "2026-11"}}}}, "captions": []}))
+    assert Q.check_onscreen_labels(item, "final", doc, {}).status == Q.PASS
+    (item / "sources.md").write_text("| claim | figure | tag |\n|---|---|---|\n| yield | 4.5% | LAGGED |\n")   # ledgers keep tags
+    assert Q.check_data(item, doc, False)
 
 
 def test_platform_preview_without_pack_warns_not_fails(tmp_path):

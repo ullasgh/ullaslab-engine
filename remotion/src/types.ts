@@ -18,6 +18,6 @@ export type TlScene = { id: string; kind: string; start: number; end: number; be
 export type Cue = { start: number; end: number; lines: string[] };
 export type Props = {
   lang: string; orientation: "vertical" | "horizontal"; format: number; template: string; hookStyle: string;
-  disclaimer: I18n; scenes: Scene[]; timeline: { total_s: number; scenes: TlScene[] };
+  disclaimer?: I18n; scenes: Scene[]; timeline: { total_s: number; scenes: TlScene[] };
   cues: Cue[]; audio: string; numberLocale: string; rtl: boolean; audit?: boolean;
 };

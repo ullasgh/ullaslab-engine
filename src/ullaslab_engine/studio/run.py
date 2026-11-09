@@ -265,7 +265,8 @@ class Studio:
                     track = A.generated_track()
                     src = A.generate_pad(st / "pad_source.wav", min(total, 60.0))
                 A.run(A.music_stem_cmd(src, total, st / "music.wav"), "music stem")
-                A.run(A.mix_cmd(st / "narration.wav", st / "music.wav", st / "sfx.wav", st / "mix.wav"), "ducked mix")
+                duck = A.apply_duck(st / "narration.wav", st / "music.wav", st / "music_ducked.wav")
+                A.run(A.mix_cmd(st / "narration.wav", st / "music_ducked.wav", st / "sfx.wav", st / "mix.wav"), "ducked mix")
                 pre = A.loudnorm_two_pass(st / "mix.wav", st / "master.wav")
                 m = A.measure(st / "master.wav")
                 if abs(m["lufs"] - A.TARGET_LUFS) > 1.0 or m["true_peak_dbtp"] > A.TP_LIMIT:
@@ -277,7 +278,7 @@ class Studio:
                 bad = check_spec(final, w, h)
                 if bad:
                     raise StudioError(f"{n}: spec check failed: {bad}")
-                meta[n] = {"music": track, "sfx": sorted({e[0] for e in events}), "measure": m, "pre_norm_lufs": pre.get("input_i")}
+                meta[n] = {"music": track, "sfx": sorted({e[0] for e in events}), "measure": m, "duck": duck, "pre_norm_lufs": pre.get("input_i")}
                 self.log(f"  {n}: {m['lufs']} LUFS, {m['true_peak_dbtp']} dBTP, music={track['id']}, sfx={len(events)}")
             meta_p.write_text(json.dumps(meta, indent=1))
         self._stage("mix", sha([self.wmode / f"video.{o['output']}.mp4" for o in doc["outputs"]], self.mode), outs + [meta_p], go)
