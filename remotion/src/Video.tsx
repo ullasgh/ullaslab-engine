@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Audio, continueRender, delayRender, staticFile } from "remotion";
-import { FONT_FAMILIES, fontFor } from "./brand";
+import { END_LINES, FONT_FAMILIES, fontFor } from "./brand";
 import { Audit } from "./components/audit";
 import { Captions } from "./components/captions";
 import { Frame, Header } from "./components/common";
@@ -9,7 +9,7 @@ import { CtxR, computeLayout } from "./layout";
 import { TEMPLATES } from "./templates";
 import { Props } from "./types";
 
-const allText = (p: Props) => [p.disclaimer, ...p.scenes.flatMap((s) => [s.headline, s.body, ...(s.items ?? []).map((i) => i.label), s.chart_data?.title])]
+const allText = (p: Props) => [END_LINES[p.lang] ?? END_LINES.en, ...p.scenes.flatMap((s) => [s.headline, s.body, ...(s.items ?? []).map((i) => i.label), s.chart_data?.title])]
   .flatMap((v) => (v === undefined ? [] : typeof v === "string" ? [v] : Object.values(v))).join("") + p.cues.flatMap((c) => c.lines).join("");
 
 // Loads the Noto faces needed for this language (and Latin) before the first frame renders.

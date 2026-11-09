@@ -1,10 +1,10 @@
 import React from "react";
 import { Sequence, useCurrentFrame, useVideoConfig, interpolate } from "remotion";
-import { C, fmt, t } from "../brand";
+import { C, endParts, fmt, t } from "../brand";
 import { ease, useEnter, useScene } from "../hooks";
 import { useCtx } from "../layout";
 import { Scene, TlScene } from "../types";
-import { Body, Card, Content, FreshnessTag, Headline, SourceStamp, Title } from "./common";
+import { Body, Card, Content, Headline, SourceStamp, Title } from "./common";
 import { BarChart, Counter, Legend, LineChart } from "./charts";
 
 const useBeat = (tl: TlScene) => {
@@ -97,7 +97,6 @@ const GridScene: React.FC<{ scene: Scene; tl: TlScene }> = ({ scene, tl }) => {
               display: "flex", flexDirection: ticker ? "row" : "column", justifyContent: "space-between", alignItems: ticker ? "center" : "flex-start", gap: 8, direction: p.rtl ? "rtl" : "ltr" }}>
               <div data-audit="label" style={{ fontSize: L.type.label, color: C.muted }}>{t(it.label, p.lang)}</div>
               {it.value && <div data-audit="headline" style={{ fontSize: L.type.headline, fontWeight: 700, direction: "ltr" }}>{it.value}</div>}
-              {it.tag && <FreshnessTag tag={it.tag} />}
             </div>
           );
         })}
@@ -163,12 +162,16 @@ const QAScene: React.FC<{ scene: Scene; tl: TlScene }> = ({ scene, tl }) => {
   );
 };
 
+// End card (scene kind "disclaimer" kept for manifest compatibility): "Follow UllasLab" + "Education only" in the video's language.
+// The full disclaimer is NOT shown in the video; it is the first line of the description / caption (owner decision 2026-11-09).
 const DisclaimerScene: React.FC = () => {
   const { p, L } = useCtx();
+  const [follow, edu] = endParts(p.lang);
   return (
     <Content style={{ justifyContent: "center" }}>
-      <Card style={{ padding: 44, border: `4px solid ${C.grid}` }}>
-        <div data-audit="legal" style={{ fontSize: L.type.body, lineHeight: 1.4, color: C.text, direction: p.rtl ? "rtl" : "ltr" }}>{t(p.disclaimer, p.lang)}</div>
+      <Card style={{ padding: 44, border: `4px solid ${C.grid}`, textAlign: "center", direction: p.rtl ? "rtl" : "ltr" }}>
+        <div data-audit="headline" style={{ fontSize: L.type.headline, fontWeight: 700, lineHeight: 1.2, color: C.text }}>{follow}</div>
+        <div data-audit="body" style={{ fontSize: L.type.body, lineHeight: 1.4, color: C.muted, marginTop: 16 }}>{edu}</div>
       </Card>
     </Content>
   );

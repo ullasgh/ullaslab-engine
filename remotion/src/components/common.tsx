@@ -1,5 +1,5 @@
 import React from "react";
-import { C, TAG_COLOR, fontFor, stampText, t } from "../brand";
+import { C, fontFor, stampText, t } from "../brand";
 import { useCtx } from "../layout";
 import { Chart, Tag } from "../types";
 
@@ -47,14 +47,7 @@ export const Body: React.FC<{ text: string; style?: React.CSSProperties }> = ({ 
   );
 };
 
-export const FreshnessTag: React.FC<{ tag: Tag; small?: boolean }> = ({ tag, small }) => {
-  const { L } = useCtx();
-  return (
-    <span data-audit="tag" style={{ display: "inline-block", background: TAG_COLOR[tag], color: C.tagText, fontWeight: 700, fontSize: L.type.label, padding: small ? "2px 12px" : "4px 16px", borderRadius: 999, letterSpacing: 1 }}>{tag}</span>
-  );
-};
-
-// Source stamp + freshness tag: required under every chart (data-licensing gate).
+// Source stamp ("Source: <name> · <as-of>"): required under every chart (data-licensing gate). No freshness badge on screen.
 export const SourceStamp: React.FC<{ chart: Chart }> = ({ chart }) => {
   const { L, p } = useCtx();
   return (
@@ -62,7 +55,6 @@ export const SourceStamp: React.FC<{ chart: Chart }> = ({ chart }) => {
       <span data-audit="stamp" style={{ fontSize: L.type.label, color: C.muted, flex: "1 1 0", minWidth: 0, lineHeight: 1.25, overflowWrap: "anywhere", direction: p.rtl ? "rtl" : "ltr" }}>
         {stampText(p.lang, chart.source.name, chart.source.as_of)}
       </span>
-      <span style={{ flex: "none" }}><FreshnessTag tag={chart.freshness} /></span>
     </div>
   );
 };

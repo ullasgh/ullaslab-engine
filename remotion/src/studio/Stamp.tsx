@@ -1,20 +1,19 @@
 import React from "react";
-import { TAG_COLOR, stampText } from "../brand";
+import { stampText } from "../brand";
 import type { Tag } from "../types";
 import { useFont, useRamp, useStudio } from "./context";
-import { PALETTES } from "./palettes";
 
 export type SourceInfo = { name: string; as_of: string; url?: string };
 
-// Source stamp + freshness tag. Required under every data visual (data-licensing gate).
-export const StudioSourceStamp: React.FC<{ source: SourceInfo; freshness: Tag; style?: React.CSSProperties }> = ({ source, freshness, style }) => {
+// Source stamp ("Source: <name> · <as-of>"). Required under every data visual (data-licensing gate). The freshness tag stays in the
+// data ledger and is never drawn (owner decision 2026-11-09).
+export const StudioSourceStamp: React.FC<{ source: SourceInfo; freshness?: Tag; style?: React.CSSProperties }> = ({ source, style }) => {
   const { L, pal, lang } = useStudio();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16, minHeight: 52, width: "100%", ...style }}>
       <span data-audit="stamp" style={{ fontSize: L.type.stamp, color: pal.muted, flex: "1 1 0", minWidth: 0, lineHeight: 1.2, overflowWrap: "anywhere" }}>
         {stampText(lang, source.name, source.as_of)}
       </span>
-      <span data-audit="tag" style={{ flex: "none", background: TAG_COLOR[freshness], color: PALETTES.policy.bg, fontWeight: 700, fontSize: L.type.stamp, padding: "2px 14px", borderRadius: 999, letterSpacing: 1 }}>{freshness}</span>
     </div>
   );
 };
