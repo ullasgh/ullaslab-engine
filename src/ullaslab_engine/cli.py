@@ -221,6 +221,17 @@ def cmd_voice_score(a):
     return 0 if r.passed else 1
 
 
+def cmd_broll_fetch(a):
+    from .broll.run import run_fetch
+    r = run_fetch(Path(a.scenes), Path(a.out), channel=a.channel, episode=a.episode, orientation=a.orientation,
+                  cache_dir=Path(a.cache_dir) if a.cache_dir else None, force_fallback_ranker=a.fallback_ranker)
+    ok = sum(1 for x in r["report"] if x["status"] == "ok")
+    print(f"broll: {ok}/{len(r['report'])} scenes filled, {r['http'].used} requests, {r['http'].cache_hits} cache hits")
+    for n in r["notes"]:
+        print("note:", n)
+    return 0 if ok == len(r["report"]) else 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="ullaslab-engine")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -249,6 +260,16 @@ def main(argv=None) -> int:
     add("voice-demo", cmd_voice_demo, out=dict(required=True), refs=dict(default=None), langs=dict(default=None),
         max_per_lang=dict(type=int, default=None))
     add("voice-score", cmd_voice_score, file=dict(required=True))
+    bp = sub.add_parser("broll").add_subparsers(dest="broll_cmd", required=True)
+    bf = bp.add_parser("fetch", help="fetch licensed stock footage for the footage scenes of a scenes.json")
+    bf.set_defaults(fn=cmd_broll_fetch)
+    bf.add_argument("--scenes", required=True)
+    bf.add_argument("--out", required=True)
+    bf.add_argument("--channel", default="default")
+    bf.add_argument("--episode", default=None)
+    bf.add_argument("--orientation", choices=["landscape", "portrait"], default="landscape")
+    bf.add_argument("--cache-dir", default=None)
+    bf.add_argument("--fallback-ranker", action="store_true")
     a = ap.parse_args(argv)
     try:
         return a.fn(a) or 0
