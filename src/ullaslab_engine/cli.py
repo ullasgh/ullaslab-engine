@@ -282,6 +282,8 @@ def main(argv=None) -> int:
     sq = sp.add_parser("qc", help="automated QC of a rendered queue item; writes qc.md, qc.json, contact sheets")
     sq.add_argument("item")
     sq.add_argument("--preview", action="store_true", help="check preview/<output>.mp4 (half size) instead of the finals")
+    sq.add_argument("--platform", choices=["both", "youtube_shorts", "instagram_reels"], default="both",
+                    help="safe-area template for vertical outputs: both = stricter of the two (default), or one platform")
     sq.set_defaults(fn=lambda a: __import__("ullaslab_engine.studio.qc", fromlist=["x"]).cmd_studio_qc(a))
     a = ap.parse_args(argv)
     try:

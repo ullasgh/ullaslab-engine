@@ -444,3 +444,36 @@ def test_banned_word_no_brand_exception_by_default_but_configurable(tmp_path):
     assert Q.check_banned_word(item, "final", doc, {}, T2).status == Q.PASS
     doc["outputs"][0]["scenes"][0]["on_screen_text"] = "#macro and Macroeconomics"
     assert Q.check_banned_word(item, "final", doc, {}, T2).status == Q.FAIL
+
+
+def test_platform_safe_boxes():
+    import json
+    from ullaslab_engine.config import ROOT
+    from ullaslab_engine.studio.layout_check import platform_box, caption_boxes, check
+    z = json.loads((ROOT / "config" / "safe_zones.json").read_text())["platforms"]
+    both = Q.safe_box("vertical")
+    yt, ig = Q.safe_box("vertical", "youtube_shorts"), Q.safe_box("vertical", "instagram_reels")
+    assert yt == {k: z["youtube_shorts"][k] for k in ("top", "bottom", "left", "right")}
+    assert ig["right"] == 130 and yt["right"] == 192 and ig["top"] == 269 and yt["top"] == 288
+    for k in ("top", "bottom", "left", "right"):                       # one render serving both uses the stricter of the two
+        assert both[k] == max(yt[k], ig[k])
+    assert Q.safe_box("horizontal", "youtube_shorts") == Q.safe_box("horizontal")   # platform only changes vertical
+    assert platform_box("vertical", "youtube_shorts", "ad")["bottom"] == 672
+    assert platform_box("vertical", "both", "ad")["bottom"] == 672
+    assert caption_boxes("vertical", platform="instagram_reels")["safe"][2] > caption_boxes("vertical")["safe"][2]
+    assert check("vertical", platform="youtube_shorts") == []
+    with pytest.raises(ValueError):
+        platform_box("vertical", "tiktok")
+
+
+def test_caption_frames_per_platform_override(tmp_path):
+    from PIL import Image
+    # half-scale frame: text in x 450..470 sits in the Reels-only right-rail band (both box ends at x=444, Reels box at x=475)
+    png = tmp_path / "f.png"
+    Image.fromarray(_frame((450, 300, 470, 380))).save(png)
+    v = tmp_path / "c.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(png), "-t", "2", "-r", "30", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "12", str(v)], check=True)
+    props = {"width": 1080, "captions": [{"start": 0.2, "end": 1.8, "lines": [[{"w": "x", "start": 0.2, "end": 0.5}]]}]}
+    assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "instagram_reels").status == Q.PASS
+    assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "both").status == Q.FAIL
+    assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "youtube_shorts").status == Q.FAIL

@@ -10,32 +10,33 @@ export type Palette = {
   land: string; landLine: string; water: string; grid: string;
 };
 
+// Base brand palette (owner direction 2026-11-09): dark navy and charcoal surfaces, teal and gold accents, strong white type.
+// Every topic shares the base surfaces and neutrals; a topic only re-orders / tints the accents (teal, gold, soft blue, coral).
+export const BASE = {
+  bg: "#0B1424",       // dark navy
+  bg2: "#15233C",      // navy, lifted (gradient end)
+  panel: "#1A2230",    // charcoal card surface
+  ink: "#FFFFFF",      // strong white type
+  muted: "#B4BFCE",
+  teal: "#4FD1C5",
+  gold: "#E8BB55",
+  blue: "#8AB4F8",     // third series colour for charts
+  coral: "#F28B82",    // negative / warning only
+  land: "#1B2638", landLine: "#33425A", water: "#070D18", grid: "#2C3647",
+} as const;
+
+const mk = (topic: Topic, accent: string, accent2: string, accent3: string, over: Partial<Palette> = {}): Palette => ({
+  topic, bg: BASE.bg, bg2: BASE.bg2, panel: BASE.panel, ink: BASE.ink, muted: BASE.muted,
+  accent, accent2, accent3, negative: BASE.coral,
+  land: BASE.land, landLine: BASE.landLine, water: BASE.water, grid: BASE.grid, ...over,
+});
+
 export const PALETTES: Record<Topic, Palette> = {
-  policy: {
-    topic: "policy", bg: "#0E1726", bg2: "#18294A", panel: "#16233A", ink: "#F2F5F9", muted: "#A9B6C8",
-    accent: "#8AB4F8", accent2: "#F6C177", accent3: "#4FD1C5", negative: "#F28B82",
-    land: "#1E2E48", landLine: "#34496B", water: "#0A1220", grid: "#2A3A55",
-  },
-  commodities: {
-    topic: "commodities", bg: "#14100B", bg2: "#2E2113", panel: "#211A12", ink: "#F6F1E9", muted: "#BDB0A0",
-    accent: "#E6B450", accent2: "#E08A5B", accent3: "#9BD0A4", negative: "#F28B82",
-    land: "#2B2216", landLine: "#4A3B26", water: "#0D0A07", grid: "#3A2E20",
-  },
-  trade: {
-    topic: "trade", bg: "#08182A", bg2: "#0F3050", panel: "#0F2540", ink: "#EEF5FA", muted: "#9FB6CB",
-    accent: "#5EC4F0", accent2: "#FF9F68", accent3: "#7EE2A8", negative: "#F28B82",
-    land: "#14304F", landLine: "#2A4F78", water: "#061220", grid: "#1F3B5C",
-  },
-  tech: {
-    topic: "tech", bg: "#110F20", bg2: "#241F45", panel: "#1C1932", ink: "#F3F1FA", muted: "#B1ACCB",
-    accent: "#C4B5FD", accent2: "#7EE2A8", accent3: "#5EC4F0", negative: "#F28BB8",
-    land: "#221F3E", landLine: "#3B3669", water: "#0B0A16", grid: "#2E2A52",
-  },
-  volatility: {
-    topic: "volatility", bg: "#190F14", bg2: "#35182A", panel: "#2A1820", ink: "#F9F0F1", muted: "#C9AEB4",
-    accent: "#F28B82", accent2: "#F6C177", accent3: "#8AB4F8", negative: "#FF9AA2",
-    land: "#2C1A22", landLine: "#4F2D3A", water: "#0F080B", grid: "#40242F",
-  },
+  policy: mk("policy", BASE.teal, BASE.gold, BASE.blue),
+  commodities: mk("commodities", BASE.gold, BASE.teal, BASE.blue, { bg2: "#1D2231" }),           // warmer charcoal lift
+  trade: mk("trade", "#6FE0D4", BASE.gold, BASE.blue, { bg2: "#10294A", land: "#162B48" }),        // deeper navy, lighter teal
+  tech: mk("tech", BASE.blue, BASE.teal, BASE.gold, { bg2: "#18213F" }),                           // blue-led, navy-indigo lift
+  volatility: mk("volatility", BASE.gold, BASE.coral, BASE.teal, { bg2: "#231D2E", negative: "#FF9AA2" }), // charcoal-plum lift
 };
 
 export const paletteFor = (topic: string | undefined): Palette => PALETTES[(topic as Topic) ?? "policy"] ?? PALETTES.policy;

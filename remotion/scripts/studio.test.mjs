@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { PALETTES, TOPICS } from "../src/studio/palettes.ts";
-import { SAFE_BOX, SIZES, studioLayout } from "../src/studio/layout.ts";
+import { PALETTES, TOPICS, BASE } from "../src/studio/palettes.ts";
+import { SAFE_BOX, PLATFORM_BOX, SIZES, studioLayout, safeBoxFor } from "../src/studio/layout.ts";
 import { validateScenes, transitionProgress, cameraTransform, overlapAfter } from "../src/studio/scenes.ts";
 import { counterValue, revealPoints, parseX } from "../src/studio/chartMath.ts";
 import { sampleRoute, splitJumps, along } from "../src/studio/geoMath.ts";
@@ -25,10 +25,12 @@ test("five topic palettes, text colours readable", () => {
 
 test("safe boxes match config; vertical keeps bottom 20% and right 12% free", () => {
   const z = JSON.parse(fs.readFileSync(new URL("../../config/safe_zones.json", import.meta.url)));
+  const zs = { vertical: { ...z.both, sides: z.both.left }, horizontal: z.horizontal };   // studio vertical = the "both" template
   for (const o of ["vertical", "horizontal"]) {
-    assert.equal(SAFE_BOX[o].top, z[o].top); assert.equal(SAFE_BOX[o].bottom, z[o].bottom); assert.equal(SAFE_BOX[o].left, z[o].sides);
-    assert.equal(SIZES[o].w, z[o].width);
+    assert.equal(SAFE_BOX[o].top, zs[o].top); assert.equal(SAFE_BOX[o].bottom, zs[o].bottom); assert.equal(SAFE_BOX[o].left, zs[o].sides);
+    assert.equal(SIZES[o].w, zs[o].width);
   }
+  assert.equal(SAFE_BOX.vertical.right, z.both.right);
   const L = studioLayout("vertical");
   assert.ok(L.h - L.y1 >= 0.2 * L.h);
   assert.ok(L.w - L.x1 >= 0.12 * L.w);
@@ -89,4 +91,33 @@ test("director scenes.json adapter", () => {
   assert.deepEqual(validateScenes(out, { map_routes: {} }), []);
   assert.deepEqual(normalizeScenes(out), out);
   assert.equal(outputFor(file, "9:16"), undefined);
+});
+
+test("topic palettes are accent variations on the shared navy/charcoal base", () => {
+  for (const t of TOPICS) {
+    const p = PALETTES[t];
+    assert.equal(p.bg, BASE.bg); assert.equal(p.panel, BASE.panel); assert.equal(p.ink, "#FFFFFF");
+    assert.ok(cr(p.ink, p.bg) >= 15, `${t} headline white on navy`);
+    assert.ok(cr(p.bg2, p.bg) < 2, `${t} bg2 stays a subtle lift of the base`);
+    assert.equal(new Set([p.accent, p.accent2, p.accent3]).size, 3, `${t} series colours distinct`);
+  }
+  assert.ok([PALETTES.policy.accent, PALETTES.commodities.accent].includes(BASE.teal) && PALETTES.commodities.accent === BASE.gold);
+});
+
+test("per-platform safe boxes match config; both = stricter of the two", () => {
+  const z = JSON.parse(fs.readFileSync(new URL("../../config/safe_zones.json", import.meta.url)));
+  for (const k of ["youtube_shorts", "instagram_reels"]) {
+    for (const e of ["top", "bottom", "left", "right"]) assert.equal(PLATFORM_BOX[k][e], z.platforms[k][e], `${k}.${e}`);
+  }
+  const y = PLATFORM_BOX.youtube_shorts, i = PLATFORM_BOX.instagram_reels;
+  assert.equal(SAFE_BOX.vertical.top, Math.max(y.top, i.top));
+  assert.equal(SAFE_BOX.vertical.bottom, Math.max(y.bottom, i.bottom));
+  assert.equal(SAFE_BOX.vertical.right, Math.max(y.right, i.right));
+  assert.equal(SAFE_BOX.vertical.left, Math.max(y.left, i.left));
+  for (const e of ["top", "bottom", "left", "right"]) assert.equal(z.both[e], SAFE_BOX.vertical[e]);
+  // override: a per-platform layout is never stricter than "both"
+  const both = studioLayout("vertical", 0, "both"), ig = studioLayout("vertical", 0, "instagram_reels");
+  assert.ok(ig.cw >= both.cw && ig.ch >= both.ch);
+  assert.equal(studioLayout("vertical").x1, both.x1);
+  assert.equal(safeBoxFor("horizontal", "youtube_shorts"), SAFE_BOX.horizontal);   // horizontal ignores the platform
 });

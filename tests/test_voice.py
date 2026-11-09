@@ -370,3 +370,93 @@ def test_gate_flags_survive_trim_and_reach_status(work):
     r = P.stage_tts(work, "en", bad_tts)
     assert r["naturalness_flags"] and r["naturalness_flags"][0].startswith("seg0: naturalness")
     assert json.loads((work / "en" / "status.json").read_text())["naturalness_flags"]
+
+
+# ---- pronunciation lexicon + pacing (G8)
+def test_lexicon_default_file_valid_and_covers_categories():
+    import yaml
+    from ullaslab_engine.config import CONFIG_DIR
+    from ullaslab_engine.voice import lexicon
+    doc = yaml.safe_load((CONFIG_DIR / "lexicon.yaml").read_text(encoding="utf-8"))
+    assert lexicon.validate(doc) == []
+    en = {e["match"] for e in doc["en"]}
+    for must in ("bps", "mb/d", "bbl", "GDP", "USD/INR", "INR"):
+        assert must in en
+    assert {"NVDA", "M&A"} <= {e["match"] for e in doc["common"]}
+    assert doc.get("hi") and doc.get("es")
+
+
+def test_lexicon_units_and_numbers_en():
+    n = textnorm.normalize_text
+    assert n("The Fed cut 25 bps.", "en") == "The Fed cut twenty-five basis points."
+    assert n("Output rose to 9.5 mb/d.", "en") == "Output rose to nine point five million barrels per day."
+    assert n("Oil at $80/bbl", "en") == "Oil at eighty dollars per barrel"
+    assert n("USD/INR moved", "en") == "dollar rupee moved"
+    assert n("USD 5bn of flows", "en") == "five billion dollars of flows"
+    assert n("The 10Y yield and FY26 guidance", "en") == "The ten year yield and fiscal year twenty twenty-six guidance"
+    assert n("S&P 500 and NVDA", "en") == "S&P five hundred and Nvidia"
+    assert n("GDP and CPI", "en") == "G D P and C P I"
+
+
+def test_lexicon_whole_token_and_no_match_unchanged():
+    n = textnorm.normalize_text
+    assert n("ozone and bpsx stay", "en") == "ozone and bpsx stay"           # tokens inside longer words are untouched
+    plain = "Markets were calm on Tuesday, and traders waited."
+    assert n(plain, "en") == plain == n(plain, "en", lexicon=False)
+    assert n("Rs 12,34,567", "en", "indian") == n("Rs 12,34,567", "en", "indian", lexicon=False)   # existing behaviour kept
+    assert n("In 2026, 3.2% on 2026-03-14 and Q3 stays", "en") == n("In 2026, 3.2% on 2026-03-14 and Q3 stays", "en", lexicon=False)
+
+
+def test_lexicon_per_language_override_and_unverbalized_lang(tmp_path, monkeypatch):
+    n = textnorm.normalize_text
+    assert "puntos básicos" in n("25 bps", "es") and "basis points" not in n("25 bps", "es")
+    assert n("bps", "hi") == "बेसिस पॉइंट्स"
+    assert n("bps", "ta") == "bps"                              # no ta section: unchanged, digits/ text pass through
+    lex = tmp_path / "lex.yaml"
+    lex.write_text("version: 1\ncommon:\n  - {match: Foo, say: Bar}\nta:\n  - {match: Foo, say: Baz}\n", encoding="utf-8")
+    monkeypatch.setenv("ULLASLAB_LEXICON", str(lex))
+    assert n("Foo", "en") == "Bar" and n("Foo", "ta") == "Baz"  # language section overrides common; works for passthrough languages
+    monkeypatch.setenv("ULLASLAB_LEXICON", str(tmp_path / "missing.yaml"))
+    assert n("Foo 5", "en") == "Foo five"                        # missing file = empty lexicon
+
+
+def test_lexicon_hits_not_rewritten_by_later_entries(tmp_path, monkeypatch):
+    lex = tmp_path / "lex.yaml"
+    lex.write_text("version: 1\ncommon:\n  - {match: AAA, say: BBB}\n  - {match: BBB, say: CCC}\n", encoding="utf-8")
+    monkeypatch.setenv("ULLASLAB_LEXICON", str(lex))
+    assert textnorm.normalize_text("AAA BBB", "en") == "BBB CCC"
+
+
+def test_lexicon_rejects_bad_entry(tmp_path, monkeypatch):
+    lex = tmp_path / "lex.yaml"
+    lex.write_text("version: 1\nen:\n  - {match: '(', say: x, regex: true}\n  - {match: y}\n", encoding="utf-8")
+    monkeypatch.setenv("ULLASLAB_LEXICON", str(lex))
+    with pytest.raises(ValueError):
+        textnorm.normalize_text("hi", "en")
+
+
+def test_pacing_markers_lengthen_pauses():
+    base = prosody.split_sentences("Why did oil jump? Supply fell. Prices rose.")
+    marked = prosody.split_sentences("Why did oil jump? [[hook]] Supply fell. [[payoff]] Prices rose.")
+    assert [s for s, _ in marked] == [s for s, _ in base]                # text identical, markers gone
+    assert base[0][1] == prosody.PAUSE_S["?"] < prosody.PACING_S["hook"]
+    assert marked[0][1] == prosody.PACING_S["hook"]                       # beat after the hook
+    assert marked[1][1] == prosody.PACING_S["payoff"] > prosody.PAUSE_S["."]   # beat before the payoff
+    assert marked[2][1] == 0.0                                            # last sentence still has no tail pause
+
+
+def test_pacing_floor_never_shortens_and_strip_and_mark():
+    out = prosody.split_sentences("Wait… [[payoff]] Now.")
+    assert out[0][1] == max(prosody.PAUSE_S["…"], prosody.PACING_S["payoff"])   # a floor: ellipsis 0.55 raised to 0.60
+    long = prosody.split_sentences("Hold on. [[hook]] Next.")
+    assert long[0][1] == prosody.PACING_S["hook"]
+    prosody.PACING_S["hook"], keep = 0.1, prosody.PACING_S["hook"]
+    try:
+        assert prosody.split_sentences("Hold on. [[hook]] Next.")[0][1] == prosody.PAUSE_S["."]   # never shorter than its own pause
+    finally:
+        prosody.PACING_S["hook"] = keep
+    assert prosody.strip_markers("A. [[hook]] B.") == "A. B."
+    t = prosody.mark_pacing("One. Two. Three. Four.", payoff_at=3)
+    assert t == "One. [[hook]] Two. Three. [[payoff]] Four."
+    assert prosody.mark_pacing(t) == t and prosody.mark_pacing("Only one.") == "Only one."
+    assert "[[" not in " ".join(s for s, _ in prosody.split_sentences(t))

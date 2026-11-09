@@ -1,16 +1,16 @@
 import React, { createContext, useContext } from "react";
 import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { fontFor } from "../brand";
-import { studioLayout, type Orientation, type StudioLayout } from "./layout";
+import { studioLayout, type Orientation, type Platform, type StudioLayout } from "./layout";
 import { paletteFor, type Palette } from "./palettes";
 import { cameraTransform, type CameraMove } from "./scenes";
 
 export type StudioCtx = { L: StudioLayout; pal: Palette; lang: string; numberLocale: string };
 const Ctx = createContext<StudioCtx | null>(null);
 
-export const StudioProvider: React.FC<{ orientation: Orientation; topic?: string; lang?: string; numberLocale?: string; reserveBottom?: number; children: React.ReactNode }> = ({
-  orientation, topic, lang = "en", numberLocale = "en-US", reserveBottom = 0, children,
-}) => <Ctx.Provider value={{ L: studioLayout(orientation, reserveBottom), pal: paletteFor(topic), lang, numberLocale }}>{children}</Ctx.Provider>;
+export const StudioProvider: React.FC<{ orientation: Orientation; topic?: string; lang?: string; numberLocale?: string; reserveBottom?: number; platform?: Platform; children: React.ReactNode }> = ({
+  orientation, topic, lang = "en", numberLocale = "en-US", reserveBottom = 0, platform = "both", children,
+}) => <Ctx.Provider value={{ L: studioLayout(orientation, reserveBottom, platform), pal: paletteFor(topic), lang, numberLocale }}>{children}</Ctx.Provider>;
 
 export const useStudio = (): StudioCtx => {
   const c = useContext(Ctx);

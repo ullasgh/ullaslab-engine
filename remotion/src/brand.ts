@@ -1,18 +1,19 @@
 import type { I18n } from "./types";
 
-// Calm, data-first palette. Every text/background pair below is >= 4.5:1 (checked in scripts/brand.test.mjs).
+// Base brand palette (owner direction 2026-11-09): dark navy + charcoal, teal and gold accents, strong white type, minimal.
+// Every text/background pair below is >= 4.5:1 (checked in scripts/brand.test.mjs). studio/palettes.ts builds on the same base.
 export const C = {
-  bg: "#0E1726",        // deep ink
-  panel: "#16233A",     // card surface
-  caption: "#0A1220",   // caption box
-  text: "#F2F5F9",
-  muted: "#A9B6C8",
+  bg: "#0B1424",        // dark navy
+  panel: "#1A2230",     // charcoal card surface
+  caption: "#080F1C",   // caption box
+  text: "#FFFFFF",
+  muted: "#B4BFCE",
   primary: "#4FD1C5",   // teal
-  secondary: "#F6C177", // amber
+  secondary: "#E8BB55", // gold
   accent: "#8AB4F8",    // soft blue
   negative: "#F28B82",
-  grid: "#2A3A55",
-  tagText: "#0E1726",
+  grid: "#2C3647",
+  tagText: "#0B1424",
 } as const;
 
 // Freshness tags (LIVE / RECENT / LAGGED / EXPECTATION / INFERRED) are data-ledger fields only: never drawn on screen
