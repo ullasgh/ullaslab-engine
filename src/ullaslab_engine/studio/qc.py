@@ -880,6 +880,19 @@ def qc_output(video: Path, *, size: tuple[int, int], orient: str, voice: Path | 
     return checks, sheet
 
 
+def check_music_fallback(item: Path, mode: str) -> Check:
+    """WARN when a render used the generated pad although the music ledger lists licensed tracks (they could not be fetched)."""
+    ap = item / "work" / mode / "audio.json"
+    if not ap.is_file():
+        return Check("audio", "licensed music bed", WARN, "no audio.json to read the music choice from")
+    meta = json.loads(ap.read_text(encoding="utf-8"))
+    used = [n for n, m in meta.items() if (m.get("music") or {}).get("fallback")]
+    if not used:
+        return Check("audio", "licensed music bed", PASS, "no pad fallback while ledger tracks exist")
+    why = (meta[used[0]]["music"]["fallback"] or {}).get("fetch_failed") or "unknown"
+    return Check("audio", "licensed music bed", WARN, f"generated pad used for {', '.join(used)} although ledger tracks exist; R2 fetch: {why}")
+
+
 def qc_item(item: Path, *, preview: bool = False, platform: str = "both") -> Report:
     item = Path(item).resolve()
     mode = "preview" if preview else "final"
@@ -938,6 +951,10 @@ def qc_item(item: Path, *, preview: bool = False, platform: str = "both") -> Rep
             rep.item_checks.append(fn())
         except Exception as e:
             rep.item_checks.append(Check("platform", name, FAIL, f"check could not run: {e}"))
+    try:
+        rep.item_checks.append(check_music_fallback(item, mode))
+    except Exception as e:  # noqa: BLE001
+        rep.item_checks.append(Check("audio", "licensed music bed", WARN, f"check could not run: {e}"))
     rep.item_checks += check_platform(item, preview)
     (item / "qc.json").write_text(json.dumps(rep.as_dict(), indent=1, ensure_ascii=False), encoding="utf-8")
     (item / "qc.md").write_text(rep.markdown(), encoding="utf-8")

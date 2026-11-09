@@ -17,7 +17,8 @@
 # Owner downloaded these on 2026-11-09 from Pixabay Music (page 403s to automated access, so source_url is the download URL the
 # owner's browser recorded; the track page is pixabay.com/music/ with the numeric id in the id field). Titles come from the file names.
 # Order matters: with no mood match the first present track is used, so the calmest comes first.
-# Audio files stay local in assets/music/ (git-ignored); sha256 below is verified when the file is present.
+# Audio files are git-ignored. Master copies sit in the private R2 bucket ullaslab-private under assets/music/<file>; the studio fetches
+# any missing one (R2_* env keys, else wrangler login) and verifies the sha256 below.
 tracks:
   - id: pixabay-606216
     file: ambient-calm-atlasaudio-606216.mp3

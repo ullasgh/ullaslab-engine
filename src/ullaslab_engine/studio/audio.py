@@ -4,10 +4,14 @@ Licences: music comes from config/music_ledger.yaml (Pixabay Music with the lice
 is available, an in-house generated pad (CC0, zero cost). YouTube Audio Library tracks are refused (YouTube-only use).
 SFX are synthesised in-house with ffmpeg lavfi (no third-party files)."""
 from __future__ import annotations
+
 import hashlib
 import json
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -80,6 +84,74 @@ def pick_track(ledger: list[dict], mood: str | None = None, music_dir: Path = MU
     if not ok:
         return None
     return next((t for t in ok if mood and mood in t.get("mood", [])), ok[0])
+
+
+# ------------------------------------------------------------------ private R2 fetch
+# Licensed tracks are not in git. They sit in a PRIVATE R2 bucket under assets/music/<file> (no public r2.dev, no custom domain).
+# Cloud renders use S3-compatible read-only keys from env; the owner's Mac falls back to wrangler's existing login.
+R2_PREFIX = "assets/music/"
+R2_DEFAULT_BUCKET = "ullaslab-private"
+
+
+def _sha256_file(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _r2_get_s3(key: str, dst: Path, env: dict) -> None:
+    import boto3  # optional extra: pip install ullaslab-engine[cloud]
+    s3 = boto3.client("s3", endpoint_url=f"https://{env['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com", region_name="auto",
+                      aws_access_key_id=env["R2_ACCESS_KEY_ID"], aws_secret_access_key=env["R2_SECRET_ACCESS_KEY"])
+    s3.download_file(env.get("R2_BUCKET") or R2_DEFAULT_BUCKET, key, str(dst))
+
+
+def _r2_get_wrangler(key: str, dst: Path, env: dict) -> None:
+    exe = shutil.which("wrangler")
+    cmd = [exe] if exe else ["npx", "--yes", "wrangler"]
+    bucket = env.get("R2_BUCKET") or R2_DEFAULT_BUCKET
+    r = subprocess.run(cmd + ["r2", "object", "get", f"{bucket}/{key}", "--file", str(dst), "--remote"],
+                       capture_output=True, text=True, timeout=300, check=False)
+    if r.returncode != 0:
+        raise AudioError("wrangler r2 object get failed: " + (r.stderr or r.stdout).strip()[-300:])
+
+
+def fetch_missing_tracks(ledger: list[dict], music_dir: Path = MUSIC_DIR, env: dict | None = None,
+                         getter=None) -> dict:
+    """Download every ledger track that is not in music_dir from private R2 and verify its sha256.
+    Returns {"fetched": [ids], "failed": {id: reason}}. Never raises for a failed download: the caller must surface `failed` loudly."""
+    env = dict(os.environ) if env is None else env
+    out: dict = {"fetched": [], "failed": {}}
+    missing = [t for t in ledger if t.get("file") and not (music_dir / t["file"]).is_file()]
+    if not missing:
+        return out
+    if getter is None:
+        have_s3 = all(env.get(k) for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"))
+        getter = _r2_get_s3 if have_s3 else _r2_get_wrangler
+    music_dir.mkdir(parents=True, exist_ok=True)
+    for t in missing:
+        tmp = None
+        try:
+            check_track(t)
+            fd, name = tempfile.mkstemp(dir=music_dir, suffix=".part")
+            os.close(fd)
+            tmp = Path(name)
+            tmp.unlink()   # wrangler refuses to overwrite; boto3 does not care
+            getter(R2_PREFIX + t["file"], tmp, env)
+            if not tmp.is_file() or tmp.stat().st_size == 0:
+                raise AudioError("downloaded file is empty or missing")
+            if t.get("sha256") and _sha256_file(tmp) != str(t["sha256"]).lower():
+                raise AudioError("downloaded file does not match the ledger sha256")
+            tmp.replace(music_dir / t["file"])
+            out["fetched"].append(t["id"])
+        except Exception as e:   # noqa: BLE001 - every failure must be reported, never swallowed
+            out["failed"][t.get("id", "?")] = f"{type(e).__name__}: {str(e)[:200]}"
+        finally:
+            if tmp is not None and tmp.exists():
+                tmp.unlink()
+    return out
 
 
 def generated_track() -> dict:
