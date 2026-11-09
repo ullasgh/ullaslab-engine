@@ -82,3 +82,13 @@ def test_dub_job_wires_parler_mirror_without_secrets():
     assert txt.count(".model.url") == 3  # every job masks the model URL first
     for p in WF:
         assert "HF_TOKEN" not in p.read_text()
+
+
+def test_master_uploads_even_when_qa_fails_and_dubs_wait_for_master():
+    j = load(ROOT / ".github/workflows/render.yml")["jobs"]
+    steps = j["master"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    qa_i = next(i for i, n in enumerate(names) if n.startswith("QA gates"))
+    up_i = next(i for i, n in enumerate(names) if n == "Upload outputs")
+    assert up_i > qa_i and steps[up_i]["if"] == "always()"  # failed render stays reviewable (qa.json + master.mp4)
+    assert "dub" not in steps[up_i]["run"] and "master" in j["dub"]["needs"]  # default if: success() keeps dubs off

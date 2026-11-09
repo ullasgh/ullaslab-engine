@@ -123,3 +123,15 @@ def test_wpm_gate_catches_fast_speech(bundle_dir):
 
 def test_contrast_ratio_math():
     assert abs(Q.contrast_ratio("#000000", "#ffffff") - 21) < 0.01
+
+
+def test_qa_lines_are_numbers_only(bundle_dir):
+    from ullaslab_engine.cli import qa_lines
+    m, wav, tl = setup(bundle_dir)
+    qa = run(m, wav, tl, good_layout(), err=9.0)
+    lines = qa_lines(qa)
+    assert "A3.wer_pct=9.0 limit=3 FAIL" in lines
+    assert any(l.startswith("duration.duration_s=") for l in lines)
+    blob = " ".join(lines)
+    for s in m["segments"]:
+        assert s["text"]["en"][:20] not in blob
