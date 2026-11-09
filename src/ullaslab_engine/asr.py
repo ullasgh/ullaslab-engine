@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .bundle import normalise_for_wer
+from .wer_norm import canonical_for_wer, merge_compounds
 from .captions import NO_SPACE_LANGS
 
 _MODEL = {}
+# Style hint only (no script text): keeps the ASR from writing decimals as 5 ,550 and percentages as 525%.
+_PROMPT = "The rate is 5.25 percent, up 0.5 percentage points. The ratio is 3.5%."
 
 
 def model_size() -> str:
@@ -21,7 +23,7 @@ def transcribe(path: Path, lang: str) -> list[tuple[str, float, float]]:
         _MODEL[size] = WhisperModel(size, device="cpu", compute_type="int8")
     from .audio import Wav, resample
     audio = resample(Wav.load(path), 16000).samples  # decode ourselves: no dependency on PyAV decoding
-    segs, _ = _MODEL[size].transcribe(audio, language=lang, word_timestamps=True, beam_size=5,
+    segs, _ = _MODEL[size].transcribe(audio, language=lang, word_timestamps=True, beam_size=5, initial_prompt=_PROMPT,
                                        vad_filter=False, condition_on_previous_text=False)
     out = []
     for s in segs:
@@ -44,9 +46,10 @@ def words_by_segment(words: list[tuple[str, float, float]], timeline: dict, pad:
 def error_rate(reference: str, hypothesis: str, lang: str) -> float:
     """WER in percent (CER for languages written without spaces)."""
     import jiwer
-    ref, hyp = normalise_for_wer(reference), normalise_for_wer(hypothesis)
+    ref, hyp = canonical_for_wer(reference, lang), canonical_for_wer(hypothesis, lang)
     if not ref:
         return 0.0
     if lang in NO_SPACE_LANGS:
         return 100 * jiwer.cer(ref.replace(" ", ""), hyp.replace(" ", "") or "_")
-    return 100 * jiwer.wer(ref, hyp or "_")
+    r, h = merge_compounds(ref.split(), hyp.split())
+    return 100 * jiwer.wer(" ".join(r), " ".join(h) or "_")

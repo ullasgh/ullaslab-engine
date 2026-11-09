@@ -196,10 +196,16 @@ def _en_year(y: int) -> str:
     return num2words(y, to="year")
 
 
+# Acronyms read letter by letter. TTS engines otherwise say them as a word or add a stray syllable before them.
+_RE_SPELLED = re.compile(r"\b(?:RBI|SDF|MSF|MPC|LAF|CRR|SLR)\b")
+
+
 def normalize_text(text: str, lang: str, number_format: str | None = None) -> str:
     """Verbalise currency, percentages, dates and numbers. number_format 'indian' enables lakh/crore for en."""
     if lang not in VERBALIZED:
         return text
+    if lang == "en":
+        text = _RE_SPELLED.sub(lambda m: " ".join(m[0]), text)
     indian = number_format == "indian"
     rx = _RES["eu" if lang in _EU else "west"]
     text = rx["cur"].sub(lambda m: _cur(m, lang, indian), text)

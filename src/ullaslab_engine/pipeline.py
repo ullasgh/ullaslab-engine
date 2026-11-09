@@ -12,7 +12,8 @@ from .bundle import load_bundle, seg_text
 from .config import ROOT, language
 from .qa import run_qa, write_qa
 from .synth import natural_timeline, slot_timeline, synth_segments, SR
-from .tts import NoVoiceAvailable, tts as default_tts
+from .tts import NoVoiceAvailable, tts as _raw_tts
+from .voice.textnorm import normalize_text
 
 SRC = "en"
 
@@ -36,6 +37,12 @@ def voice_path(work: Path, m: dict) -> Path | None:
         if (work / "bundle").resolve() in p.parents and p.exists():
             return p
     return None
+
+
+def default_tts(text: str, lang: str, ref_wav=None, **kw) -> Wav:
+    """Engine call with the script verbalised first (5.50 -> words, RBI -> letters). Engines read raw digits and
+    acronyms unpredictably, which made the A3 WER gate fail on stray syllables and mangled decimals."""
+    return _raw_tts(normalize_text(text, lang, language(lang).get("number_format")), lang, ref_wav, **kw)
 
 
 def stage_tts(work: Path, lang: str, tts_fn=default_tts, want_natural: bool = False) -> dict:
