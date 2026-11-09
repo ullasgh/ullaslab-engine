@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..config import language
 from . import FPS
+from ..endline import END_CARD_S
 from .captions import build_cues
 
 ASPECT_SIZE = {"16:9": (1920, 1080, "horizontal"), "9:16": (1080, 1920, "vertical")}
@@ -170,5 +171,8 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
     cues = build_cues(scenes, lang)
     nf = language(lang).get("number_format", "western")
     total = max(1, round(scenes[-1]["narration"]["end_s"] * FPS))
+    last = scenes[-1]["narration"]
+    card_from = max(round(last["start_s"] * FPS), total - round(END_CARD_S * FPS))   # last END_CARD_S s, or the whole last scene if shorter
     return {"orientation": orient, "scenes": scenes, "refs": refs, "lang": lang, "numberLocale": NUMBER_LOCALE.get(nf, "en-US"),
-            "captions": cues, "rtl": lang == "ar", "durationInFrames": total, "width": w, "height": h}, warns
+            "captions": cues, "rtl": lang == "ar", "durationInFrames": total, "width": w, "height": h,
+            "endCard": {"fromFrame": card_from, "durationInFrames": max(1, total - card_from)}}, warns

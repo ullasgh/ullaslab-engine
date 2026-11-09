@@ -157,7 +157,40 @@ def test_missing_footage_fails_unless_preview(tmp_path):
 # ---------------------------------------------------------------- audio graphs
 def test_mix_graph_ducks_music_under_narration():
     g = A.mix_graph()
-    assert "sidechaincompress" in g and "[mus][key]" in g and "amix=inputs=3:normalize=0" in g
+    assert "sidechaincompress" not in g and "amix=inputs=3:normalize=0" in g     # the duck is an upstream envelope (apply_duck)
+
+
+def _voice_with_pauses(sr=48000):
+    """12 s: speech 0-4, pause 4-6 (2 s), speech 6-8, pause 8-8.5 (short), speech 8.5-10.5, then silence (outro)."""
+    t = np.arange(12 * sr) / sr
+    v = 0.2 * np.sin(2 * np.pi * 180 * t) * (0.6 + 0.4 * np.sin(2 * np.pi * 3 * t))
+    for a, b in ((4, 6), (8, 8.5), (10.5, 12)):
+        v[int(a * sr):int(b * sr)] = 0
+    v[: int(0.6 * sr)] = 0
+    return v.astype(np.float32), t
+
+
+def test_duck_music_about_20db_under_voice_with_gentle_rise_only_in_long_pauses():
+    sr = 48000
+    v, t = _voice_with_pauses(sr)
+    m = (0.3 * np.sin(2 * np.pi * 261 * t) + 0.2 * np.sin(2 * np.pi * 392 * t)).astype(np.float32)
+    g, info = A.duck_gain_db(v, m, sr, A.mix_cfg())
+    gain = lambda a, b: g[int(a * 100):int(b * 100)].mean()
+    rms = lambda x: 20 * np.log10(np.sqrt(np.mean(x ** 2)))
+    speech = slice(int(1.0 * sr), int(3.8 * sr))
+    gap = rms(v[speech]) - (rms(m[speech]) + gain(1.0, 3.8))
+    assert gap >= 17.0, gap                                    # music at least about 20 dB under the voice while speaking
+    assert gain(5.0, 5.9) > gain(1.0, 3.8) + 5                 # rises in the 2 s pause
+    assert abs(gain(8.1, 8.4) - gain(7.0, 7.8)) < 1.5          # 0.5 s pause is bridged, stays ducked
+    assert gain(11.0, 12.0) > gain(9.0, 10.3) + 3              # outro rise
+    assert np.abs(np.diff(g)).max() < 0.8                      # smooth: no step larger than 0.8 dB per 10 ms
+    assert info["base_gain_db"] < 0
+
+
+def test_mix_levels_exposed_in_config():
+    from ullaslab_engine.config import quality
+    q = quality()["MIX"]
+    assert q["music_below_voice_db"] >= 20 and q["rise_db"] > 0 and q["pause_min_s"] == 1.0 and q["lufs"] == -14 and q["true_peak_max_dbtp"] <= -1
 
 
 def test_loudnorm_filters_two_pass():
@@ -204,12 +237,19 @@ def test_real_mix_hits_minus14_lufs_and_true_peak(tmp_path):
     A.run(A.sfx_stem_cmd(ev, lib, 9.0, tmp_path / "s.wav"), "s")
     A.generate_pad(tmp_path / "pad.wav", 9.0)
     A.run(A.music_stem_cmd(tmp_path / "pad.wav", 9.0, tmp_path / "m.wav"), "m")
-    A.run(A.mix_cmd(tmp_path / "n.wav", tmp_path / "m.wav", tmp_path / "s.wav", tmp_path / "mix.wav"), "mix")
+    A.apply_duck(tmp_path / "n.wav", tmp_path / "m.wav", tmp_path / "md.wav")
+    A.run(A.mix_cmd(tmp_path / "n.wav", tmp_path / "md.wav", tmp_path / "s.wav", tmp_path / "mix.wav"), "mix")
     A.loudnorm_two_pass(tmp_path / "mix.wav", tmp_path / "master.wav")
     m = A.measure(tmp_path / "master.wav")
     assert abs(m["lufs"] + 14.0) <= 0.6 and m["true_peak_dbtp"] <= -1.0
     for stem in ("n", "m", "s"):
         assert (tmp_path / f"{stem}.wav").is_file()      # stems stay separate files
+    import re
+
+    def lufs(f, ss, t):
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-ss", str(ss), "-t", str(t), "-i", str(f), "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
+        return float(re.search(r"I:\s+(-?[\d.]+) LUFS", r[r.rindex("Summary:"):]).group(1))
+    assert lufs(tmp_path / "n.wav", 1.5, 5.0) - lufs(tmp_path / "md.wav", 1.5, 5.0) >= 18.5     # voice vs bed on the stems while narrating
 
 
 @needs_ffmpeg
@@ -218,14 +258,14 @@ def test_music_is_ducked_while_narration_speaks(tmp_path):
     sp = speechlike(4.0, 48000, level=0.3).samples
     nar = np.concatenate([sp, np.zeros(48000 * 4, dtype=np.float32)])        # speech 0-4 s, silence 4-8 s
     sf.write(str(tmp_path / "n.wav"), nar, 48000)
-    A.generate_pad(tmp_path / "m.wav", 8.0)
-    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp_path / "n.wav"), "-i", str(tmp_path / "m.wav"), "-filter_complex",
-           A.mix_graph().split(";[nar]pan")[0] + ";[duck]anull[o]", "-map", "[o]", str(tmp_path / "duck.wav"), "-map", "[nar]", "-f", "null", "-"]
-    A.run(cmd, "duck")
+    tt = np.arange(8 * 48000) / 48000
+    sf.write(str(tmp_path / "m.wav"), (0.2 * np.sin(2 * np.pi * 330 * tt)).astype(np.float32), 48000)     # steady bed
+    A.apply_duck(tmp_path / "n.wav", tmp_path / "m.wav", tmp_path / "duck.wav")
     d, sr = sf.read(str(tmp_path / "duck.wav"))
     d = d if d.ndim == 1 else d.mean(axis=1)
-    rms = lambda a, b: float(np.sqrt(np.mean(d[int(a * sr):int(b * sr)] ** 2)))
-    assert rms(1.5, 3.5) < 0.6 * rms(5.5, 7.5)       # music at least ~4 dB lower under speech than in the gap
+    rms = lambda x, a, b: float(np.sqrt(np.mean(x[int(a * sr):int(b * sr)] ** 2)))
+    assert rms(d, 1.5, 3.5) < 0.5 * rms(d, 6.0, 7.5)           # bed at least ~6 dB lower under speech than in the long pause
+    assert 20 * np.log10(rms(nar, 1.5, 3.5) / rms(d, 1.5, 3.5)) >= 19      # voice to music gap while speaking
 
 
 # ---------------------------------------------------------------- packaging
@@ -255,7 +295,7 @@ def test_cost_and_publish_pack(tmp_path):
     assert "Total spend: $0.00" in K.cost_md(item, {})
     audio = {"long": {"music": {"title": "T", "artist": "A", "licence": "CC0"}, "sfx": []}}
     t = K.publishing_pack(item, timed_doc(), {"title": "My title"}, [], audio)
-    assert t.index(K.DISCLAIMER) < t.index("Credits") and "My title" in t and "containsSyntheticMedia" in t and "#economics" in t and "macro" not in t.lower()
+    assert t.index(K.DISCLAIMER) < t.index("Credits") and "My title" in t and "containsSyntheticMedia" in t and "#economy" in t and "#economics" in t and "macro" not in t.lower()
 
 
 # ---------------------------------------------------------------- resumability (fake ASR + fake renderer, real ffmpeg)
@@ -377,3 +417,48 @@ def test_publish_pack_drops_banned_brand_word(tmp_path):
     t = K.publishing_pack(item, timed_doc(), {"title": "A macro view", "title_options": ["Macroeconomics 101", "Rates explained"],
                                               "hashtags": ["#macro", "#rates"]}, [], audio)
     assert "macro" not in t.lower() and "Rates explained" in t and "#rates" in t
+
+
+# ---------------------------------------------------------------- end line (owner decision 2026-11-09)
+def test_end_line_13_languages_and_brand_sync():
+    import re
+    from ullaslab_engine import endline as E
+    assert len(E.END_LINES) == 13 and E.END_LINES["en"] == "Follow UllasLab. Education only."
+    assert all("UllasLab" in v and "macro" not in v.lower() for v in E.END_LINES.values())
+    ts = (ROOT / "remotion/src/brand.ts").read_text(encoding="utf-8")
+    for lang, line in E.END_LINES.items():
+        assert re.search(rf'\b{lang}: "{re.escape(line)}"', ts), lang
+    assert E.end_parts("en") == ["Follow UllasLab.", "Education only."] and len(E.end_parts("hi")) == 2
+    assert E.ends_with_end_line("so that is it. Follow UllasLab. Education only.", "en")
+    assert not E.ends_with_end_line("Education only. Not investment advice.", "en")
+
+
+def test_props_carry_end_card_over_last_seconds(tmp_path):
+    doc = timed_doc()
+    o = doc["outputs"][0]
+    assert o["scenes"][-1]["narration"]["text"].endswith("Follow UllasLab. Education only.")
+    item = make_item(tmp_path, voice=False)
+    props, _ = build_props(item, doc, o, tmp_path / "p", allow_placeholder=True)
+    ec, total = props["endCard"], props["durationInFrames"]
+    assert ec["fromFrame"] + ec["durationInFrames"] == total and 1 <= ec["durationInFrames"] <= 90 + 1
+
+
+def test_pack_description_and_caption_start_with_full_disclaimer(tmp_path):
+    item = make_item(tmp_path, voice=False)
+    t = K.publishing_pack(item, timed_doc(), {"title": "My title"}, [], {"long": {"music": {"title": "T", "artist": "A", "licence": "CC0"}, "sfx": []}})
+    for head in ("## Description (long)", "## Caption (Instagram Reel / YouTube Short)"):
+        assert t.split(head)[1].split("\n")[2] == K.DISCLAIMER
+    assert "tag RECENT" not in t and "tag INFERRED" not in t
+
+
+def test_music_ledger_sha256_is_verified_when_present(tmp_path):
+    good = {"id": "t1", "file": "a.mp3", "title": "T", "artist": "A", "source": "pixabay", "licence": "Pixabay Content Licence",
+            "licence_url": "https://pixabay.com/service/license-summary/", "source_url": "https://pixabay.com/music/x", "downloaded": "2026-11-09",
+            "sha256": __import__("hashlib").sha256(b"x").hexdigest()}
+    (tmp_path / "a.mp3").write_bytes(b"x")
+    assert A.pick_track([good], music_dir=tmp_path)["id"] == "t1"
+    (tmp_path / "a.mp3").write_bytes(b"y")
+    with pytest.raises(A.AudioError, match="sha256"):
+        A.pick_track([good], music_dir=tmp_path)
+    with pytest.raises(A.AudioError):
+        A.check_track({**good, "sha256": "zz"})

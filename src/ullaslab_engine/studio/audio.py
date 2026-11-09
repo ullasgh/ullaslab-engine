@@ -1,15 +1,18 @@
-"""Audio for the studio: stems (narration / music / sfx stay separate files), sidechain ducking, two-pass loudnorm.
+"""Audio for the studio: stems (narration / music / sfx stay separate files), an envelope duck (music about 20 dB under the voice), two-pass loudnorm.
 
 Licences: music comes from config/music_ledger.yaml (Pixabay Music with the licence recorded, or CC0) or, when no track
 is available, an in-house generated pad (CC0, zero cost). YouTube Audio Library tracks are refused (YouTube-only use).
 SFX are synthesised in-house with ffmpeg lavfi (no third-party files)."""
 from __future__ import annotations
+import hashlib
 import json
 import re
 import subprocess
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 import yaml
 
 from ..config import CONFIG_DIR, ROOT
@@ -61,13 +64,18 @@ def check_track(t: dict) -> None:
             raise AudioError(f"music '{t.get('id', '?')}': ledger field '{k}' missing (licence must be recorded)")
     if t["source"].lower() not in ("pixabay", "cc0"):
         raise AudioError(f"music '{t['id']}': source must be pixabay or cc0, got '{t['source']}'")
+    if t.get("sha256") and not re.fullmatch(r"[0-9a-f]{64}", str(t["sha256"]).lower()):
+        raise AudioError(f"music '{t['id']}': sha256 must be 64 hex characters")
 
 
 def pick_track(ledger: list[dict], mood: str | None = None, music_dir: Path = MUSIC_DIR) -> dict | None:
     ok = []
     for t in ledger:
         check_track(t)
-        if (music_dir / t["file"]).is_file():
+        f = music_dir / t["file"]
+        if f.is_file():
+            if t.get("sha256") and hashlib.sha256(f.read_bytes()).hexdigest() != str(t["sha256"]).lower():
+                raise AudioError(f"music '{t['id']}': {t['file']} does not match the recorded sha256")
             ok.append(t)
     if not ok:
         return None
@@ -140,17 +148,99 @@ def narration_stem_cmd(src: Path, total_s: float, dst: Path) -> list[str]:
 
 
 # ------------------------------------------------------------------ mix
-MUSIC_GAIN = 0.34
+MIX_DEFAULTS = {"music_below_voice_db": 20.0, "rise_db": 9.0, "pause_min_s": 1.0, "intro_s": 2.0, "outro_s": 3.0, "attack_s": 0.30,
+                "release_s": 1.20, "lookahead_s": 0.25, "speech_floor_db": -42.0}
+FRAME_S = 0.01
+
+
+def mix_cfg() -> dict:
+    from ..config import quality
+    return {**MIX_DEFAULTS, **(quality().get("MIX") or {})}
+
+
+def _db(x: float) -> float:
+    return 20 * np.log10(max(float(x), 1e-9))
+
+
+def _lufs(x: np.ndarray, sr: int) -> float:
+    """K-weighted loudness (what a listener and the ebur128 meter hear), so the voice-to-music gap is perceptual, not raw RMS."""
+    import pyloudnorm as pyln
+    x = np.asarray(x, dtype=np.float64)
+    if len(x) < int(0.5 * sr):
+        x = np.pad(x, (0, int(0.5 * sr) - len(x)))
+    v = pyln.Meter(sr).integrated_loudness(x)
+    return float(v) if np.isfinite(v) else -70.0
+
+
+def speech_mask(nar: np.ndarray, sr: int, cfg: dict) -> np.ndarray:
+    """Per 10 ms frame: True while narration is active. Gaps shorter than pause_min_s are bridged (stay ducked)."""
+    n = int(sr * FRAME_S)
+    k = len(nar) // n
+    rms = np.sqrt((nar[: k * n].reshape(k, n) ** 2).mean(axis=1) + 1e-12)
+    on = 20 * np.log10(rms) > cfg["speech_floor_db"]
+    out, i = on.copy(), 0
+    idx = np.flatnonzero(on)
+    for a, b in zip(idx[:-1], idx[1:]):
+        if 1 < b - a and (b - a - 1) * FRAME_S <= cfg["pause_min_s"]:
+            out[a:b] = True
+    return out
+
+
+def duck_gain_db(nar: np.ndarray, music: np.ndarray, sr: int, cfg: dict | None = None) -> tuple[np.ndarray, dict]:
+    """Per-frame gain (dB) for the music bed. While narration is active the bed is `music_below_voice_db` under the voice
+    (measured on the voice's active RMS vs the bed's RMS); in the intro, the outro and pauses longer than pause_min_s it rises by
+    rise_db. Lookahead plus separate attack (down) and release (up) one-pole smoothing keeps every move gentle."""
+    cfg = cfg or mix_cfg()
+    mask = speech_mask(nar, sr, cfg)
+    nfr = len(mask)
+    if not mask.any():
+        return np.full(nfr, -30.0), {"voice_lufs": None, "base_gain_db": -30.0}
+    n = int(sr * FRAME_S)
+    voice_db = _lufs(np.concatenate([nar[i * n:(i + 1) * n] for i in np.flatnonzero(mask)]), sr)
+    music_db = _lufs(music, sr)
+    base = voice_db - cfg["music_below_voice_db"] - music_db
+    t = np.arange(nfr) * FRAME_S
+    total = nfr * FRAME_S
+    rise = ~mask
+    rise |= (t < cfg["intro_s"]) & ~mask
+    rise |= (t > total - cfg["outro_s"]) & ~mask
+    # Level-follow: a bed that swells (slow beats in a pad, a louder bar) is brought back to its average, so the gap to the voice holds.
+    k = int(2.0 / FRAME_S)
+    e = np.sqrt((music[: nfr * n].reshape(nfr, n) ** 2).mean(axis=1) + 1e-12) if len(music) >= nfr * n else np.full(nfr, 1e-4)
+    loc = np.sqrt(np.convolve(np.pad(e ** 2, (k // 2, k // 2), mode="edge"), np.ones(k) / k, mode="valid")[:nfr] + 1e-12)
+    follow = np.clip(20 * np.log10(np.sqrt(np.mean(e ** 2)) + 1e-9) - 20 * np.log10(loc + 1e-9), -8.0, 6.0)
+    target = np.where(rise, base + cfg["rise_db"], base) + follow
+    la = max(1, int(cfg["lookahead_s"] / FRAME_S))          # start ducking before the first word
+    pad = np.concatenate([target, np.full(la, target[-1])])
+    tgt = np.minimum.reduce([pad[j:j + nfr] for j in range(la + 1)])
+    ka, kr = np.exp(-FRAME_S / cfg["attack_s"]), np.exp(-FRAME_S / cfg["release_s"])
+    g = np.empty(nfr)
+    cur = tgt[0]
+    for i, x in enumerate(tgt):
+        c = ka if x < cur else kr
+        cur = c * cur + (1 - c) * x
+        g[i] = cur
+    return g, {"voice_lufs": round(voice_db, 2), "music_lufs": round(music_db, 2), "base_gain_db": round(base, 2)}
+
+
+def apply_duck(nar_path: Path, mus_path: Path, dst: Path, cfg: dict | None = None) -> dict:
+    """Write the ducked music stem (same length as the music stem) and return the levels used."""
+    nar, sr = sf.read(str(nar_path), dtype="float32", always_2d=True)
+    mus, sr2 = sf.read(str(mus_path), dtype="float32", always_2d=True)
+    if sr != sr2:
+        raise AudioError(f"narration {sr} Hz != music {sr2} Hz")
+    g, info = duck_gain_db(nar.mean(axis=1), mus.mean(axis=1), sr, cfg)
+    per = np.repeat(10 ** (g / 20), int(sr * FRAME_S))
+    per = np.concatenate([per, np.full(max(0, len(mus) - len(per)), per[-1])])[: len(mus)]
+    sf.write(str(dst), (mus * per[:, None]).astype(np.float32), sr)
+    return info
 
 
 def mix_graph() -> str:
-    """Inputs: 0 narration, 1 music, 2 sfx. Music is sidechain-compressed by the narration (ducking), then summed."""
-    return (f"[0:a]asplit=2[nar][key];"
-            f"[1:a]volume={MUSIC_GAIN}[mus];"
-            "[mus][key]sidechaincompress=threshold=0.015:ratio=9:attack=25:release=450:makeup=1[duck];"
-            "[nar]pan=stereo|c0=c0|c1=c0[narst];"
+    """Inputs: 0 narration, 1 music (already ducked by apply_duck), 2 sfx. Plain sum; the duck is done upstream."""
+    return ("[0:a]pan=stereo|c0=c0|c1=c0[narst];"
             "[2:a]pan=stereo|c0=c0|c1=c0[sfxst];"
-            "[narst][duck][sfxst]amix=inputs=3:normalize=0:duration=first[mix]")
+            "[narst][1:a][sfxst]amix=inputs=3:normalize=0:duration=first[mix]")
 
 
 def mix_cmd(nar: Path, mus: Path, sfx: Path, dst: Path) -> list[str]:

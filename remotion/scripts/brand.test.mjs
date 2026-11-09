@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { C, FONT, TAG_COLOR, SAFE, TYPE, SOURCE_WORD, ILLUSTRATIVE_FOOTAGE } from "../src/brand.ts";
+import { C, FONT, END_LINES, endParts, SAFE, TYPE, SOURCE_WORD, ILLUSTRATIVE_FOOTAGE } from "../src/brand.ts";
 const tplSrc = fs.readFileSync(new URL("../src/templates.ts", import.meta.url), "utf8");
 
 const lum = (h) => {
@@ -14,7 +14,12 @@ test("palette pairs meet 4.5:1 contrast", () => {
   const pairs = [[C.text, C.bg], [C.muted, C.bg], [C.muted, C.panel], [C.text, C.panel], [C.text, C.caption], [C.primary, C.panel],
     [C.negative, C.panel], [C.secondary, C.panel], [C.accent, C.panel], ["#0E1726", "#F2F5F9"], ["#1E293B", "#F2F5F9"], [C.primary, C.bg]];
   for (const [a, b] of pairs) assert.ok(cr(a, b) >= 4.5, `${a} on ${b} = ${cr(a, b).toFixed(2)}`);
-  for (const [k, bg] of Object.entries(TAG_COLOR)) assert.ok(cr(C.tagText, bg) >= 4.5, k);
+});
+
+test("end line in all 13 languages, two parts, no freshness tag words, no macro", () => {
+  const langs = "en hi ta te kn ml mr bn gu es pt ar ja".split(" ");
+  assert.equal(END_LINES.en, "Follow UllasLab. Education only.");
+  for (const l of langs) { assert.ok(END_LINES[l].includes("UllasLab"), l); assert.equal(endParts(l).length, 2, l); assert.doesNotMatch(END_LINES[l], /macro|LIVE|RECENT|LAGGED|EXPECTATION|INFERRED/i); }
 });
 
 test("fonts cover all 13 languages", () => {

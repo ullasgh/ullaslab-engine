@@ -12,5 +12,8 @@
 #     licence_url: https://pixabay.com/service/license-summary/
 #     source_url: https://pixabay.com/music/...
 #     downloaded: 2026-11-09
+#     sha256: <64 hex, optional; verified when the file is present>
 #     mood: [policy, commodities]     # matched against the first scene's palette
 tracks: []
+# No licensed track is recorded yet: pixabay.com blocks automated access (HTTP 403), so the tracks must be downloaded by the owner.
+# Track URLs and the steps are in the content repo: .claude/progress/video-studio/owner-music.md. Until then the studio uses the generated CC0 pad.

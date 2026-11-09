@@ -19,9 +19,10 @@ from ..config import ROOT
 from . import FPS, audio as A, pack as K
 from .assemble import ASPECT_SIZE, AssembleError, build_props, load_assets
 from .captions import cues_to_srt
+from .qc import QCError
 from .timings import UNSPACED, CoverageError, time_output, transcribe_words
 
-STAGES = ["timings", "broll", "assemble", "render", "mix", "package"]
+STAGES = ["timings", "broll", "assemble", "render", "mix", "package", "qc"]
 REMOTION = ROOT / "remotion"
 
 
@@ -264,7 +265,8 @@ class Studio:
                     track = A.generated_track()
                     src = A.generate_pad(st / "pad_source.wav", min(total, 60.0))
                 A.run(A.music_stem_cmd(src, total, st / "music.wav"), "music stem")
-                A.run(A.mix_cmd(st / "narration.wav", st / "music.wav", st / "sfx.wav", st / "mix.wav"), "ducked mix")
+                duck = A.apply_duck(st / "narration.wav", st / "music.wav", st / "music_ducked.wav")
+                A.run(A.mix_cmd(st / "narration.wav", st / "music_ducked.wav", st / "sfx.wav", st / "mix.wav"), "ducked mix")
                 pre = A.loudnorm_two_pass(st / "mix.wav", st / "master.wav")
                 m = A.measure(st / "master.wav")
                 if abs(m["lufs"] - A.TARGET_LUFS) > 1.0 or m["true_peak_dbtp"] > A.TP_LIMIT:
@@ -276,7 +278,7 @@ class Studio:
                 bad = check_spec(final, w, h)
                 if bad:
                     raise StudioError(f"{n}: spec check failed: {bad}")
-                meta[n] = {"music": track, "sfx": sorted({e[0] for e in events}), "measure": m, "pre_norm_lufs": pre.get("input_i")}
+                meta[n] = {"music": track, "sfx": sorted({e[0] for e in events}), "measure": m, "duck": duck, "pre_norm_lufs": pre.get("input_i")}
                 self.log(f"  {n}: {m['lufs']} LUFS, {m['true_peak_dbtp']} dBTP, music={track['id']}, sfx={len(events)}")
             meta_p.write_text(json.dumps(meta, indent=1))
         self._stage("mix", sha([self.wmode / f"video.{o['output']}.mp4" for o in doc["outputs"]], self.mode), outs + [meta_p], go)
@@ -332,15 +334,26 @@ class Studio:
                 break
         return made
 
+    def s_qc(self):
+        """Last stage: automated QC of the packaged files (not checkpointed; cheap and always current). Writes qc.md / qc.json."""
+        from .qc import qc_item
+        rep = qc_item(self.item, preview=self.preview)
+        self.log(f"[qc] {rep.verdict()}: " + ", ".join(f"{o}={rep.verdict(o)}" for o in rep.outputs))
+        return rep
+
 
 def cmd_studio_run(a) -> int:
     s = Studio(Path(a.item), preview=a.preview, lang=a.lang, asr_backend=a.asr, force=a.force)
     try:
-        made = s.run(a.until)
-    except (StudioError, AssembleError, CoverageError, A.AudioError) as e:
+        made = s.run("package" if a.until == "qc" else a.until)
+        rep = s.s_qc() if a.until == "qc" else None
+    except (StudioError, AssembleError, CoverageError, A.AudioError, QCError) as e:
         print(f"studio: {type(e).__name__}: {e}")
         return 1
     for w in dict.fromkeys(s.warnings):
         print("warning:", w)
     print("done:", ", ".join(p.name for p in made) or a.until)
+    if rep is not None:
+        print(f"qc: {rep.verdict()} (see qc.md)")
+        return 1 if rep.verdict() == "FAIL" else 0
     return 0
