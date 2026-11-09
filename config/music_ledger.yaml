@@ -4,8 +4,8 @@
 # With no track present the studio generates a CC0 pad in-house (zero cost).
 # tracks:
 #   - id: pixabay-12345
-#     file: calm-macro.mp3
-#     title: Calm Macro
+#     file: calm-markets.mp3
+#     title: Calm Markets
 #     artist: Some Artist
 #     source: pixabay
 #     licence: Pixabay Content Licence

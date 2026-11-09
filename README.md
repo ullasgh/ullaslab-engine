@@ -1,6 +1,6 @@
 # ullaslab-engine
 
-Generic, secret-free render, TTS, captions and QA engine for the UllasLab Macro content pipeline.
+Generic, secret-free render, TTS, captions and QA engine for the UllasLab content pipeline.
 
 **This repository is public. It contains no secrets, no content, no voice sample, no scripts and no owner
 data, and it never will.** Inputs and outputs travel as presigned R2 URLs in a `repository_dispatch` payload
