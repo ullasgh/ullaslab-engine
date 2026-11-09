@@ -4,6 +4,8 @@ import { FPS, SAFE } from "./brand";
 import { Video } from "./Video";
 import { Props } from "./types";
 import { Story } from "./Story";
+import { SceneRenderer } from "./studio/SceneRenderer";
+import { StudioDemo, demoProps, studioMetadata } from "./studio/StudioDemo";
 import { STORY_SAFE, StoryProps, clampDuration } from "./storyConfig";
 
 const empty: Props = {
@@ -38,6 +40,15 @@ export const Root: React.FC = () => (
     height={STORY_SAFE.h}
     defaultProps={emptyStory as unknown as Record<string, unknown>}
     calculateMetadata={({ props }) => ({ durationInFrames: Math.round(clampDuration((props as unknown as StoryProps).durationS) * FPS), width: STORY_SAFE.w, height: STORY_SAFE.h, fps: FPS })}
+  />
+  <Composition id="StudioDemo-16x9" component={() => <StudioDemo orientation="horizontal" />} durationInFrames={900} fps={FPS} width={1920} height={1080} />
+  <Composition id="StudioDemo-9x16" component={() => <StudioDemo orientation="vertical" />} durationInFrames={900} fps={FPS} width={1080} height={1920} />
+  <Composition
+    id="StudioScenes"
+    component={SceneRenderer as unknown as React.FC<Record<string, unknown>>}
+    durationInFrames={900} fps={FPS} width={1920} height={1080}
+    defaultProps={demoProps("horizontal") as unknown as Record<string, unknown>}
+    calculateMetadata={({ props }) => studioMetadata(props as unknown as Parameters<typeof studioMetadata>[0])}
   />
   </>
 );
