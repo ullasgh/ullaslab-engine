@@ -43,7 +43,7 @@ DEFAULTS = {
     "duration_tol_s": 0.5, "black_min_s": 0.5, "black_edge_fade_max_s": 1.0, "freeze_min_s": 2.0, "silence_min_s": 1.5, "silence_db": -45,
     "lufs_target": -14.0, "lufs_tol": 1.0, "true_peak_max": -1.0, "clip_level": 0.999, "clip_run": 3,
     "phash_max_dist": 0.12, "phash_shot_cut": 0.5, "phash_min_std": 4.0, "caption_drift_s": 0.15, "caption_hold_s": 0.35,
-    "margin_white_frac": 0.001, "contact_cols": 4, "contact_rows": 6,
+    "margin_white_frac": 0.001, "banned_word": r"\bmacro", "brand_allow": [], "contact_cols": 4, "contact_rows": 6,
 }
 
 
@@ -672,11 +672,50 @@ def check_deny(item: Path, mode: str, doc: dict, srts: dict[str, Path | None]) -
                  "; ".join(hits) or "no Schwab / FYERS / NSE feed / Atlas / yfinance / investing.com on screen or in captions")
 
 
+def banned_word_hits(text: str, T: dict) -> list[str]:
+    """Occurrences of the owner-banned word (QC.banned_word, default `\\bmacro`, case-insensitive; also matches macroeconomic(s)
+    and #macro) after removing any allowed brand strings (QC.brand_allow, empty by default: no exception)."""
+    for b in T["brand_allow"]:
+        text = re.sub(re.escape(b), " ", text, flags=re.I)
+    return [m.group(0) for m in re.finditer(r"[#\w]*" + T["banned_word"] + r"\w*", text, re.I)]
+
+
+def check_banned_word(item: Path, mode: str, doc: dict, srts: dict, T: dict) -> Check:
+    """The word 'macro' must not appear anywhere the audience sees or hears it: captions/SRT, on-screen text, rendered
+    text layers (props), thumbnail text, publishing pack (titles, description, hashtags), meta, narration."""
+    src: dict[str, str] = {}
+    for o in doc["outputs"]:
+        n = o["output"]
+        src[f"{n}/narration"] = " ".join(sc["narration"]["text"] for sc in o["scenes"])
+        src[f"{n}/on_screen_text"] = " ".join(str(sc.get("on_screen_text") or "") for sc in o["scenes"])
+        p = item / "work" / mode / f"props.{n}.json"
+        if p.is_file():
+            keep = ("scenes", "refs", "captions")
+            src[f"{n}/rendered text layers"] = "\n".join(_walk_strings({k: v for k, v in json.loads(p.read_text(encoding="utf-8")).items() if k in keep}))
+        if srts.get(n) and srts[n].is_file():
+            src[f"{n}/srt"] = srts[n].read_text(encoding="utf-8")
+    tp = item / "work" / mode / "props.thumb.json"
+    if tp.is_file():
+        src["thumbnail"] = "\n".join(_walk_strings({k: v for k, v in json.loads(tp.read_text(encoding="utf-8")).items() if k in ("headline", "scenes")}))
+    for name in ("publish.md", "meta.json"):
+        if (item / name).is_file():
+            src[name] = (item / name).read_text(encoding="utf-8")
+    hits = [f"{k}: '{h}'" for k, t in src.items() for h in banned_word_hits(t, T)[:2]]
+    if hits:
+        return Check("platform", "banned word 'macro'", FAIL, "; ".join(hits[:6]))
+    return Check("platform", "banned word 'macro'", PASS,
+                 f"not found in {len(src)} audience-facing source(s)" + (f" (allowed: {', '.join(T['brand_allow'])})" if T["brand_allow"] else ""))
+
+
 # ---------------------------------------------------------------- 7. platform readiness (item level)
-def check_platform(item: Path) -> list[Check]:
+def check_platform(item: Path, preview: bool = False) -> list[Check]:
     meta = json.loads((item / "meta.json").read_text(encoding="utf-8")) if (item / "meta.json").is_file() else {}
     pub = (item / "publish.md").read_text(encoding="utf-8") if (item / "publish.md").is_file() else ""
     out = []
+    if preview and not (item / "publish.md").is_file():     # previews are not packaged: the pack comes with the final run
+        return [Check("platform", n, WARN, "publish.md is written by the final run (preview has no pack)") for n in ("disclaimer", "AI label recommendation")] + [
+            Check("platform", "synthetic-voice disclosure", PASS if meta.get("synthetic_voice") is True else FAIL,
+                  "meta.json synthetic_voice is true" if meta.get("synthetic_voice") is True else "meta.json synthetic_voice is not true")]
     in_pub = DISCLAIMER in pub or "Not investment advice" in pub
     in_meta = "not investment advice" in str(meta.get("description", "")).lower()
     out.append(Check("platform", "disclaimer", PASS if in_pub or in_meta else FAIL,
@@ -815,7 +854,11 @@ def qc_item(item: Path, *, preview: bool = False) -> Report:
         rep.item_checks.append(check_deny(item, mode, doc, srts))
     except Exception as e:
         rep.item_checks.append(Check("data", "deny-listed sources off screen", FAIL, f"check could not run: {e}"))
-    rep.item_checks += check_platform(item)
+    try:
+        rep.item_checks.append(check_banned_word(item, mode, doc, srts, T))
+    except Exception as e:
+        rep.item_checks.append(Check("platform", "banned word 'macro'", FAIL, f"check could not run: {e}"))
+    rep.item_checks += check_platform(item, preview)
     (item / "qc.json").write_text(json.dumps(rep.as_dict(), indent=1, ensure_ascii=False), encoding="utf-8")
     (item / "qc.md").write_text(rep.markdown(), encoding="utf-8")
     return rep

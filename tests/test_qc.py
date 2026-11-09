@@ -292,6 +292,13 @@ def test_platform_readiness(tmp_path):
     assert [c.status for c in Q.check_platform(item)] == [Q.FAIL] * 3
 
 
+def test_platform_preview_without_pack_warns_not_fails(tmp_path):
+    item, _ = _item(tmp_path)
+    (item / "publish.md").unlink()
+    assert sorted(c.status for c in Q.check_platform(item, preview=True)) == [Q.PASS, Q.WARN, Q.WARN]
+    assert Q.FAIL in [c.status for c in Q.check_platform(item, preview=False)]
+
+
 # ---------------------------------------------------------------- orchestration
 def test_qc_output_runs_all_detectors_and_writes_contact_sheet(vids, tmp_path):
     item = tmp_path / "item"
@@ -336,3 +343,44 @@ def test_loop_inside_one_scene_is_not_a_duplicate(vids):
     assert c.status == Q.FAIL and "s1/s3" in c.detail
     two[0]["type"] = "kinetic"
     assert Q.check_phash(vids["dup"], d, two, T).status == Q.WARN     # a repeated non-footage backdrop is only a warning
+
+
+@pytest.mark.parametrize("where", ["narration", "on_screen", "srt", "publish_hashtag", "publish_title", "meta", "thumb", "props"])
+def test_banned_word_macro_fails_everywhere_audience_sees_it(tmp_path, where):
+    item, doc = _item(tmp_path)
+    sc = doc["outputs"][0]["scenes"][0]
+    wm = item / "work" / "final"
+    wm.mkdir(parents=True)
+    srts = {}
+    if where == "narration":
+        sc["narration"]["text"] = "Today we cover Macroeconomics basics"
+    elif where == "on_screen":
+        sc["on_screen_text"] = "The macro view"
+    elif where == "srt":
+        (item / "c.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nmacro moves\n\n")
+        srts = {"long": item / "c.srt"}
+    elif where == "publish_hashtag":
+        (item / "publish.md").write_text("# Pack\n\n## Hashtags\n\n#markets #macro\n")
+    elif where == "publish_title":
+        (item / "publish.md").write_text("# Pack\n\n1. A macroeconomic puzzle\n")
+    elif where == "meta":
+        (item / "meta.json").write_text(json.dumps({"description": "macro"}))
+    elif where == "thumb":
+        (wm / "props.thumb.json").write_text(json.dumps({"headline": "Macro shock"}))
+    elif where == "props":
+        (wm / "props.long.json").write_text(json.dumps({"scenes": [], "refs": {"c1": {"meta": {"source": {"name": "Macro Data Inc"}}}}, "captions": []}))
+    c = Q.check_banned_word(item, "final", doc, srts, Q.thresholds())
+    assert c.status == Q.FAIL, c
+
+
+def test_banned_word_no_brand_exception_by_default_but_configurable(tmp_path):
+    item, doc = _item(tmp_path)
+    (item / "publish.md").write_text("# Pack\n\nBy UllasLab Macro. Education only.\n")
+    T2 = Q.thresholds()
+    assert T2["brand_allow"] == []
+    assert Q.check_banned_word(item, "final", doc, {}, T2).status == Q.FAIL        # no brand exception: "UllasLab Macro" fails
+    assert Q.check_banned_word(item, "final", doc, {}, {**T2, "brand_allow": ["UllasLab Macro"]}).status == Q.PASS   # the one config value
+    (item / "publish.md").write_text("# Pack\n\nBy UllasLab. Education only.\n")
+    assert Q.check_banned_word(item, "final", doc, {}, T2).status == Q.PASS
+    doc["outputs"][0]["scenes"][0]["on_screen_text"] = "#macro and Macroeconomics"
+    assert Q.check_banned_word(item, "final", doc, {}, T2).status == Q.FAIL

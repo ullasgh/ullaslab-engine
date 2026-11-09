@@ -255,7 +255,7 @@ def test_cost_and_publish_pack(tmp_path):
     assert "Total spend: $0.00" in K.cost_md(item, {})
     audio = {"long": {"music": {"title": "T", "artist": "A", "licence": "CC0"}, "sfx": []}}
     t = K.publishing_pack(item, timed_doc(), {"title": "My title"}, [], audio)
-    assert t.index(K.DISCLAIMER) < t.index("Credits") and "My title" in t and "containsSyntheticMedia" in t and "#macro" in t
+    assert t.index(K.DISCLAIMER) < t.index("Credits") and "My title" in t and "containsSyntheticMedia" in t and "#economy" in t and "#macro" not in t
 
 
 # ---------------------------------------------------------------- resumability (fake ASR + fake renderer, real ffmpeg)

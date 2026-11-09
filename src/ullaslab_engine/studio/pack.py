@@ -90,11 +90,11 @@ def publishing_pack(item: Path, doc: dict, meta: dict, assets: list[dict], audio
     if meta.get("title"):
         titles.insert(0, meta["title"])
     if not titles:
-        titles = [_hook_title(longo), f"{_hook_title(longo)}: the macro explained", "A macro question, answered with data"]
+        titles = [_hook_title(longo), f"{_hook_title(longo)}: the economics explained", "An economics question, answered with data"]
     titles = list(dict.fromkeys(t[:100] for t in titles))[:5]
     credits = sorted({(a.get("licence", {}).get("attribution") or f"{a.get('creator', '')} / {a.get('provider', '')}") for a in assets})
     music = sorted({f"Music: {m['music']['title']} - {m['music']['artist']} ({m['music']['licence']})" for m in audio.values()})
-    tags = list(dict.fromkeys(["#macro", "#economics", "#markets", "#finance", "#investingbasics", "#education"] + list(meta.get("hashtags") or [])))
+    tags = list(dict.fromkeys(["#economy", "#economics", "#markets", "#finance", "#investingbasics", "#education"] + list(meta.get("hashtags") or [])))
     L = ["# Publishing pack", "", f"Item: {item.name}", "", "## Title options", ""]
     L += [f"{i}. {t}" for i, t in enumerate(titles, 1)]
     for o in doc["outputs"]:

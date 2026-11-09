@@ -26,7 +26,7 @@ export const StudioThumb: React.FC<StudioThumbProps> = ({ headline, art = true, 
       fontFamily: fontFor(scene.lang ?? "en") }}>
       <div style={{ width: 96, height: 8, background: C.primary, borderRadius: 4 }} />
       <div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1.05, color: C.text, textShadow: "0 3px 20px rgba(0,0,0,0.6)" }}>{headline}</div>
-      <div style={{ fontSize: 34, fontWeight: 700, color: C.primary, letterSpacing: 2 }}>UllasLab Macro</div>
+      <div style={{ fontSize: 34, fontWeight: 700, color: C.primary, letterSpacing: 2 }}>UllasLab</div>
     </div>
   </AbsoluteFill>
 );
