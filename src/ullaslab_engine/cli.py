@@ -117,6 +117,12 @@ def cmd_story(a):
     return 0 if qa["passed"] else 1
 
 
+def qa_lines(qa: dict) -> list[str]:
+    """One line per check: gate.name=value limit=limit PASS|FAIL. Numbers and gate names only, never content."""
+    return [f"{g}.{c['name']}={c['value']} limit={c['limit']} {'PASS' if c['passed'] else 'FAIL'}"
+            for g, v in qa["gates"].items() for c in v["checks"]]
+
+
 def cmd_qa(a):
     work = Path(a.work)
     m = load_bundle(work / "bundle")
@@ -131,6 +137,8 @@ def cmd_qa(a):
     else:
         qa = P.stage_qa(work, a.lang, None, m["orientation"], use_asr=not a.no_asr, master_total=master_total)
     print("qa", "PASS" if qa["passed"] else "FAIL", [g for g, v in qa["gates"].items() if not v["passed"]])
+    for line in qa_lines(qa):
+        print(line)
     return 0 if qa["passed"] else 1
 
 
