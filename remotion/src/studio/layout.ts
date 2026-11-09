@@ -1,4 +1,4 @@
-import { STUDIO_TYPE, type TypeScale } from "./palettes";
+import { STUDIO_TYPE, type TypeScale } from "./palettes.ts";
 
 export type Orientation = "horizontal" | "vertical";
 export const SIZES = { horizontal: { w: 1920, h: 1080 }, vertical: { w: 1080, h: 1920 } } as const;

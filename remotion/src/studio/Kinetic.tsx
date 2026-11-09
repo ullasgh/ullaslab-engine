@@ -27,8 +27,8 @@ export const KineticText: React.FC<{ text: string }> = ({ text }) => {
   return (
     <div style={{ position: "absolute", left: L.x0, top: L.y0, width: L.cw, height: L.ch, fontFamily: font, display: "flex", flexDirection: "column", justifyContent: "center", gap: size * 0.1 }}>
       <svg width={L.cw * 0.9} height={L.vertical ? 420 : 520} style={{ position: "absolute", right: -L.cw * 0.12, top: L.vertical ? 0 : L.ch * 0.05, opacity: 0.55, overflow: "visible" }}>
-        <circle cx={L.cw * 0.5 - drift} cy={200} r={L.vertical ? 220 : 280} fill="none" stroke={pal.accent} strokeWidth={2} opacity={0.5} />
-        <circle cx={L.cw * 0.5 - drift} cy={200} r={L.vertical ? 150 : 190} fill="none" stroke={pal.grid} strokeWidth={2} />
+        <circle cx={L.cw * 0.5 - drift} cy={L.vertical ? 110 : 200} r={L.vertical ? 220 : 280} fill="none" stroke={pal.accent} strokeWidth={2} opacity={0.5} />
+        <circle cx={L.cw * 0.5 - drift} cy={L.vertical ? 110 : 200} r={L.vertical ? 150 : 190} fill="none" stroke={pal.grid} strokeWidth={2} />
       </svg>
       <div style={{ width: ease(f / 22) * 120, height: 8, background: pal.accent, borderRadius: 4, marginBottom: size * 0.2 }} />
       {lines.map((line, li) => (

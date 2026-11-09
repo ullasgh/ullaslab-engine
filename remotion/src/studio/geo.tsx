@@ -18,7 +18,7 @@ const graticule = geoGraticule10();
 
 type ColorKey = "accent" | "accent2" | "accent3" | "negative";
 export type GeoRoute = { id: string; name?: string; points: LonLat[]; color?: ColorKey; delay?: number; duration?: number; markers?: number; dashed?: boolean };
-type LabelPlace = { at?: LonLat; dx?: number; dy?: number; anchor?: "start" | "middle" | "end" };
+type LabelPlace = { text?: string; at?: LonLat; dx?: number; dy?: number; anchor?: "start" | "middle" | "end" };
 export type GeoLabel = { text: string; at: LonLat; dx?: number; dy?: number; anchor?: "start" | "middle" | "end"; delay?: number; color?: ColorKey; dot?: boolean; vertical?: LabelPlace };
 // Labels may carry a 9:16 placement override (the framing differs, so collisions differ).
 const place = (l: GeoLabel, vertical: boolean): GeoLabel => (vertical && l.vertical ? { ...l, ...l.vertical } : l);

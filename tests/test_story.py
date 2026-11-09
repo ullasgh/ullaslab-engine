@@ -205,3 +205,10 @@ def test_story_render_passes_qa(work):
     assert qa["passed"], [c for c in qa["checks"] if not c["passed"]]
     vid = work / "en" / "story" / "video.mp4"
     assert vid.stat().st_size < 100 * 1024 * 1024 and shutil.which("node")
+
+
+def test_source_stamp_has_no_double_prefix():
+    assert ST.clean_source_name("Source: FRED") == "FRED"
+    assert ST.clean_source_name("Source: Source: FRED") == "FRED"
+    m = {"scenes": [{"chart_data": {"source": {"name": "Source: FRED"}}}]}
+    assert ST.source_stamp(m, "en") == "Source: FRED"

@@ -44,7 +44,7 @@ export const DEMO_REFS: Record<string, unknown> = {
   } satisfies ChartSceneData,
   map_routes: {
     meta: MAP_META, focus: { center: [62, 24], zoom: 1.75 }, focusVertical: { center: [52, 15], zoom: 2.7 },
-    highlights: [{ id: "356", color: "accent2", label: { text: "India", at: [79, 22], anchor: "middle", delay: 30, dot: false } }, { id: "682", color: "accent", label: { text: "Saudi Arabia", at: [41, 17], anchor: "middle", delay: 24, dot: false, vertical: { at: [45.5, 19.5], anchor: "start" } } }],
+    highlights: [{ id: "356", color: "accent2", label: { text: "India", at: [79, 22], anchor: "middle", delay: 30, dot: false } }, { id: "682", color: "accent", label: { text: "Saudi Arabia", at: [41, 17], anchor: "middle", delay: 24, dot: false, vertical: { text: "Saudi", at: [44, 19.5], anchor: "start" } } }],
     routes: [
       { id: "gulf-india", points: [[50.1, 26.6], [56.5, 26.4], [60.5, 23.5], [72.8, 19]], color: "accent2", delay: 10, duration: 60, markers: 2 },
       { id: "asia-europe", points: [[103.8, 1.3], [79.8, 6.9], [43.3, 12.6], [32.5, 29.9], [14, 36], [4.4, 51.9]], color: "accent", delay: 28, duration: 90, markers: 3 },
