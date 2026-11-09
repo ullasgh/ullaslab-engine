@@ -58,11 +58,11 @@ export const FreshnessTag: React.FC<{ tag: Tag; small?: boolean }> = ({ tag, sma
 export const SourceStamp: React.FC<{ chart: Chart }> = ({ chart }) => {
   const { L, p } = useCtx();
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "nowrap", minHeight: 56 }}>
-      <span data-audit="stamp" style={{ fontSize: L.type.label, color: C.muted, whiteSpace: "nowrap", direction: p.rtl ? "rtl" : "ltr" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "nowrap", minHeight: 56, width: "100%" }}>
+      <span data-audit="stamp" style={{ fontSize: L.type.label, color: C.muted, flex: "1 1 0", minWidth: 0, lineHeight: 1.25, overflowWrap: "anywhere", direction: p.rtl ? "rtl" : "ltr" }}>
         {SOURCE_WORD[p.lang] ?? SOURCE_WORD.en}: {chart.source.name} {"·"} {chart.source.as_of}
       </span>
-      <FreshnessTag tag={chart.freshness} />
+      <span style={{ flex: "none" }}><FreshnessTag tag={chart.freshness} /></span>
     </div>
   );
 };

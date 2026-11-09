@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .bundle import normalise_for_wer
+from .wer_norm import canonical_for_wer
 from .captions import NO_SPACE_LANGS
 
 _MODEL = {}
@@ -44,7 +44,7 @@ def words_by_segment(words: list[tuple[str, float, float]], timeline: dict, pad:
 def error_rate(reference: str, hypothesis: str, lang: str) -> float:
     """WER in percent (CER for languages written without spaces)."""
     import jiwer
-    ref, hyp = normalise_for_wer(reference), normalise_for_wer(hypothesis)
+    ref, hyp = canonical_for_wer(reference, lang), canonical_for_wer(hypothesis, lang)
     if not ref:
         return 0.0
     if lang in NO_SPACE_LANGS:

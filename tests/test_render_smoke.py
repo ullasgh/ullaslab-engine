@@ -71,3 +71,32 @@ def test_horizontal_passes_a5(prepared):
 def test_dubbed_visual_variants_pass_a5(prepared, lang):
     g = audit(prepared, lang, "vertical", True, 4, f"l{lang}")
     assert g["passed"], checks_failed(g)
+
+
+LONG_SOURCE = "Synthetic Reserve Authority, Governor's Statement, annual series of the national bank lending rate"
+
+
+@pytest.fixture(scope="module")
+def long_sources(tmp_path_factory):
+    """Long source names (as real citations are) must wrap inside the safe zone, not run off the frame."""
+    work = tmp_path_factory.mktemp("wl")
+    shutil.copytree(ROOT / "fixtures" / "fixture-bundle", work / "bundle")
+    mp = work / "bundle" / "manifest.json"
+    m = json.loads(mp.read_text())
+    for sc in m["scenes"]:
+        if "chart" in sc:
+            pass
+    mp.write_text(json.dumps(m, ensure_ascii=False))
+    for f in (work / "bundle" / "charts").glob("*.json"):
+        c = json.loads(f.read_text())
+        c["source"]["name"] = LONG_SOURCE
+        f.write_text(json.dumps(c, ensure_ascii=False))
+    P.stage_tts(work, "en", tts_fn=fake_tts_factory(2.6))
+    P.stage_captions(work, "en", use_asr=False)
+    return work
+
+
+@pytest.mark.parametrize("fmt", [1, 4, 7])
+def test_long_source_stamp_stays_in_safe_zone(long_sources, fmt):
+    g = audit(long_sources, "en", "vertical", False, fmt, f"ls{fmt}")
+    assert g["passed"], checks_failed(g)
