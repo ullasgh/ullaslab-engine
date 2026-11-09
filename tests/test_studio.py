@@ -255,7 +255,7 @@ def test_cost_and_publish_pack(tmp_path):
     assert "Total spend: $0.00" in K.cost_md(item, {})
     audio = {"long": {"music": {"title": "T", "artist": "A", "licence": "CC0"}, "sfx": []}}
     t = K.publishing_pack(item, timed_doc(), {"title": "My title"}, [], audio)
-    assert t.index(K.DISCLAIMER) < t.index("Credits") and "My title" in t and "containsSyntheticMedia" in t and "#economy" in t and "#macro" not in t
+    assert t.index(K.DISCLAIMER) < t.index("Credits") and "My title" in t and "containsSyntheticMedia" in t and "#economy" in t and "#economics" in t and "macro" not in t.lower()
 
 
 # ---------------------------------------------------------------- resumability (fake ASR + fake renderer, real ffmpeg)
@@ -369,3 +369,11 @@ def test_unspaced_language_is_refused_clearly(studio_item):
         Studio(studio_item, lang="ja", asr=lambda p, l: ([], "x"), log=lambda m: None).run(until="timings")
     with pytest.raises(CoverageError, match="without spaces"):
         time_output(scenes_doc()["outputs"][0]["scenes"], fake_asr_words("zzz qqq"), 5.0, "long", lang="ja")
+
+
+def test_publish_pack_drops_banned_brand_word(tmp_path):
+    item = make_item(tmp_path, voice=False)
+    audio = {"long": {"music": {"title": "T", "artist": "A", "licence": "CC0"}, "sfx": []}}
+    t = K.publishing_pack(item, timed_doc(), {"title": "A macro view", "title_options": ["Macroeconomics 101", "Rates explained"],
+                                              "hashtags": ["#macro", "#rates"]}, [], audio)
+    assert "macro" not in t.lower() and "Rates explained" in t and "#rates" in t

@@ -20,7 +20,7 @@ const useFonts = (p: Props) => {
     link.rel = "stylesheet";
     link.href = staticFile("fonts/fonts.css");
     link.onload = () => {
-      const sample = allText(p) + "0123456789 UllasLab Macro";
+      const sample = allText(p) + "0123456789 UllasLab";
       const fam = fontFor(p.lang).split(",")[0].replace(/"/g, "").trim();
       Promise.all([400, 700].flatMap((w) => [...new Set([fam, "Noto Sans"])].map((f) => document.fonts.load(`${w} 40px "${f}"`, sample))))
         .catch(() => undefined).finally(() => continueRender(handle));

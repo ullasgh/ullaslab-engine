@@ -15,7 +15,7 @@ const base = { chartArea: false, chartDots: false, gridStyle: "cards", compareSt
 // manifest.template names the sub-template (e.g. "annotated-bands") and is carried through for logging.
 export const TEMPLATES: TemplateSpec[] = [
   { ...base, id: "chart-of-the-week", format: 1, name: "Chart of the Week", accent: C.primary, enter: "wipe", chartArea: true },
-  { ...base, id: "macro-in-60s", format: 2, name: "Macro in 60s", accent: C.secondary, enter: "slide", gridStyle: "ticker" },
+  { ...base, id: "macro-in-60s", format: 2, name: "Economy in 60s", accent: C.secondary, enter: "slide", gridStyle: "ticker" },
   { ...base, id: "bond-market-says", format: 3, name: "Bond Market Says", accent: C.accent, enter: "rise", chartDots: true },
   { ...base, id: "india-vs-us", format: 4, name: "India vs US Side-by-Side", accent: "#FF9F68", enter: "slide", compareStyle: "mirror" },
   { ...base, id: "week-ahead", format: 5, name: "Week-Ahead Calendar", accent: "#C4B5FD", enter: "fade", gridStyle: "calendar" },

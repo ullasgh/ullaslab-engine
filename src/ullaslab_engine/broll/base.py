@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 import requests
 
-USER_AGENT = "ullaslab-engine/0.1 (+https://learn.ullaslab.co.in; educational macro videos)"
+USER_AGENT = "ullaslab-engine/0.1 (+https://learn.ullaslab.co.in; educational finance and economics videos)"
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 SECRET_PARAMS = {"key", "api_key", "apikey", "token"}
 

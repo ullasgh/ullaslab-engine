@@ -12,7 +12,7 @@ const useFonts = (p: StoryProps) => {
     link.href = staticFile("fonts/fonts.css");
     link.onload = () => {
       const fam = fontFor(p.lang).split(",")[0].replace(/"/g, "").trim();
-      const sample = p.text + p.sub + p.cta + p.edu + p.aiVoice + p.source + "UllasLab Macro";
+      const sample = p.text + p.sub + p.cta + p.edu + p.aiVoice + p.source + "UllasLab";
       Promise.all([400, 700].flatMap((w) => [...new Set([fam, "Noto Sans"])].map((f) => document.fonts.load(`${w} 40px "${f}"`, sample))))
         .catch(() => undefined).finally(() => continueRender(handle));
     };
@@ -43,7 +43,7 @@ export const Story: React.FC<StoryProps> = (p) => {
       <div style={{ position: "absolute", inset: 0, opacity: fadeOut }}>
         <div data-audit="stamp" style={{ position: "absolute", left: S.sides, top: S.top, height: 60, display: "flex", alignItems: "center", gap: 14, fontSize: 36, fontWeight: 700, color: C.muted, letterSpacing: 1 }}>
           <span style={{ width: 14, height: 14, borderRadius: 7, background: p.accent, display: "inline-block", opacity: 0.6 + 0.4 * pulse }} />
-          UllasLab Macro
+          UllasLab
         </div>
         <div style={{ position: "absolute", left: S.sides, width: S.w - 2 * S.sides, top: 400, direction: dir, display: "flex", flexWrap: "wrap", gap: "0 22px", fontSize: 92, fontWeight: 700, lineHeight: 1.15 }}>
           {words.map((w, i) => {
