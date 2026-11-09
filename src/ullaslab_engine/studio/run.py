@@ -19,9 +19,10 @@ from ..config import ROOT
 from . import FPS, audio as A, pack as K
 from .assemble import ASPECT_SIZE, AssembleError, build_props, load_assets
 from .captions import cues_to_srt
+from .qc import QCError
 from .timings import CoverageError, time_output, transcribe_words
 
-STAGES = ["timings", "broll", "assemble", "render", "mix", "package"]
+STAGES = ["timings", "broll", "assemble", "render", "mix", "package", "qc"]
 REMOTION = ROOT / "remotion"
 
 
@@ -330,15 +331,26 @@ class Studio:
                 break
         return made
 
+    def s_qc(self):
+        """Last stage: automated QC of the packaged files (not checkpointed; cheap and always current). Writes qc.md / qc.json."""
+        from .qc import qc_item
+        rep = qc_item(self.item, preview=self.preview)
+        self.log(f"[qc] {rep.verdict()}: " + ", ".join(f"{o}={rep.verdict(o)}" for o in rep.outputs))
+        return rep
+
 
 def cmd_studio_run(a) -> int:
     s = Studio(Path(a.item), preview=a.preview, lang=a.lang, asr_backend=a.asr, force=a.force)
     try:
-        made = s.run(a.until)
-    except (StudioError, AssembleError, CoverageError, A.AudioError) as e:
+        made = s.run("package" if a.until == "qc" else a.until)
+        rep = s.s_qc() if a.until == "qc" else None
+    except (StudioError, AssembleError, CoverageError, A.AudioError, QCError) as e:
         print(f"studio: {type(e).__name__}: {e}")
         return 1
     for w in dict.fromkeys(s.warnings):
         print("warning:", w)
     print("done:", ", ".join(p.name for p in made) or a.until)
+    if rep is not None:
+        print(f"qc: {rep.verdict()} (see qc.md)")
+        return 1 if rep.verdict() == "FAIL" else 0
     return 0

@@ -25,3 +25,24 @@ refused. With no track the studio generates a CC0 pad. SFX are synthesised in-ho
 Tests: `pytest tests/test_studio.py`; real dry-run `make studio-e2e` (needs macOS `say`, mlx-whisper, node + Chrome).
 Known limits: alignment assumes space-delimited languages (not ja); non-English "Illustrative footage" strings are machine-seeded
 and need native review before first publication.
+
+## Automated QC (`studio qc <item>`, final stage of `studio run`)
+`ullaslab-engine studio qc <item> [--preview]` (also run by `studio run`, which now defaults to `--until qc`) checks the latest
+`long`, `short`, `reel` mp4s and writes `qc.md`, `qc.json` and `contact_sheet.<output>.png` (4x6 frames, timestamped) into the queue
+folder. Each check is PASS / WARN / FAIL; the overall verdict is the worst one, and `studio qc` exits 1 on FAIL. Code: `studio/qc.py`;
+thresholds are `DEFAULTS` there and can be overridden in a `QC:` block of `config/quality.yaml`.
+
+| Group | Check | Fails when |
+|---|---|---|
+| spec | video/audio format, duration, faststart | wrong size (1920x1080 long, 1080x1920 short/reel; half in preview), not 30 fps H.264 yuv420p, not AAC 48 kHz, duration differs from the voice track by more than 0.5 s, moov after mdat |
+| visual | black frames | black segment >= 0.5 s that is not a start/end fade (<= 1 s) or a `dip_to_black` transition |
+| visual | frozen frames | frozen >= 2 s unless inside a scene marked `"hold": true` in scenes.json |
+| visual | repeated assets | same asset sha256 used by two scenes of one output (assets.json) |
+| visual | near-duplicate shots | perceptual signature (16x16 grey thumbnail at 1 fps, shots split on jumps and scene starts) within 0.12 of another shot; FAIL for footage/unscened video, WARN between non-footage scenes |
+| audio | narration / mix silence | silence > 1.5 s (-45 dB) in the voice track or the final mix |
+| audio | loudness | integrated outside -14 +-1 LUFS, true peak above -1 dBTP, or any run of >= 3 samples at full scale |
+| captions | layout limits, safe area, SRT sync | cue over 2 lines / 32 chars; caption plate located outside the renderer safe box in sampled frames (OCR-free colour locator; WARN when the plate cannot be told from the backdrop); SRT start/end drift over 150 ms from the aligned word timings (the deliberate 0.35 s hold after a cue is allowed) |
+| data | data_ref, chart hash, tags, footage ledger, deny-list | chart `data_ref` not in chart specs; `chart_hash` (spec or sources.md) differs from the computed hash (WARN when none recorded); chart without a LIVE/RECENT/LAGGED/EXPECTATION/INFERRED tag or on-screen number without a tagged sources.md row; footage scene without a complete ledger entry or `illustrative` flag; Schwab / FYERS / NSE feed / Atlas / yfinance / investing.com in on-screen text, refs or captions |
+| platform | disclaimer, synthetic voice, AI label | disclaimer missing from publish.md; `synthetic_voice` not true in meta.json; no AI disclosure recommendation (publish.md or `ai_label`) |
+
+QC reads the render's own props (`work/<mode>/props.<output>.json`) and `work/scenes.timed.json`, so what it checks is what was rendered.
