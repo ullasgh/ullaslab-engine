@@ -5,6 +5,12 @@ import numpy as np
 from ..audio import Wav
 
 PAUSE_S = {".": 0.42, "?": 0.48, "!": 0.40, "…": 0.55, ";": 0.30, ":": 0.30, ",": 0.16, "para": 0.80}
+# Pacing hints: a marker placed in front of a sentence lengthens the pause before it, so the hook can land and the payoff
+# arrives after a beat. `[[hook]]` = the hook ends before this sentence; `[[payoff]]` = the payoff starts at this sentence.
+# The pause is a floor (max with the punctuation pause), never a cut. Markers are removed from the spoken text.
+PACING_S = {"hook": 0.65, "payoff": 0.60}
+_MARK = re.compile(r"\[\[(hook|payoff)\]\]")
+_LEAD_MARK = re.compile(r"^\s*\[\[(hook|payoff)\]\]\s*")
 MAX_WORDS = 25  # longer sentences are split at commas so the model stays stable
 _END = "。！？।॥؟.!?…"
 _TERM = {"。": ".", "！": "!", "？": "?", "।": ".", "॥": ".", "؟": "?"}
@@ -12,6 +18,29 @@ _COMMAS = ",，、،"
 _SPLIT = re.compile(rf"(?<=[{re.escape(_END)}])\s+|(?<=[。！？])")
 _ABBREV = re.compile(r"\b(?:Mr|Mrs|Ms|Dr|St|vs|etc|e\.g|i\.e|No)\.$", re.I)
 _DECIMAL = re.compile(r"\d[.,]$")
+
+
+def strip_markers(text: str) -> str:
+    """Remove pacing markers (for TTS paths that do not split sentences)."""
+    return re.sub(r"[ \t]*\[\[(?:hook|payoff)\]\][ \t]*", " ", text).strip()
+
+
+def mark_pacing(text: str, payoff_at: int | None = None) -> str:
+    """Insert pacing markers into plain text: `[[hook]]` after the first sentence, and `[[payoff]]` before sentence index
+    `payoff_at` (0-based; None = no payoff marker). Existing markers are left alone."""
+    if _MARK.search(text):
+        return text
+    sents = [x for x in _SPLIT.split(" ".join(text.split())) if x.strip()]
+    if len(sents) < 2:
+        return text
+    out = []
+    for i, x in enumerate(sents):
+        if i == 1:
+            out.append("[[hook]]")
+        elif payoff_at is not None and i == payoff_at and i > 1:
+            out.append("[[payoff]]")
+        out.append(x)
+    return " ".join(out)
 
 
 def _pause_for(s: str) -> float:
@@ -38,6 +67,13 @@ def split_sentences(text: str) -> list[tuple[str, float]]:
             else:
                 parts.append(chunk)
         for s in parts:
+            lead = _LEAD_MARK.match(s)
+            if lead:
+                s = s[lead.end():]
+                if out:      # lengthen the pause after the previous sentence (floor, never shorter than its own)
+                    out[-1] = (out[-1][0], max(out[-1][1], PACING_S[lead[1]]))
+                if not s:
+                    continue
             for piece, pause in _split_long(s):
                 out.append((piece, pause))
         if out:

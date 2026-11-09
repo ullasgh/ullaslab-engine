@@ -12,7 +12,7 @@ const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
 
 test("palette pairs meet 4.5:1 contrast", () => {
   const pairs = [[C.text, C.bg], [C.muted, C.bg], [C.muted, C.panel], [C.text, C.panel], [C.text, C.caption], [C.primary, C.panel],
-    [C.negative, C.panel], [C.secondary, C.panel], [C.accent, C.panel], ["#0E1726", "#F2F5F9"], ["#1E293B", "#F2F5F9"], [C.primary, C.bg]];
+    [C.negative, C.panel], [C.secondary, C.panel], [C.accent, C.panel], ["#0B1424", "#FFFFFF"], ["#1E293B", "#F2F5F9"], [C.primary, C.bg]];
   for (const [a, b] of pairs) assert.ok(cr(a, b) >= 4.5, `${a} on ${b} = ${cr(a, b).toFixed(2)}`);
 });
 

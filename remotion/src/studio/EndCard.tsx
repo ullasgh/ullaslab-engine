@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { endParts } from "../brand";
 import { StudioProvider, useFont, useStudio } from "./context";
-import type { Orientation } from "./layout";
+import type { Orientation, Platform } from "./layout";
 
 export type EndCardProps = { fromFrame: number; durationInFrames: number };
 
@@ -26,8 +26,8 @@ const Card: React.FC<{ rtl?: boolean }> = ({ rtl }) => {
 
 // End card over the last seconds of every video: "Follow UllasLab" + "Education only" (owner decision 2026-11-09), inside the safe box
 // above the caption band. The full disclaimer is in the description / caption, not in the video.
-export const EndCard: React.FC<{ orientation: Orientation; lang: string; rtl?: boolean; card: EndCardProps; reserveBottom: number }> = ({ orientation, lang, rtl, card, reserveBottom }) => (
+export const EndCard: React.FC<{ orientation: Orientation; lang: string; rtl?: boolean; card: EndCardProps; reserveBottom: number; platform?: Platform }> = ({ orientation, lang, rtl, card, reserveBottom, platform }) => (
   <Sequence from={card.fromFrame} durationInFrames={Math.max(1, card.durationInFrames)} name="end-card">
-    <StudioProvider orientation={orientation} lang={lang} reserveBottom={reserveBottom}><Card rtl={rtl} /></StudioProvider>
+    <StudioProvider orientation={orientation} lang={lang} reserveBottom={reserveBottom} platform={platform}><Card rtl={rtl} /></StudioProvider>
   </Sequence>
 );

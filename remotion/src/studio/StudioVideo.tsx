@@ -12,8 +12,8 @@ export type StudioVideoProps = SceneRendererProps & { captions: CaptionCue[]; rt
 export const StudioVideo: React.FC<StudioVideoProps> = ({ captions, rtl, durationInFrames: _d, endCard, ...scene }) => (
   <AbsoluteFill>
     <SceneRenderer {...scene} reserveBottom={CAPTION_RESERVE} />
-    {endCard && <EndCard orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} card={endCard} reserveBottom={CAPTION_RESERVE} />}
-    <StudioCaptions cues={captions} orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} />
+    {endCard && <EndCard orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} card={endCard} reserveBottom={CAPTION_RESERVE} platform={scene.platform} />}
+    <StudioCaptions cues={captions} orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} platform={scene.platform} />
   </AbsoluteFill>
 );
 

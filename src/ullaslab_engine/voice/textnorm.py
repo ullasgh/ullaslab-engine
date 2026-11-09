@@ -200,8 +200,12 @@ def _en_year(y: int) -> str:
 _RE_SPELLED = re.compile(r"\b(?:RBI|SDF|MSF|MPC|LAF|CRR|SLR)\b")
 
 
-def normalize_text(text: str, lang: str, number_format: str | None = None) -> str:
-    """Verbalise currency, percentages, dates and numbers. number_format 'indian' enables lakh/crore for en."""
+def normalize_text(text: str, lang: str, number_format: str | None = None, lexicon: bool = True) -> str:
+    """Apply the pronunciation lexicon (config/lexicon.yaml), then verbalise currency, percentages, dates and numbers.
+    number_format 'indian' enables lakh/crore for en. lexicon=False skips the lexicon (text with no entry match is unchanged either way)."""
+    if lexicon:
+        from .lexicon import apply_lexicon
+        text = apply_lexicon(text, lang)
     if lang not in VERBALIZED:
         return text
     if lang == "en":

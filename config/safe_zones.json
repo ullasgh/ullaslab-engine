@@ -1,8 +1,17 @@
 {
+  "_notes": "Pixels on the stated canvas. 'both' is the stricter of youtube_shorts and instagram_reels (one render serves both; the studio layout uses it); 'vertical' is the legacy template-pipeline zone (A5 gate); 'platforms' holds per-platform templates for a per-platform override. Top/side/right-rail figures come from the platforms' published ad overlay guidance (secondary summaries, see docs/brand.md in the content repo). 'organic' bottom is the owner-set 420 px caption zone; 'ad' bottom is the published 672 px (35%) figure, used with profile 'ad'.",
   "vertical": {
     "top": 220,
     "bottom": 420,
     "sides": 60,
+    "width": 1080,
+    "height": 1920
+  },
+  "both": {
+    "top": 288,
+    "bottom": 420,
+    "left": 65,
+    "right": 192,
     "width": 1080,
     "height": 1920
   },
@@ -19,5 +28,19 @@
     "sides": 60,
     "width": 1080,
     "height": 1920
+  },
+  "platforms": {
+    "youtube_shorts": {
+      "width": 1080, "height": 1920,
+      "top": 288, "bottom": 420, "left": 48, "right": 192,
+      "caption_zone_bottom": 420,
+      "profiles": { "ad": { "bottom": 672 } }
+    },
+    "instagram_reels": {
+      "width": 1080, "height": 1920,
+      "top": 269, "bottom": 420, "left": 65, "right": 130,
+      "caption_zone_bottom": 420,
+      "profiles": { "ad": { "bottom": 672 } }
+    }
   }
 }
