@@ -76,3 +76,17 @@ test("source stamp never doubles the prefix", () => {
   assert.equal(stampText("en", "Source: FRED", "2026-11"), "Source: FRED · 2026-11");
   assert.equal(stampText("en", "FRED", "2026-11"), "Source: FRED · 2026-11");
 });
+
+import { fromDirectorScenes, normalizeScenes, outputFor } from "../src/studio/director.ts";
+const dscene = (o) => ({ id: "s01", role: "hook", narration: { text: "x", start_s: 0, end_s: 2.5 }, visual_objective: "show the route", type: "map", palette: "trade", camera_move: "slow_push", transition: "match_cut", sfx: "none", rationale: "because reasons here", on_screen_text: null, data_ref: { kind: "chart", ref: "map_routes" }, ...o });
+test("director scenes.json adapter", () => {
+  const file = { schema_version: 1, item: "2026-11-09-x", outputs: [{ output: "long", aspect: "16:9", scenes: [dscene({}), dscene({ id: "s02", narration: { text: "y", start_s: 2.5, end_s: null }, camera_move: "pull_back", transition: "pattern_interrupt", on_screen_text: "Hi" }), dscene({ id: "s03", type: "footage", data_ref: null, illustrative: true, transition: "dip_to_black", camera_move: "orbit", narration: { text: "z" } })] }] };
+  const out = fromDirectorScenes(outputFor(file, "16:9").scenes, 30);
+  assert.equal(out[0].start, 0); assert.equal(out[0].end, 75);
+  assert.equal(out[0].data_ref, "map_routes"); assert.equal(out[0].camera_move, "push"); assert.equal(out[0].transition, "match_move");
+  assert.equal(out[1].start, 75); assert.equal(out[1].end, 165); assert.equal(out[1].camera_move, "pull"); assert.equal(out[1].transition, "cut"); assert.equal(out[1].on_screen_text, "Hi");
+  assert.equal(out[2].start, 165); assert.equal(out[2].transition, "crossfade"); assert.deepEqual(out[2].data, { illustrative: true });
+  assert.deepEqual(validateScenes(out, { map_routes: {} }), []);
+  assert.deepEqual(normalizeScenes(out), out);
+  assert.equal(outputFor(file, "9:16"), undefined);
+});

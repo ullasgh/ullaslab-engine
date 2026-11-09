@@ -8,6 +8,7 @@ import { FootageScene, type FootageData } from "./Footage";
 import { GlobeScene, MapScene, type GlobeData, type MapData } from "./geo";
 import { KineticText } from "./Kinetic";
 import type { Orientation } from "./layout";
+import { normalizeScenes, type DirectorScene } from "./director";
 import { overlapAfter, resolveData, transitionProgress, validateScenes, type StudioScene, type TransitionKind } from "./scenes";
 
 export type ChartSceneData =
@@ -15,7 +16,7 @@ export type ChartSceneData =
 
 export type SceneRendererProps = {
   orientation: Orientation;
-  scenes: StudioScene[];
+  scenes: (StudioScene | DirectorScene)[];   // kit shape or director scenes.json scenes (schema v1)
   refs: Record<string, unknown>;   // resolves each scene's data_ref
   lang?: string;
   numberLocale?: string;
@@ -73,7 +74,8 @@ const Enter: React.FC<{ kind: TransitionKind; first: boolean; accent: string; ch
   return <AbsoluteFill style={{ opacity: p }}>{children}</AbsoluteFill>;
 };
 
-export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes, refs, lang, numberLocale }) => {
+export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale }) => {
+  const scenes = normalizeScenes(raw);
   const errs = validateScenes(scenes, refs);
   if (errs.length) throw new Error(`scenes.json invalid:\n${errs.join("\n")}`);
   return (

@@ -47,7 +47,7 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
   const fs = L.type.label;
   const dec = data.decimals ?? 1;
   const multi = data.series.length > 1;
-  const m = { l: 18 + fs * 2.3, r: fs * 2.6, t: (multi ? fs * 1.6 : 20) + (data.annotations?.length ? fs * 2.2 : 0), b: fs * 2.1 };
+  const m = { l: 18 + fs * 2.3, r: fs * 2.6, t: (multi ? fs * 1.9 : 20) + (data.annotations?.length ? fs * 2.4 : 0), b: fs * 2.1 };
   const xs = data.series.flatMap((s) => s.points.map((p) => parseX(p.x)));
   const ys = data.series.flatMap((s) => s.points.map((p) => p.y));
   const X = makeTimeScale(xs, [m.l, w - m.r]);
@@ -106,7 +106,7 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
         const near = s0.points.reduce((best, p) => (Math.abs(parseX(p.x) - parseX(a.x)) < Math.abs(parseX(best.x) - parseX(a.x)) ? p : best));
         const ay = Y(near.y);
         const level = i % 2;
-        const ty = fs * (1.0 + level * 1.1) + (multi ? fs * 1.5 : 0) - 6;
+        const ty = fs * (1.0 + level * 1.15) + (multi ? fs * 1.9 : 0);
         const anchor = ax > w * 0.62 ? "end" : ax < w * 0.2 ? "start" : "middle";
         const k = Math.min(1, (reveal - prog) * 12);
         return (
