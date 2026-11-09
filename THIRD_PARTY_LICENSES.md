@@ -28,6 +28,8 @@ Not used on purpose: learned MOS predictors UTMOS, TorchAudio-SQUIM and DNSMOS (
 | pyloudnorm, PyYAML, jsonschema, onnxruntime | MIT | |
 | jiwer, requests, huggingface-hub, transformers, tokenizers | Apache-2.0 | |
 | TypeScript | Apache-2.0 | |
+| d3-geo, d3-scale, d3-shape, d3-array, d3-interpolate, topojson-client | ISC (d3-geo also BSD-3-Clause for its projection code) | Studio visual kit (`remotion/src/studio`). |
+| `world-atlas` 2.0.2 (`countries-110m.json`, vendored in `remotion/src/studio/data`) | ISC packaging; data is Natural Earth 4.1.0, public domain | Licence file kept beside the data. |
 
 ## Flags for the owner
 

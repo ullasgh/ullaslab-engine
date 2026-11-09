@@ -56,3 +56,15 @@ export const SOURCE_WORD: Record<string, string> = {
   en: "Source", hi: "स्रोत", ta: "ஆதாரம்", te: "మూలం", kn: "ಮೂಲ", ml: "ഉറവിടം", mr: "स्रोत", bn: "সূত্র",
   gu: "સ્ત્રોત", es: "Fuente", pt: "Fonte", ar: "المصدر", ja: "出典",
 };
+
+// Stamp text "<Source word>: <name> · <as_of>". Source names that already start with a source word
+// ("Source: FRED", "Fuente: INE") would print "Source: Source: ..."; strip any leading source prefix first.
+export const cleanSourceName = (name: string): string => {
+  const words = [...new Set(Object.values(SOURCE_WORD)), "Sources", "Source"].map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`^\\s*(?:${words.join("|")})\\s*[:：\\-–—]\\s*`, "i");
+  let out = name.trim();
+  for (let i = 0; i < 3 && re.test(out); i++) out = out.replace(re, "");
+  return out || name.trim();
+};
+export const stampText = (lang: string, name: string, asOf: string): string =>
+  `${SOURCE_WORD[lang] ?? SOURCE_WORD.en}: ${cleanSourceName(name)}${asOf ? ` · ${asOf}` : ""}`;
