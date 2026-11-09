@@ -462,3 +462,24 @@ def test_music_ledger_sha256_is_verified_when_present(tmp_path):
         A.pick_track([good], music_dir=tmp_path)
     with pytest.raises(A.AudioError):
         A.check_track({**good, "sha256": "zz"})
+
+
+def test_real_music_ledger_is_valid_and_preferred_over_the_generated_pad(tmp_path):
+    ledger = A.load_music_ledger()
+    assert len(ledger) >= 3 and len({t["id"] for t in ledger}) == len(ledger)
+    for t in ledger:
+        A.check_track(t)
+        assert isinstance(t["downloaded"], str)   # a bare YAML date is not JSON-serialisable in the studio provenance
+        assert t["source"] == "pixabay" and t["licence"] == "Pixabay Content License" and t["sha256"]
+        assert t["file"] == Path(t["file"]).name and t["file"].endswith(".mp3")
+        local = A.MUSIC_DIR / t["file"]
+        if local.is_file():                                    # audio is git-ignored; verify it when the owner's copy is present
+            assert __import__("hashlib").sha256(local.read_bytes()).hexdigest() == t["sha256"]
+    # with the files present (stand-ins, sha dropped) the first ledger track is chosen, never None (which means: use the pad)
+    for t in ledger:
+        (tmp_path / t["file"]).write_bytes(b"stub")
+    stub = [{k: v for k, v in t.items() if k != "sha256"} for t in ledger]
+    assert A.pick_track(stub, music_dir=tmp_path)["id"] == ledger[0]["id"]
+    assert A.pick_track(stub, mood="no-such-mood", music_dir=tmp_path)["id"] == ledger[0]["id"]
+    assert A.pick_track(stub, music_dir=tmp_path / "absent") is None     # only then does the studio fall back to the CC0 pad
+    assert A.mix_cfg()["music_below_voice_db"] >= 20                     # ducking target unchanged
