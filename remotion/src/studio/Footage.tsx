@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, OffthreadVideo, staticFile, useCurrentFrame } from "remotion";
+import { illustrativeTag } from "../brand";
 import { useCameraStyle, useFont, useStudio } from "./context";
 import { SceneHeadline } from "./Stamp";
 import { LowerThird } from "./Kinetic";
@@ -17,7 +18,7 @@ export type FootageData = {
 const srcUrl = (s: string) => (/^https?:\/\//.test(s) ? s : staticFile(s));
 
 export const FootageScene: React.FC<{ data: FootageData; headline?: string; camera?: CameraMove }> = ({ data, headline, camera }) => {
-  const { L, pal } = useStudio();
+  const { L, pal, lang } = useStudio();
   const font = useFont();
   const f = useCurrentFrame();
   const cam = useCameraStyle(camera ?? "push");
@@ -46,7 +47,7 @@ export const FootageScene: React.FC<{ data: FootageData; headline?: string; came
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
         <span data-audit="stamp" style={{ fontSize: L.type.stamp, color: pal.muted, lineHeight: 1.2, flex: "1 1 0", minWidth: 0 }}>{data.credit ?? ""}</span>
         {illustrative && (
-          <span data-audit="tag" style={{ flex: "none", fontSize: L.type.stamp, fontWeight: 700, color: pal.ink, border: `2px solid ${pal.muted}`, background: `${pal.bg}b3`, borderRadius: 999, padding: "2px 18px" }}>Illustrative footage</span>
+          <span data-audit="tag" style={{ flex: "none", fontSize: L.type.stamp, fontWeight: 700, color: pal.ink, border: `2px solid ${pal.muted}`, background: `${pal.bg}b3`, borderRadius: 999, padding: "2px 18px" }}>{illustrativeTag(lang)}</span>
         )}
       </div>
       </div>

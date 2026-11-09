@@ -270,6 +270,15 @@ def main(argv=None) -> int:
     bf.add_argument("--orientation", choices=["landscape", "portrait"], default=None, help="override; default per output aspect")
     bf.add_argument("--cache-dir", default=None)
     bf.add_argument("--fallback-ranker", action="store_true")
+    sp = sub.add_parser("studio", help="video studio (timings, assembly, render, mix, package)").add_subparsers(dest="studio_cmd", required=True)
+    sr = sp.add_parser("run", help="run the resumable stages for a queue item")
+    sr.add_argument("item")
+    sr.add_argument("--preview", action="store_true", help="half-resolution render first; writes preview/<output>.mp4")
+    sr.add_argument("--until", choices=["timings", "broll", "assemble", "render", "mix", "package"], default="package")
+    sr.add_argument("--lang", default="en")
+    sr.add_argument("--asr", choices=["auto", "mlx", "faster"], default="auto")
+    sr.add_argument("--force", action="store_true", help="ignore checkpoints")
+    sr.set_defaults(fn=lambda a: __import__("ullaslab_engine.studio.run", fromlist=["x"]).cmd_studio_run(a))
     a = ap.parse_args(argv)
     try:
         return a.fn(a) or 0

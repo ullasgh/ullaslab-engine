@@ -6,6 +6,8 @@ import { Props } from "./types";
 import { Story } from "./Story";
 import { SceneRenderer } from "./studio/SceneRenderer";
 import { StudioDemo, demoProps, studioMetadata } from "./studio/StudioDemo";
+import { StudioVideo, studioVideoMetadata } from "./studio/StudioVideo";
+import { StudioThumb } from "./studio/StudioThumb";
 import { STORY_SAFE, StoryProps, clampDuration } from "./storyConfig";
 
 const empty: Props = {
@@ -49,6 +51,19 @@ export const Root: React.FC = () => (
     durationInFrames={900} fps={FPS} width={1920} height={1080}
     defaultProps={demoProps("horizontal") as unknown as Record<string, unknown>}
     calculateMetadata={({ props }) => studioMetadata(props as unknown as Parameters<typeof studioMetadata>[0])}
+  />
+  <Composition
+    id="StudioVideo"
+    component={StudioVideo as unknown as React.FC<Record<string, unknown>>}
+    durationInFrames={900} fps={FPS} width={1920} height={1080}
+    defaultProps={{ ...demoProps("horizontal"), captions: [], durationInFrames: 900 } as unknown as Record<string, unknown>}
+    calculateMetadata={({ props }) => studioVideoMetadata(props as unknown as Parameters<typeof studioVideoMetadata>[0])}
+  />
+  <Composition
+    id="StudioThumb"
+    component={StudioThumb as unknown as React.FC<Record<string, unknown>>}
+    durationInFrames={90} fps={FPS} width={1280} height={720}
+    defaultProps={{ ...demoProps("horizontal"), headline: "Thumbnail" } as unknown as Record<string, unknown>}
   />
   </>
 );

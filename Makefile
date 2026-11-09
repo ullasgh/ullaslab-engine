@@ -1,4 +1,4 @@
-.PHONY: setup test test-py test-js test-render render-fixture clean
+.PHONY: studio-e2e setup test test-py test-js test-render render-fixture clean
 PY := .venv/bin/python
 
 setup:
@@ -24,3 +24,7 @@ render-fixture:
 
 clean:
 	rm -rf out work remotion/out
+
+# Real studio dry-run (macOS: say + mlx-whisper + Remotion), 3 outputs at preview resolution.
+studio-e2e:
+	RUN_STUDIO_E2E=1 $(PY) -m pytest tests/test_studio.py -q -k e2e

@@ -1,0 +1,16 @@
+# Licensed music beds for the studio. Files live in assets/music/ (git-ignored audio; this ledger is the record).
+# Allowed sources: pixabay (Pixabay Content Licence, record the track page URL and download date) or cc0.
+# NEVER add YouTube Audio Library tracks: they are YouTube-only and reels use the same mix. The studio refuses them.
+# With no track present the studio generates a CC0 pad in-house (zero cost).
+# tracks:
+#   - id: pixabay-12345
+#     file: calm-macro.mp3
+#     title: Calm Macro
+#     artist: Some Artist
+#     source: pixabay
+#     licence: Pixabay Content Licence
+#     licence_url: https://pixabay.com/service/license-summary/
+#     source_url: https://pixabay.com/music/...
+#     downloaded: 2026-11-09
+#     mood: [policy, commodities]     # matched against the first scene's palette
+tracks: []
