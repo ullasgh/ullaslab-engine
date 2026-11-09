@@ -155,8 +155,18 @@ class NasaProvider(BrollProvider):
 
 
 # ---------------------------------------------------------------- Wikimedia Commons
-def classify_commons_licence(short: str, usage_terms: str = "", copyrighted: str = "") -> str | None:
-    """Return 'PD' | 'CC0' | 'CC-BY' for acceptable licences, None for anything else (SA/NC/ND/unclear)."""
+PD_WORLDWIDE = re.compile(r"\bpd-(old(-\d+)?(-[a-z0-9-]+)?|author|self|ineligible|textlogo)\b")
+PD_US_ONLY = re.compile(r"\bpd-(us(?!gov)[a-z0-9-]*|\d{4}[a-z0-9-]*)")   # PD-US, PD-US-expired, PD-1923 ...
+PD_USGOV = re.compile(r"\bpd-usgov\b")
+
+
+def classify_commons_licence(short: str, usage_terms: str = "", copyrighted: str = "", categories: str = "") -> str | None:
+    """Return 'PD' | 'PD-USGov' | 'CC0' | 'CC-BY' for acceptable licences, None for anything else (SA/NC/ND/unclear).
+
+    US-only public-domain tags (PD-US*, PD-1923...) can still be copyrighted in India and elsewhere, so they are rejected
+    unless the same file also carries a worldwide PD tag (PD-old-*, PD-author, PD-self, PD-ineligible, PD-textlogo).
+    PD-USGov is accepted (the ledger notes "US federal government work"). Bare "Public domain" is accepted only when
+    UsageTerms says so and the short name is not a PD-US variant."""
     s = f"{short} {usage_terms}".strip().lower().replace("_", "-")
     if not s:
         return None
@@ -166,7 +176,16 @@ def classify_commons_licence(short: str, usage_terms: str = "", copyrighted: str
         return None
     if re.fullmatch(r"(cc0|cc-zero)(\s*1\.0)?|.*\bcc0\b.*", s) or "cc-zero" in s:
         return "CC0"
-    if "public domain" in s or re.match(r"^(pd\b|pd-)", s) or s.startswith("public-domain"):
+    tags = f"{s} {categories}".lower().replace("_", "-")
+    if PD_WORLDWIDE.search(tags):
+        return "PD"
+    if PD_USGOV.search(tags) and not PD_US_ONLY.search(short.lower().replace("_", "-")):
+        return "PD-USGov"
+    if PD_US_ONLY.search(tags):
+        return None
+    if re.match(r"^\s*(pd\b|pd-)", short.lower().replace("_", "-")):
+        return None   # unrecognised PD tag: unclear
+    if short.strip().lower().replace("-", " ") in ("public domain", "public-domain") and "public domain" in usage_terms.lower().replace("-", " "):
         return "PD"
     if re.match(r"^cc-by(-\d(\.\d)?)?(\s+\d(\.\d)?)?(\s+[a-z]{2,3})?$", s) or re.match(r"^cc by \d", s.replace("-", " ")):
         return "CC-BY"
@@ -194,7 +213,7 @@ class WikimediaCommonsProvider(BrollProvider):
                 continue
             md = ii.get("extmetadata") or {}
             val = lambda k: (md.get(k) or {}).get("value", "")
-            kind = classify_commons_licence(val("LicenseShortName"), val("UsageTerms"), val("Copyrighted"))
+            kind = classify_commons_licence(val("LicenseShortName"), val("UsageTerms"), val("Copyrighted"), val("Categories"))
             if not kind:
                 continue
             artist = _strip_html(val("Artist"))
@@ -222,13 +241,14 @@ class WikimediaCommonsProvider(BrollProvider):
 
     def licence(self, c):
         short = c.extra.get("licence_short", "")
-        if c.extra.get("licence_kind") not in ("PD", "CC0", "CC-BY"):
+        if c.extra.get("licence_kind") not in ("PD", "PD-USGov", "CC0", "CC-BY"):
             raise LicenceRejected(f"wikimedia:{c.id}: unclear or non-permitted licence {short!r}")
         kind = c.extra["licence_kind"]
         url = c.extra.get("licence_url") or "https://commons.wikimedia.org/wiki/Commons:Licensing"
         by = kind == "CC-BY"
         return LicenceRecord(name=short, url=url, creator=c.creator, source_url=c.page_url, credit_required=by,
-                             attribution=f'"{c.title}" by {c.creator}, {short}, via Wikimedia Commons' if by else "")
+                             attribution=f'"{c.title}" by {c.creator}, {short}, via Wikimedia Commons' if by else "",
+                             notice="US federal government work" if kind == "PD-USGov" else "")
 
 
 # ---------------------------------------------------------------- Manual import

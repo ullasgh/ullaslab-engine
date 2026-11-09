@@ -151,12 +151,29 @@ def commons_page(pid, title, short, w=1920, h=1080, artist="Jane", mime="video/w
                 "Artist": {"value": f'<a href="x">{artist}</a>' if artist else ""}, "ImageDescription": {"value": "ship"}}}]}
 
 
-@pytest.mark.parametrize("short,expected", [
-    ("Public domain", "PD"), ("PD-USGov-NASA", "PD"), ("CC0", "CC0"), ("CC-BY 4.0", "CC-BY"), ("CC BY 3.0", "CC-BY"),
-    ("CC BY-SA 4.0", None), ("CC-BY-SA-3.0", None), ("CC BY-NC 2.0", None), ("CC BY-ND 4.0", None), ("GFDL", None),
-    ("", None), ("Attribution unclear", None), ("Fair use", None)])
-def test_commons_licence_classifier(short, expected):
-    assert classify_commons_licence(short) == expected
+@pytest.mark.parametrize("short,usage,cats,expected", [
+    ("Public domain", "Public domain", "", "PD"), ("Public domain", "", "", None), ("Public domain", "Attribution", "", None),
+    ("PD-US", "Public domain", "", None), ("PD-US-expired", "Public domain", "", None), ("PD-US-no notice", "Public domain", "", None),
+    ("PD-US-not renewed", "Public domain", "", None), ("PD-1923", "Public domain", "", None), ("PD-US", "", "PD-old-70", "PD"),
+    ("PD-US-expired", "Public domain", "PD-author|Foo", "PD"), ("PD-old-70", "", "", "PD"), ("PD-old-100-expired", "", "", "PD"),
+    ("PD-author", "", "", "PD"), ("PD-self", "", "", "PD"), ("PD-ineligible", "", "", "PD"), ("PD-textlogo", "", "", "PD"),
+    ("PD-USGov", "", "", "PD-USGov"), ("PD-USGov-NASA", "", "", "PD-USGov"), ("PD-US", "Public domain", "PD-USGov", None),
+    ("PD-mystery", "Public domain", "", None),
+    ("CC0", "", "", "CC0"), ("CC-BY 4.0", "", "", "CC-BY"), ("CC BY 3.0", "", "", "CC-BY"),
+    ("CC BY-SA 4.0", "", "", None), ("CC-BY-SA-3.0", "", "", None), ("CC BY-NC 2.0", "", "", None), ("CC BY-ND 4.0", "", "", None),
+    ("GFDL", "", "", None), ("", "", "", None), ("Attribution unclear", "", "", None), ("Fair use", "", "", None)])
+def test_commons_licence_classifier(short, usage, cats, expected):
+    assert classify_commons_licence(short, usage, "", cats) == expected
+
+
+def test_wikimedia_usgov_notice_and_us_only_rejected(tmp_path):
+    pages = [commons_page(1, "gov.webm", "PD-USGov-NASA"), commons_page(2, "us.webm", "PD-US-expired", terms="Public domain"),
+             commons_page(3, "world.webm", "PD-old-70")]
+    http, _, _ = mkhttp(tmp_path, {WikimediaCommonsProvider.URL: Resp(data={"query": {"pages": pages}})})
+    out = WikimediaCommonsProvider(http=http).search("x")
+    assert sorted(c.id for c in out) == ["1", "3"]
+    assert next(c for c in out if c.id == "1").licence.notice == "US federal government work"
+    assert next(c for c in out if c.id == "3").licence.notice == ""
 
 
 def test_wikimedia_filters_and_records_attribution(tmp_path):
