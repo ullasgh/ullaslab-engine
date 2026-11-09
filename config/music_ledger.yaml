@@ -14,6 +14,38 @@
 #     downloaded: 2026-11-09
 #     sha256: <64 hex, optional; verified when the file is present>
 #     mood: [policy, commodities]     # matched against the first scene's palette
-tracks: []
-# No licensed track is recorded yet: pixabay.com blocks automated access (HTTP 403), so the tracks must be downloaded by the owner.
-# Track URLs and the steps are in the content repo: .claude/progress/video-studio/owner-music.md. Until then the studio uses the generated CC0 pad.
+# Owner downloaded these on 2026-11-09 from Pixabay Music (page 403s to automated access, so source_url is the download URL the
+# owner's browser recorded; the track page is pixabay.com/music/ with the numeric id in the id field). Titles come from the file names.
+# Order matters: with no mood match the first present track is used, so the calmest comes first.
+# Audio files stay local in assets/music/ (git-ignored); sha256 below is verified when the file is present.
+tracks:
+  - id: pixabay-606216
+    file: ambient-calm-atlasaudio-606216.mp3
+    title: Ambient Calm
+    artist: atlasaudio
+    source: pixabay
+    licence: Pixabay Content License
+    licence_url: https://pixabay.com/service/license-summary/
+    source_url: https://cdn.pixabay.com/download/audio/2026/09/18/audio_93472d5ea0.mp3?filename=atlasaudio-ambient-calm-606216.mp3
+    downloaded: "2026-11-09"
+    sha256: 18bac6f4be9ef6620d581b41845fd45c1c639c65fc5ee8cfa979062d1feb26c7
+  - id: pixabay-606712
+    file: background-music-nastelbom-606712.mp3
+    title: Background Music
+    artist: nastelbom
+    source: pixabay
+    licence: Pixabay Content License
+    licence_url: https://pixabay.com/service/license-summary/
+    source_url: https://cdn.pixabay.com/download/audio/2026/09/19/audio_3acc208b3a.mp3?filename=nastelbom-background-music-606712.mp3
+    downloaded: "2026-11-09"
+    sha256: 5ea6138f2cdfe81b94b105a66e8faecd00fa3f974b6c975f3c9e75108ebd6cb8
+  - id: pixabay-594872
+    file: music-background-atlasaudio-594872.mp3
+    title: Music Background
+    artist: atlasaudio
+    source: pixabay
+    licence: Pixabay Content License
+    licence_url: https://pixabay.com/service/license-summary/
+    source_url: https://cdn.pixabay.com/download/audio/2026/08/31/audio_dd583d8b01.mp3?filename=atlasaudio-music-background-594872.mp3
+    downloaded: "2026-11-09"
+    sha256: 1bc72610ff3ea8f289e2010063c08a5a716758ccbd7410b07b27b2e96e380c87
