@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from .bundle import normalise_for_wer
-from .voice.textnorm import _EN_MONTH_IDX, _en_year, d_ord_en, normalize_text
+from .voice.textnorm import _EN_MONTH_IDX, _en_year, d_ord_en
 
 _MONTH = "|".join(m.capitalize() for m in _EN_MONTH_IDX)
 _MONTH_RE = rf"(?P<mon>(?:{_MONTH}|{'|'.join(m[:3].capitalize() for m in _EN_MONTH_IDX)})\.?)"
@@ -15,6 +15,7 @@ _RE_ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _RE_DM = re.compile(rf"\b(?:[Tt]he )?{_DAY}(?: of)? {_MONTH_RE}(?:,? (?P<y>\d{{4}}))?\b", )
 _RE_MD = re.compile(rf"\b{_MONTH_RE} {_DAY}(?:,? (?P<y>\d{{4}}))?\b")
 _RE_TRAIL0 = re.compile(r"(?<![\d.])(\d+)\.(\d*?)0+(?![\d])")
+_RE_NUM = re.compile(r"\d+(?:\s?[.,]\s?\d+)+")
 _RE_ORD = re.compile(r"\b(\d+)(?:st|nd|rd|th)\b")
 
 
@@ -61,11 +62,30 @@ def canonical_for_wer(text: str, lang: str = "en") -> str:
     t = re.sub(r"\b(\d+(?:\.\d+)?)\s?(?:bps|bp)\b", r"\1 basis points", t, flags=re.I)
     t = re.sub(r"\b(?:bps|bp)\b", "basis points", t, flags=re.I)
     t = t.replace("&", " and ")
+    t = re.sub(r"(?<=\d)\s?([.,])\s?(?=\d)", r"\1", t)  # "5 .50" -> "5.50"
     t = _RE_TRAIL0.sub(_decimals, t)
     if lang == "en":
         t = _dates(t)
         t = _RE_ORD.sub(r"\1", t)
-    t = normalize_text(t, lang, None)
+    # numbers compare as digit strings: ASR renders 5.50 as 5.5, 5,50, "5 ,550" or 550 inconsistently, so a
+    # number is one token with its separators removed, and a spelled-out number counts once, not per word
+    t = _RE_NUM.sub(lambda m: re.sub(r"[\s.,]", "", m[0]), t)
     t = t.replace("-", " ").replace("/", " ")
     toks = normalise_for_wer(t).split()
     return " ".join(_acronyms(toks) if lang == "en" else toks)
+
+
+def merge_compounds(ref: list[str], hyp: list[str]) -> tuple[list[str], list[str]]:
+    """'sebi sec' vs 'sebisec': an adjacent token pair on one side that equals one token on the other is
+    the same word spelled with or without a separator."""
+    def merge(a: list[str], other: set[str]) -> list[str]:
+        out, i = [], 0
+        while i < len(a):
+            if i + 1 < len(a) and a[i] + a[i + 1] in other:
+                out.append(a[i] + a[i + 1])
+                i += 2
+            else:
+                out.append(a[i])
+                i += 1
+        return out
+    return merge(ref, set(hyp)), merge(hyp, set(ref))
