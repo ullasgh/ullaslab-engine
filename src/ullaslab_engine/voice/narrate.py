@@ -297,12 +297,22 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
     return w
 
 
+_MARKER = re.compile(r"(\[\[[^\[\]]*\]\])")
+
+
+def spoken_text(text: str, lang: str, number_format: str | None = None) -> str:
+    """Lexicon and verbalisation for the words only: pacing markers ([[pause:0.8]] ...) pass through untouched, so their
+    numbers are never verbalised into words that would be spoken. Emphasis asterisks are dropped."""
+    parts = _MARKER.split(strip_emphasis(text))
+    return "".join(p if i % 2 else normalize_text(p, lang, number_format) for i, p in enumerate(parts))
+
+
 def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: bool = True,
             engine: str | None = None, gate: bool = True, overrides: dict | None = None,
             cache_dir: Path | str | None = None, pace: bool = True) -> Wav:
     cfg = language(lang)
     st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k != "pace"})
-    spoken = normalize_text(strip_emphasis(text), lang, cfg.get("number_format"))
+    spoken = spoken_text(text, lang, cfg.get("number_format"))
     ref = resolve_ref(Path(ref_wav) if ref_wav else None, st["ref_clip"])
     pc = pace_settings(lang, overrides) if pace else None
     cache = _cache_dir(cache_dir)

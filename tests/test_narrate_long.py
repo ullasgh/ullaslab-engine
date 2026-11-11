@@ -249,3 +249,15 @@ def test_voice_narrate_cli_resumes_from_its_chunk_cache(eng, tmp_path, capsys):
                  "--cache-dir", str(tmp_path / "work" / "tts_cache")]) == 0
     assert n > 0 and e2.calls == []
     assert '"pace"' in capsys.readouterr().out
+
+
+def test_pause_marker_survives_number_verbalisation_end_to_end(eng):
+    e = eng(FakeClone())
+    w = N.narrate("Rates rose 3.2% this year. [[pause:0.8]] Then they fell back again.", "en", engine="fakeclone", gate=False,
+                  normalize=False, pace=False)
+    said = [t for t, _ in e.calls]
+    assert said == ["Rates rose three point two percent this year.", "Then they fell back again."]
+    assert not any("pause" in t or "[[" in t for t in said)
+    from ullaslab_engine.audio import max_silence_s
+    assert 0.75 <= max_silence_s(w) <= 0.95                 # the 0.8 s marker pause, not the 0.42 s full stop
+    assert N.spoken_text("Up 5% [[pause:1.5]] down *2%*", "en") == "Up five percent [[pause:1.5]] down two percent"
