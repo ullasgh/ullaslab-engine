@@ -82,11 +82,10 @@ An unknown scene id is an error and nothing runs. Packaging gives a new version 
 only to an output whose final changed or that was named with `--scene`; unchanged outputs keep their files. QC runs on the
 result as before. Footage clips are re-cut only when their source, length or size changes.
 
-**Approval.** A re-render produces new files, so the owner's approval no longer covers them and must be given again. The signed
-studio approval is bound to a content hash over the script hash and every uploaded object of the item (key, etag, size), so
-uploading a new version changes the hash and the approval stops verifying. The engine never touches an approval file; when a
-local owner approval file exists and a re-render publishes a new version, `studio run` warns and QC reports "approval covers the
-current render" as WARN until the owner approves again.
+**Approval.** A re-render produces new files, so an approval given for the earlier render no longer covers them and must be
+given again; the engine never tries to carry it over and never touches an approval file. When an approval file exists in the
+item folder and a re-render publishes a new version, `studio run` warns and QC reports "approval covers the current render" as
+WARN until a newer approval exists.
 
 ## Narration (long text, pace, markup)
 
