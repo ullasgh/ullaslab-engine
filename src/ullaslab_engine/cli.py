@@ -278,6 +278,11 @@ def main(argv=None) -> int:
     sr.add_argument("--lang", default="en")
     sr.add_argument("--asr", choices=["auto", "mlx", "faster"], default="auto")
     sr.add_argument("--force", action="store_true", help="ignore checkpoints")
+    sr.add_argument("--scene", action="append", metavar="ID",
+                    help="re-render only the frame spans that show this scene (repeatable or comma separated) and rejoin; "
+                         "the output gets a new version file")
+    sr.add_argument("--output", choices=["long", "short", "reel"], default=None, help="limit --scene to one output")
+    sr.add_argument("--no-scene-cache", action="store_true", help="render each output in one pass (no per-scene cache)")
     sr.set_defaults(fn=lambda a: __import__("ullaslab_engine.studio.run", fromlist=["x"]).cmd_studio_run(a))
     sq = sp.add_parser("qc", help="automated QC of a rendered queue item; writes qc.md, qc.json, contact sheets")
     sq.add_argument("item")
