@@ -102,7 +102,7 @@ test("animated counters end on the written token verbatim and never overshoot", 
   }
   assert.equal(countedText(parseNumberToken("6.4%"), 0), "0.0%");     // decimals and notation are kept while counting
   assert.equal(countedText(parseNumberToken("$85"), 0), "$0");
-  for (const raw of ["abc", "4.5.6", "1e5", "five", "10-year", "1,2", "%"]) assert.equal(parseNumberToken(raw), null, raw);
+  for (const raw of ["2008", "1999", "2100", "abc", "4.5.6", "1e5", "five", "10-year", "1,2", "%"]) assert.equal(parseNumberToken(raw), null, raw);
 });
 
 test("caption notation: stand-alone % and currency signs are re-attached, words pass through", () => {
@@ -167,4 +167,13 @@ test("scene validation and director adapter carry style", () => {
   assert.equal(out[0].style, "clean-tech"); assert.equal(out[1].style, undefined); assert.equal(out[2].style, undefined);
   assert.ok(isStyledType("chart") && isStyledType("kinetic") && isStyledType("flow") && isStyledType("timeline"));
   assert.ok(!isStyledType("footage") && !isStyledType("map") && !isStyledType("globe"));
+});
+
+test("unstyled charts keep their padded domain; only anchorZero pins zero", () => {
+  const old = niceExtent([4.2, 4.6], 0.1, true);
+  assert.ok(old[0] < 0);                                   // pre-M2 behaviour: padded below zero
+  assert.deepEqual(niceExtent([4.2, 4.6], 0.1, true, true)[0], 0);
+  assert.deepEqual(niceExtent([4.2, 4.6], 0.1, false, true), niceExtent([4.2, 4.6], 0.1, false));
+  assert.equal(parseNumberToken("2008"), null);
+  assert.equal(countedText(parseNumberToken("1,200"), 0.5, "de-DE").includes("."), true);
 });

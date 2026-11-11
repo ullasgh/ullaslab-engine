@@ -5,12 +5,13 @@ import { extent } from "d3-array";
 export type XY = { x: number; y: number };
 export const parseX = (x: string | number): number => (typeof x === "number" ? x : Date.parse(x.length === 7 ? `${x}-01` : x));
 
-export const niceExtent = (vals: number[], padFrac = 0.08, includeZero = false): [number, number] => {
+export const niceExtent = (vals: number[], padFrac = 0.08, includeZero = false, anchorZero = false): [number, number] => {
   const [lo, hi] = extent(vals) as [number, number];
   const a = includeZero ? Math.min(0, lo) : lo, b = includeZero ? Math.max(0, hi) : hi;
   const pad = (b - a || Math.abs(b) || 1) * padFrac;
-  // a zero baseline sits exactly on zero (no padding past it), so an all-positive series never shows a negative axis
-  const d0 = includeZero && lo >= 0 ? 0 : a - pad, d1 = includeZero && hi <= 0 ? 0 : b + pad;
+  // anchorZero (styled charts only): the zero baseline sits exactly on zero, so an all-positive series never shows a negative axis.
+  // Off by default so unstyled charts keep their old padded domain.
+  const d0 = anchorZero && includeZero && lo >= 0 ? 0 : a - pad, d1 = anchorZero && includeZero && hi <= 0 ? 0 : b + pad;
   return scaleLinear().domain([d0, d1]).nice(4).domain() as [number, number];
 };
 

@@ -54,7 +54,7 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
   const xs = data.series.flatMap((s) => s.points.map((p) => parseX(p.x)));
   const ys = plotValues(data.series, band);
   const X = makeTimeScale(xs, [m.l, w - m.r]);
-  const Yd = niceExtent(ys, 0.1, data.includeZero ?? preset.chart.zeroBaseline);
+  const Yd = niceExtent(ys, 0.1, data.includeZero ?? preset.chart.zeroBaseline, preset.chart.zeroBaseline);
   const Y = makeLinear(Yd, [h - m.b, m.t]);
   const span = (Math.max(...xs) - Math.min(...xs)) / 86400000;
   const xt = X.ticks(L.vertical ? 4 : 6);
@@ -199,7 +199,7 @@ const YieldPlot: React.FC<{ data: YieldData; w: number; h: number }> = ({ data, 
   const dec = data.decimals ?? 2;
   const m = { l: 18 + fs * 2.3, r: 30, t: fs * 2.2, b: fs * 1.7 };
   const X = scalePoint<string>().domain(data.tenors).range([m.l + 90, w - m.r - 60]);
-  const Yd = niceExtent([...data.now, ...(data.prior ?? [])], 0.15, preset.chart.zeroBaseline);
+  const Yd = niceExtent([...data.now, ...(data.prior ?? [])], 0.15, preset.chart.zeroBaseline, preset.chart.zeroBaseline);
   const Y = makeLinear(Yd, [h - m.b, m.t]);
   const reveal = useRamp(8, 70);
   const pts = (arr: number[]): XY[] => arr.map((v, i) => ({ x: X(data.tenors[i])!, y: Y(v) }));

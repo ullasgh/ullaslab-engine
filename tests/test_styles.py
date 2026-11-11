@@ -143,3 +143,20 @@ def test_manifest_schema_accepts_style_enum_only():
     jsonschema.validate({**fixture, "style": "clean-tech"}, schema)
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate({**fixture, "style": "hologram"}, schema)
+
+
+def test_styled_chart_without_source_name_fails_in_build_props(tmp_path):
+    doc = timed_doc()
+    doc["style"] = "data-story"
+    item = make_item(tmp_path, voice=False)
+    import json as _j
+    ref = next(sc["data_ref"]["ref"] for sc in doc["outputs"][0]["scenes"] if sc["type"] == "chart")
+    from ullaslab_engine.studio import assemble as A
+    orig = A.to_kit_chart
+    A.to_kit_chart = lambda r, c: (lambda k: (k["meta"]["source"].update(name=""), k)[1])(orig(r, c))
+    try:
+        from ullaslab_engine.studio.assemble import AssembleError
+        with pytest.raises(AssembleError, match="needs a source name"):
+            build_props(item, doc, doc["outputs"][0], tmp_path / "pub", clip_prep=lambda *a: None)
+    finally:
+        A.to_kit_chart = orig

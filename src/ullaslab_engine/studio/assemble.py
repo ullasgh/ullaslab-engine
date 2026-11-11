@@ -176,6 +176,11 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
     total = max(1, round(scenes[-1]["narration"]["end_s"] * FPS))
     last = scenes[-1]["narration"]
     card_from = max(round(last["start_s"] * FPS), total - round(END_CARD_S * FPS))   # last END_CARD_S s, or the whole last scene if shorter
+    if doc.get("style") in STYLES or any(sc.get("style") in STYLES for sc in scenes):   # styled charts need a source stamp
+        for sc in scenes:
+            r = (sc.get("data_ref") or {}).get("ref")
+            if sc["type"] in ("chart", "timeline", "flow") and r in refs and not (refs[r].get("meta", {}).get("source", {}).get("name")):
+                raise AssembleError(f"{name}/{sc['id']}: styled {sc['type']} scene needs a source name for its stamp (data-licensing gate)")
     props_style = {"style": doc["style"]} if doc.get("style") in STYLES else {}   # V2 M2: item style (a scene's own style rides in scenes[])
     for sc in scenes:   # an unknown per-scene style would only be ignored by the renderer; say so
         if sc.get("style") is not None and sc["style"] not in STYLES:

@@ -110,15 +110,17 @@ export const parseNumberToken = (raw: string): NumberToken | null => {
   const m = NUM_RE.exec(raw);
   if (!m) return null;
   const [, prefix, int, frac = "", suffix = "", trail = ""] = m;
+  // a bare year ("2008") is a label, not a quantity: never count it up from 0
+  if (!prefix && !frac && !suffix && /^(19|20|21)\d\d$/.test(int)) return null;
   return { prefix, value: Number(int.replace(/,/g, "") + frac), decimals: frac ? frac.length - 1 : 0, suffix, trail, grouped: int.includes(","), raw };
 };
 
 /** Text of a counting number at progress p in 0..1. p >= 1 returns the original token verbatim. */
-export const countedText = (t: NumberToken, p: number): string => {
+export const countedText = (t: NumberToken, p: number, locale = "en-US"): string => {
   if (p >= 1) return t.raw;
   const e = 1 - Math.pow(1 - Math.max(0, p), 3);
   const v = t.value * e;
-  const body = v.toLocaleString("en-US", { minimumFractionDigits: t.decimals, maximumFractionDigits: t.decimals, useGrouping: t.grouped });
+  const body = v.toLocaleString(locale, { minimumFractionDigits: t.decimals, maximumFractionDigits: t.decimals, useGrouping: t.grouped });
   return `${t.prefix}${body}${t.suffix}${t.trail}`;
 };
 

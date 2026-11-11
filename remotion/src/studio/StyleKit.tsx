@@ -24,7 +24,7 @@ const Column: React.FC<{ gap?: number; children: React.ReactNode }> = ({ gap = 2
 /* ---------------------------------------------------------------------------------- creator-motion */
 // Large kinetic type. *word* marks an emphasis word; a number word (6.4%, $85, 1,200) counts up to exactly the written token.
 export const CreatorKinetic: React.FC<{ text: string }> = ({ text }) => {
-  const { L, pal, preset } = useStudio();
+  const { L, pal, preset, numberLocale } = useStudio();
   const f = useCurrentFrame();
   const lines = parseKinetic(text);
   const flat = lines.map((l) => l.words.map((w) => w.w).join(" "));
@@ -43,7 +43,7 @@ export const CreatorKinetic: React.FC<{ text: string }> = ({ text }) => {
             const tok = parseNumberToken(wd.w);
             const hot = wd.em || !!tok;
             const pop = 0.92 + 0.08 * k + (hot ? overshoot * Math.sin(Math.PI * k) : 0);
-            const shown = tok ? countedText(tok, (f - s - 4) / 30) : wd.w;
+            const shown = tok ? countedText(tok, (f - s - 4) / 30, numberLocale) : wd.w;
             return (
               <span key={i} style={{ position: "relative", display: "inline-block", opacity: k, transform: `translateY(${(1 - k) * size * 0.4}px) scale(${pop})`, transformOrigin: "0% 80%", color: hot ? pal.accent : pal.ink }}>
                 {shown}
@@ -123,6 +123,7 @@ export const CardStack: React.FC<{ text: string }> = ({ text }) => {
   const f = useCurrentFrame();
   const cards = parseCards(text);
   const n = cards.length;
+  if (!n) return null;
   const cols = L.vertical ? 1 : n <= 3 ? n : n === 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
   const gap = 26;
