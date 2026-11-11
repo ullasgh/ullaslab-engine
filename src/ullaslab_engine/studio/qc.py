@@ -7,7 +7,8 @@ Checks per output
   spec       ffprobe size, 30 fps, H.264 yuv420p, AAC 48 kHz, duration vs voice (+-0.5 s), faststart (moov before mdat)
   visual     blackdetect (>=0.5 s), freezedetect (>=2 s unless the scene is a deliberate `hold`), repeated clips
              (asset sha256, then perceptual hash of shots)
-  audio      silencedetect on the narration (>1.5 s), loudness (-14 +-1 LUFS, true peak <= -1 dBTP), clipping
+  audio      silencedetect on the narration (>1.5 s), loudness (-14 +-1 LUFS, true peak <= -1 dBTP), clipping, abrupt ending
+             (the mix must fade out: last 50 ms quiet; the narration must not stop mid-word)
   captions   layout limits, no text-like content outside the safe box in sampled frames, SRT cues vs word timings (drift > 150 ms)
 Checks per item
   data       chart data_ref resolves, chart hash vs ledger, number tags, footage ledger entries, deny-listed names
@@ -47,6 +48,7 @@ DEFAULTS = {
     "lufs_target": -14.0, "lufs_tol": 1.0, "true_peak_max": -1.0, "clip_level": 0.999, "clip_run": 3,
     "phash_max_dist": 0.12, "phash_shot_cut": 0.5, "phash_min_std": 4.0, "caption_drift_s": 0.15, "caption_hold_s": 0.35,
     "margin_white_frac": 0.001, "banned_word": r"\bmacro", "brand_allow": [], "contact_cols": 4, "contact_rows": 6,
+    "end_tail_s": 0.05, "end_fail_db": -30.0, "end_warn_db": -45.0, "voice_tail_s": 0.02, "voice_tail_rel_db": -20.0,
 }
 
 
@@ -271,6 +273,44 @@ def check_silence(audio_src: Path, dur: float, label: str, T: dict) -> Check:
     if hits:
         return Check("audio", label, FAIL, f"silence > {T['silence_min_s']}s at " + ", ".join(f"{s:.2f}-{e:.2f}s" for s, e in hits))
     return Check("audio", label, PASS, f"no silence > {T['silence_min_s']}s (threshold {T['silence_db']} dB)")
+
+
+def _tail(path: Path, seconds: float) -> tuple[np.ndarray, np.ndarray]:
+    """(whole file mono, last `seconds`) as float32 at 48 kHz."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", "48000", "-f", "f32le", "-"], capture_output=True)
+    if r.returncode:
+        raise QCError("audio decode failed")
+    x = np.frombuffer(r.stdout, dtype="<f4")
+    return x, x[-max(1, int(seconds * 48000)):]
+
+
+def _db(x: np.ndarray) -> float:
+    return float(20 * np.log10(np.sqrt(np.mean(np.square(x, dtype=np.float64))) + 1e-9)) if x.size else -180.0
+
+
+def check_ending(video: Path, voice: Path | None, T: dict) -> list[Check]:
+    """Abrupt endings: the final mix should fade to near silence (music fade-out, the end card holds after the sign-off),
+    and the narration track must not end while a word is still sounding (a cut-off synthesis)."""
+    out = []
+    if not has_audio(video):
+        return [Check("audio", "abrupt ending", FAIL, "no audio")]
+    _, tail = _tail(video, T["end_tail_s"])
+    d = _db(tail)
+    st = FAIL if d > T["end_fail_db"] else WARN if d > T["end_warn_db"] else PASS
+    out.append(Check("audio", "abrupt ending", st, f"last {T['end_tail_s'] * 1000:.0f} ms at {d:.1f} dBFS "
+                     f"(fail above {T['end_fail_db']}, warn above {T['end_warn_db']})"))
+    if voice is not None and voice.is_file():
+        x, vt = _tail(voice, T["voice_tail_s"])
+        n = 960                                        # 20 ms frames
+        k = x.size // n
+        if k:
+            fr = 20 * np.log10(np.sqrt(np.mean(np.square(x[: k * n].reshape(k, n), dtype=np.float64), axis=1)) + 1e-9)
+            active = float(np.percentile(fr, 90))
+            rel = _db(vt) - active
+            out.append(Check("audio", "narration ends cleanly", FAIL if rel > T["voice_tail_rel_db"] else PASS,
+                             f"last {T['voice_tail_s'] * 1000:.0f} ms of the voice track at {rel:.1f} dB vs speech "
+                             f"(fail above {T['voice_tail_rel_db']}: the synthesis was cut mid-word)"))
+    return out
 
 
 # ---------------------------------------------------------------- 3. loudness
@@ -868,6 +908,7 @@ def qc_output(video: Path, *, size: tuple[int, int], orient: str, voice: Path | 
         checks.append(Check("audio", "narration silence", WARN, "no voice track to check; see the mix silence check"))
     guard("audio", "mix silence", lambda: check_silence(video, dur, "mix silence", T))
     guard("audio", "loudness", lambda: check_loudness(video, T))
+    guard("audio", "abrupt ending", lambda: check_ending(video, voice, T))
     guard("captions", "layout limits", lambda: check_caption_layout(props, orient, T, platform))
     guard("captions", "safe area", lambda: check_caption_frames(video, props, scenes, size, orient, T, platform))
     guard("captions", "SRT sync", lambda: check_caption_sync(srt, scenes, T))
@@ -891,6 +932,23 @@ def check_music_fallback(item: Path, mode: str) -> Check:
         return Check("audio", "licensed music bed", PASS, "no pad fallback while ledger tracks exist")
     why = (meta[used[0]]["music"]["fallback"] or {}).get("fetch_failed") or "unknown"
     return Check("audio", "licensed music bed", WARN, f"generated pad used for {', '.join(used)} although ledger tracks exist; R2 fetch: {why}")
+
+
+OWNER_MARKER = "APPR" + "OVED"   # the owner's local approval file: only its time is read here
+
+
+def check_approval_current(item: Path, preview: bool) -> Check | None:
+    """WARN when the owner's local approval file is older than a packaged final: a re-render changed the reviewed files,
+    so the approval must be given again (the signed studio approval is voided by its content hash on upload)."""
+    m = item / OWNER_MARKER
+    if preview or not m.is_file():
+        return None
+    finals = [p for p in item.glob("*.mp4") if re.fullmatch(r"(long|short|reel)(\.v\d+)?\.mp4", p.name)]
+    newer = sorted(p.name for p in finals if p.stat().st_mtime > m.stat().st_mtime)
+    if newer:
+        return Check("platform", "approval covers the current render", WARN,
+                     f"{', '.join(newer)} were rendered after the owner's approval: the owner must review and approve again")
+    return Check("platform", "approval covers the current render", PASS, "no final is newer than the owner's approval")
 
 
 def qc_item(item: Path, *, preview: bool = False, platform: str = "both") -> Report:
@@ -956,6 +1014,12 @@ def qc_item(item: Path, *, preview: bool = False, platform: str = "both") -> Rep
     except Exception as e:  # noqa: BLE001
         rep.item_checks.append(Check("audio", "licensed music bed", WARN, f"check could not run: {e}"))
     rep.item_checks += check_platform(item, preview)
+    try:
+        c = check_approval_current(item, preview)
+        if c:
+            rep.item_checks.append(c)
+    except OSError as e:
+        rep.item_checks.append(Check("platform", "approval covers the current render", WARN, f"check could not run: {e}"))
     (item / "qc.json").write_text(json.dumps(rep.as_dict(), indent=1, ensure_ascii=False), encoding="utf-8")
     (item / "qc.md").write_text(rep.markdown(), encoding="utf-8")
     return rep

@@ -477,3 +477,40 @@ def test_caption_frames_per_platform_override(tmp_path):
     assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "instagram_reels").status == Q.PASS
     assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "both").status == Q.FAIL
     assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "youtube_shorts").status == Q.FAIL
+
+
+# ---------------------------------------------------------------- abrupt endings and approval currency (M2b)
+def test_abrupt_ending_detected_and_faded_ending_passes(tmp_path):
+    T = Q.thresholds()
+    loud = speechlike(3)                                   # never silent: the file stops mid-sound
+    cut = build(tmp_path / "cut.mp4", ["A"], audio=loud)
+    faded = loud.copy()
+    faded[-48000:] *= np.linspace(1, 0, 48000, dtype=np.float32) ** 2
+    ok = build(tmp_path / "ok.mp4", ["A"], audio=faded)
+    assert status(Q.check_ending(cut, None, T), "abrupt ending") == [Q.FAIL]
+    assert status(Q.check_ending(ok, None, T), "abrupt ending") == [Q.PASS]
+    voice_cut = tmp_path / "v_cut.wav"
+    sf.write(str(voice_cut), loud, 48000)
+    voice_ok = tmp_path / "v_ok.wav"
+    sf.write(str(voice_ok), np.concatenate([loud, np.zeros(9600, np.float32)]), 48000)
+    assert status(Q.check_ending(ok, voice_cut, T), "narration ends cleanly") == [Q.FAIL]
+    assert status(Q.check_ending(ok, voice_ok, T), "narration ends cleanly") == [Q.PASS]
+
+
+def test_approval_older_than_a_final_warns(tmp_path):
+    import os
+    item = tmp_path / "item"
+    item.mkdir()
+    assert Q.check_approval_current(item, False) is None
+    (item / "long.mp4").write_bytes(b"x")
+    m = item / ("APPR" + "OVED")          # fixture in a temp dir
+    m.write_text("ok")
+    os.utime(m, (1_000_000, 1_000_000))
+    (item / "long.v2.mp4").write_bytes(b"y")
+    c = Q.check_approval_current(item, False)
+    assert c.status == Q.WARN and "long.v2.mp4" in c.detail
+    os.utime(m, None)
+    for p in item.glob("*.mp4"):
+        os.utime(p, (1_000_000, 1_000_000))
+    assert Q.check_approval_current(item, False).status == Q.PASS
+    assert Q.check_approval_current(item, True) is None

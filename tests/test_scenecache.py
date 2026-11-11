@@ -396,6 +396,8 @@ def test_studio_scene_rerender_versions_only_the_changed_output(item):
         props = json.loads((item / "work" / "final" / f"props.{o}.json").read_text())
         assert av_sync_problems(item / f"{o}.mp4", props["durationInFrames"]) == []
         assert decode(item / f"{o}.mp4")[0] == list(range(props["durationInFrames"]))
+        from ullaslab_engine.studio import qc as Q
+        assert {c.status for c in Q.check_ending(item / f"{o}.mp4", item / "voice.wav", Q.thresholds())} == {Q.PASS}
     first = len(fake.jobs)
     # nothing changed: nothing rendered, nothing versioned
     s2 = mk()
