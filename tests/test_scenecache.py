@@ -497,3 +497,37 @@ def test_real_segmented_render_matches_full_render(tmp_path):
     warm = tmp_path / "warm.mp4"
     st = SC.render_output(pp, pub, warm, cache, node_render_segments, scale=0.25, log=lambda m: None)
     assert st["reused"] == 3 and warm.read_bytes() == joined.read_bytes()
+
+
+@needs_ffmpeg
+def test_sfx_edit_remixes_and_replaced_footage_rerenders_its_spans(item):
+    fake = FakeSegments()
+    mk = lambda **kw: Studio(item, asr=asr, render=fake_render, render_segments=fake, log=lambda m: None, **kw)
+    mk().run()
+    # an SFX cue change does not change the picture of a deterministic render, but the mix must follow it
+    d = json.loads((item / "scenes.json").read_text())
+    reel = next(o for o in d["outputs"] if o["output"] == "reel")
+    reel["scenes"][1]["sfx"] = "hit"
+    (item / "scenes.json").write_text(json.dumps(d))
+    mk().run()
+    audio = json.loads((item / "work" / "final" / "audio.json").read_text())
+    assert "hit" in audio["reel"]["sfx"] and (item / "reel.v2.mp4").is_file()
+    assert not (item / "long.v2.mp4").exists()
+    # same ledger and props, new footage bytes for long/s02: that span is cut and rendered again
+    fake.jobs.clear()
+    from studio_fixture import make_clip
+    make_clip(item / "footage" / "long" / "s02.mp4", seconds=4)
+    mk().run()
+    assert len(fake.jobs) == 2       # s02 and the s03 span it crosses into (the fake paints no footage, so its pixels match)
+
+
+@needs_ffmpeg
+def test_renderer_change_rerenders_even_with_identical_props(item, monkeypatch):
+    fake = FakeSegments()
+    Studio(item, preview=True, asr=asr, render=fake_render, render_segments=fake, log=lambda m: None).run()
+    n = len(fake.jobs)
+    Studio(item, preview=True, asr=asr, render=fake_render, render_segments=fake, log=lambda m: None).run()
+    assert len(fake.jobs) == n                                       # unchanged: every stage skipped
+    monkeypatch.setattr(SC, "renderer_stamp", lambda *a: "components-changed")
+    Studio(item, preview=True, asr=asr, render=fake_render, render_segments=fake, log=lambda m: None).run()
+    assert len(fake.jobs) == 2 * n                                   # a component change invalidates every clip

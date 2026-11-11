@@ -274,7 +274,8 @@ class Studio:
                 self.warnings += warns
                 p.write_text(json.dumps(props, ensure_ascii=False))
             return {"warnings": self.warnings}
-        self._stage("assemble", sha(inputs, self.mode), outs, go)
+        clips = sorted({self.item / a["filename"] for a in load_assets(self.item).values()})   # footage bytes, not just the ledger
+        self._stage("assemble", sha(inputs, self.mode + "|" + "|".join(f"{c.name}:{SC._file_sha(c)}" for c in clips if c.is_file())), outs, go)
 
     def s_render(self) -> None:
         doc = self.timed()
@@ -306,7 +307,10 @@ class Studio:
                 self.render_thumb(doc, pub, thumb)
             return {"render_s": round(time.time() - t0, 1), "scene_cache": stats if self.use_cache else "off"}
         needed = outs + ([] if self.preview else [thumb])
-        key = sha([self.wmode / f"props.{o['output']}.json" for o in doc["outputs"]], f"{self.mode}|cache={self.use_cache}")
+        footage = sorted((pub / "footage").rglob("*.mp4")) if (pub / "footage").is_dir() else []
+        stamp = SC.renderer_stamp() if (self.use_cache or self.render is node_render) else "custom-renderer"
+        key = sha([self.wmode / f"props.{o['output']}.json" for o in doc["outputs"]],
+                  f"{self.mode}|cache={self.use_cache}|{stamp}|" + "|".join(f"{p.relative_to(pub)}:{SC._file_sha(p)}" for p in footage))
         self._stage("render", key, needed, go, always=bool(forced))
 
     def render_thumb(self, doc: dict, pub: Path, dst: Path) -> None:
@@ -332,6 +336,18 @@ class Studio:
         self.render(p, pub, dst, comp="StudioThumb", frame=45)
         kp.write_text(key)
 
+    def mix_inputs(self, o: dict) -> str:
+        """Everything besides the picture and the voice that shapes one output's mix: SFX cues (scene `sfx` fields) and the
+        SFX definitions, the music track that would be picked (id and file sha) or the generated pad, mix and loudness
+        settings, and the engine version. A change re-mixes that output."""
+        ledger = A.load_music_ledger()
+        track = A.pick_track(ledger, mood=o["scenes"][0].get("palette"))
+        tsig = {"id": track["id"], "sha": A._sha256_file(A.MUSIC_DIR / track["file"])} if track else \
+               {"id": "generated-pad", "ledger": sorted(t.get("id", "") for t in ledger)}
+        blob = {"events": A.sfx_events(o["scenes"]), "track": tsig, "sfx": A.SFX, "lead": A.SFX_LEAD, "cfg": A.mix_cfg(),
+                "loudness": [A.TARGET_LUFS, A.TP_TARGET, A.TP_LIMIT], "engine": SC.engine_version()}
+        return hashlib.sha256(json.dumps(blob, sort_keys=True, default=str).encode()).hexdigest()
+
     def s_mix(self) -> None:
         doc = self.timed()
         outs = [self.wmode / f"final.{o['output']}.mp4" for o in doc["outputs"]]
@@ -343,7 +359,12 @@ class Studio:
                 prev = json.loads(meta_p.read_text()) if meta_p.is_file() else {}
             except ValueError:
                 prev = {}
-            lib = A.make_sfx_library(self.work / "sfx_lib")
+            sfx_dir = self.work / "sfx_lib"
+            stamp = hashlib.sha256(json.dumps(A.SFX, sort_keys=True).encode()).hexdigest()
+            if (sfx_dir / "stamp").is_file() and (sfx_dir / "stamp").read_text() != stamp:
+                shutil.rmtree(sfx_dir)          # SFX definitions changed: regenerate the library
+            lib = A.make_sfx_library(sfx_dir)
+            (sfx_dir / "stamp").write_text(stamp)
             ledger = A.load_music_ledger()
             fetch = A.fetch_missing_tracks(ledger)
             if fetch["fetched"]:
@@ -356,9 +377,10 @@ class Studio:
                 props = json.loads((self.wmode / f"props.{n}.json").read_text())
                 vsha = sha([self.wmode / f"video.{n}.mp4"], "video")
                 asha = sha([self.voice_for(n)], "voice")
+                isig = self.mix_inputs(o)
                 p = prev.get(n) or {}
                 if (not self.force and n not in forced and final.is_file() and p.get("video_sha") == vsha and p.get("voice_sha") == asha
-                        and p.get("mix_cfg") == A.mix_cfg()):
+                        and p.get("inputs_sha") == isig):
                     meta[n] = p          # this output's picture and voice are unchanged: keep its mix
                     self.log(f"  {n}: unchanged, mix kept")
                     continue
@@ -393,11 +415,12 @@ class Studio:
                 if bad:
                     raise StudioError(f"{n}: spec / A/V sync check failed: {bad}")
                 meta[n] = {"music": track, "sfx": sorted({e[0] for e in events}), "measure": m, "duck": duck, "pre_norm_lufs": pre.get("input_i"),
-                           "video_sha": vsha, "voice_sha": asha, "mix_cfg": A.mix_cfg()}
+                           "video_sha": vsha, "voice_sha": asha, "inputs_sha": isig}
                 self.log(f"  {n}: {m['lufs']} LUFS, {m['true_peak_dbtp']} dBTP, music={track['id']}, sfx={len(events)}")
             meta_p.write_text(json.dumps(meta, indent=1))
-        self._stage("mix", sha([self.wmode / f"video.{o['output']}.mp4" for o in doc["outputs"]], self.mode), outs + [meta_p], go,
-                    always=bool(forced))
+        key = sha([self.wmode / f"video.{o['output']}.mp4" for o in doc["outputs"]] + [self.voice_for(o["output"]) for o in doc["outputs"]],
+                  self.mode + "|" + "|".join(self.mix_inputs(o) for o in doc["outputs"]))
+        self._stage("mix", key, outs + [meta_p], go, always=bool(forced))
 
     def s_package(self) -> list[Path]:
         doc = self.timed()
