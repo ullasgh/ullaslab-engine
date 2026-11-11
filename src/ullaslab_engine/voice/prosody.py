@@ -8,9 +8,26 @@ PAUSE_S = {".": 0.42, "?": 0.48, "!": 0.40, "…": 0.55, ";": 0.30, ":": 0.30, "
 # Pacing hints: a marker placed in front of a sentence lengthens the pause before it, so the hook can land and the payoff
 # arrives after a beat. `[[hook]]` = the hook ends before this sentence; `[[payoff]]` = the payoff starts at this sentence.
 # The pause is a floor (max with the punctuation pause), never a cut. Markers are removed from the spoken text.
-PACING_S = {"hook": 0.65, "payoff": 0.60}
-_MARK = re.compile(r"\[\[(hook|payoff)\]\]")
-_LEAD_MARK = re.compile(r"^\s*\[\[(hook|payoff)\]\]\s*")
+PACING_S = {"hook": 0.65, "payoff": 0.60, "pause": 0.50}
+# `[[pause]]` (0.5 s) or `[[pause:0.8]]` (seconds, at most PAUSE_MAX_S) is an explicit pause at that point, also inside a
+# sentence. `*word*` emphasis is screen markup (kinetic text): the asterisks are removed before TTS, never read out; no
+# engine here takes an emphasis control, so emphasis stays visual.
+PAUSE_MAX_S = 2.0
+_MARK = re.compile(r"\[\[(hook|payoff|pause(?::\d+(?:\.\d+)?)?)\]\]")
+_LEAD_MARK = re.compile(r"^\s*\[\[(hook|payoff|pause(?::\d+(?:\.\d+)?)?)\]\]\s*")
+_INLINE_PAUSE = re.compile(r"\s*\[\[pause(?::(\d+(?:\.\d+)?))?\]\]\s*")
+_EMPH = re.compile(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])")
+
+
+def strip_emphasis(text: str) -> str:
+    """`*word*` -> `word` (on-screen emphasis markup is never spoken)."""
+    return _EMPH.sub(r"\1", text)
+
+
+def _mark_seconds(m: str) -> float:
+    if m.startswith("pause"):
+        return min(PAUSE_MAX_S, float(m.split(":", 1)[1])) if ":" in m else PACING_S["pause"]
+    return PACING_S[m]
 MAX_WORDS = 25  # longer sentences are split at commas so the model stays stable
 _END = "。！？।॥؟.!?…"
 _TERM = {"。": ".", "！": "!", "？": "?", "।": ".", "॥": ".", "؟": "?"}
@@ -22,7 +39,7 @@ _DECIMAL = re.compile(r"\d[.,]$")
 
 def strip_markers(text: str) -> str:
     """Remove pacing markers (for TTS paths that do not split sentences)."""
-    return re.sub(r"[ \t]*\[\[(?:hook|payoff)\]\][ \t]*", " ", text).strip()
+    return strip_emphasis(re.sub(r"[ \t]*\[\[(?:hook|payoff|pause(?::\d+(?:\.\d+)?)?)\]\][ \t]*", " ", text)).strip()
 
 
 def mark_pacing(text: str, payoff_at: int | None = None) -> str:
@@ -54,7 +71,13 @@ def _pause_for(s: str) -> float:
 
 def split_sentences(text: str) -> list[tuple[str, float]]:
     """-> [(sentence, pause_after_seconds)]. Paragraph breaks (blank line) get the longer pause."""
-    out: list[tuple[str, float]] = []
+    return [(t, p) for t, p, _ in split_marked(text)]
+
+
+def split_marked(text: str) -> list[tuple[str, float, bool]]:
+    """split_sentences plus a flag per piece: True when its pause comes from an explicit marker ([[hook]], [[payoff]],
+    [[pause]]), which callers must keep (a short piece with an explicit pause is not merged into its neighbour)."""
+    out: list[tuple[str, float, bool]] = []
     for pi, para in enumerate(p for p in re.split(r"\n\s*\n", text.strip()) if p.strip()):
         para = " ".join(para.split())
         parts: list[str] = []
@@ -68,18 +91,27 @@ def split_sentences(text: str) -> list[tuple[str, float]]:
                 parts.append(chunk)
         for s in parts:
             lead = _LEAD_MARK.match(s)
-            if lead:
+            while lead:
                 s = s[lead.end():]
                 if out:      # lengthen the pause after the previous sentence (floor, never shorter than its own)
-                    out[-1] = (out[-1][0], max(out[-1][1], PACING_S[lead[1]]))
-                if not s:
+                    out[-1] = (out[-1][0], max(out[-1][1], _mark_seconds(lead[1])), True)
+                lead = _LEAD_MARK.match(s)
+            if not s:
+                continue
+            bits = _INLINE_PAUSE.split(s)          # text, seconds|None, text, ...
+            for k in range(0, len(bits), 2):
+                seg = bits[k].strip()
+                if not seg:
                     continue
-            for piece, pause in _split_long(s):
-                out.append((piece, pause))
+                pieces = _split_long(seg)
+                out += [(piece, pause, False) for piece, pause in pieces]
+                if k + 1 < len(bits):
+                    sec = min(PAUSE_MAX_S, float(bits[k + 1])) if bits[k + 1] else PACING_S["pause"]
+                    out[-1] = (out[-1][0], max(out[-1][1] if out[-1][0][-1:] in _END else 0.0, sec), True)
         if out:
-            out[-1] = (out[-1][0], PAUSE_S["para"])
+            out[-1] = (out[-1][0], max(PAUSE_S["para"], out[-1][1]) if out[-1][2] else PAUSE_S["para"], out[-1][2])
     if out:
-        out[-1] = (out[-1][0], 0.0)
+        out[-1] = (out[-1][0], 0.0, False)
     return out
 
 

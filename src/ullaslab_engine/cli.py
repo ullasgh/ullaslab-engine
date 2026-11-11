@@ -213,6 +213,18 @@ def cmd_voice_demo(a):
     return 0
 
 
+def cmd_voice_narrate(a):
+    """Resumable narration of a text file: each finished chunk is cached, so a crash or a rerun loses nothing."""
+    from .voice.narrate import narrate
+    text = Path(a.text).read_text(encoding="utf-8")
+    cache = Path(a.cache_dir) if a.cache_dir else Path(a.out).resolve().parent / "work" / "tts_cache"
+    w = narrate(text, a.lang, Path(a.ref) if a.ref else None, engine=a.engine, cache_dir=cache)
+    w.save(Path(a.out))
+    print(json.dumps({"out": a.out, "seconds": round(w.duration, 2), "engine": w.engine, "pace": w.meta.get("pace"),
+                      "chunks": w.meta.get("chunks"), "flags": w.flags, "cache": str(cache)}, indent=1))
+    return 0
+
+
 def cmd_voice_score(a):
     from .voice import naturalness as N
     from .audio import Wav
@@ -260,6 +272,9 @@ def main(argv=None) -> int:
     add("voice-demo", cmd_voice_demo, out=dict(required=True), refs=dict(default=None), langs=dict(default=None),
         max_per_lang=dict(type=int, default=None))
     add("voice-score", cmd_voice_score, file=dict(required=True))
+    add("voice-narrate", cmd_voice_narrate, text=dict(required=True, help="UTF-8 text; blank lines separate paragraphs"),
+        out=dict(required=True), lang=dict(default="en"), ref=dict(default=None, help="reference voice wav (clone engines)"),
+        engine=dict(default=None), cache_dir=dict(default=None, help="chunk cache (default work/tts_cache beside the output)"))
     bp = sub.add_parser("broll").add_subparsers(dest="broll_cmd", required=True)
     bf = bp.add_parser("fetch", help="fetch licensed stock footage for the footage scenes of a scenes.json")
     bf.set_defaults(fn=cmd_broll_fetch)

@@ -20,6 +20,13 @@ voice_defaults:
   exaggeration: 0.4
   temperature: 0.7
   cfg_weight: 0.5
+  # Narration pace (voice/narrate.py): words per minute including pauses. Met by shortening punctuation pauses (never
+  # below pause_floor of their length; [[hook]] [[payoff]] [[pause]] markers are kept) and then a pitch-preserving
+  # tempo change of at most max_speedup. target_wpm 0 turns it off. A language entry may carry its own `pace:` block.
+  pace:
+    target_wpm: 150
+    max_speedup: 1.15
+    pause_floor: 0.6
 languages:
   - code: en
     name: English
