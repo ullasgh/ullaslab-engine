@@ -18,6 +18,7 @@ class Wav:
     sr: int
     engine: str | None = None  # which TTS engine produced it
     flags: list = field(default_factory=list)  # QA flags (e.g. naturalness gate failures after one retry)
+    meta: dict = field(default_factory=dict)   # synthesis notes (e.g. voice pace), never affects the samples
 
     @property
     def duration(self) -> float:

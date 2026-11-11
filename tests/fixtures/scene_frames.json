@@ -1,0 +1,321 @@
+{
+ "note": "Frame plan parity: generated from remotion/src/studio (director.ts fromDirectorScenes + scenes.ts overlapAfter). Python mirror: studio/scenecache.py frame_plan. Both test suites check these expectations.",
+ "cases": [
+  {
+   "name": "contiguous with every transition",
+   "scenes": [
+    {
+     "id": "s01",
+     "narration": {
+      "text": "s01",
+      "start_s": 0,
+      "end_s": 2.5
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut"
+    },
+    {
+     "id": "s02",
+     "narration": {
+      "text": "s02",
+      "start_s": 2.5,
+      "end_s": 5.05
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "crossfade"
+    },
+    {
+     "id": "s03",
+     "narration": {
+      "text": "s03",
+      "start_s": 5.05,
+      "end_s": 7.1
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "wipe"
+    },
+    {
+     "id": "s04",
+     "narration": {
+      "text": "s04",
+      "start_s": 7.1,
+      "end_s": 9
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "match_cut"
+    },
+    {
+     "id": "s05",
+     "narration": {
+      "text": "s05",
+      "start_s": 9,
+      "end_s": 11.2
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "push"
+    },
+    {
+     "id": "s06",
+     "narration": {
+      "text": "s06",
+      "start_s": 11.2,
+      "end_s": 12
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "dip_to_black"
+    },
+    {
+     "id": "s07",
+     "narration": {
+      "text": "s07",
+      "start_s": 12,
+      "end_s": 13
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "pattern_interrupt"
+    }
+   ],
+   "expected": [
+    {
+     "id": "s01",
+     "start": 0,
+     "end": 75,
+     "until": 87
+    },
+    {
+     "id": "s02",
+     "start": 75,
+     "end": 152,
+     "until": 166
+    },
+    {
+     "id": "s03",
+     "start": 152,
+     "end": 213,
+     "until": 229
+    },
+    {
+     "id": "s04",
+     "start": 213,
+     "end": 270,
+     "until": 286
+    },
+    {
+     "id": "s05",
+     "start": 270,
+     "end": 336,
+     "until": 348
+    },
+    {
+     "id": "s06",
+     "start": 336,
+     "end": 360,
+     "until": 360
+    },
+    {
+     "id": "s07",
+     "start": 360,
+     "end": 390,
+     "until": 390
+    }
+   ]
+  },
+  {
+   "name": "half-frame rounding (JS rounds .5 up)",
+   "scenes": [
+    {
+     "id": "a",
+     "narration": {
+      "text": "a",
+      "start_s": 0.05,
+      "end_s": 1.05
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut"
+    },
+    {
+     "id": "b",
+     "narration": {
+      "text": "b",
+      "start_s": 1.05,
+      "end_s": 2.15
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "crossfade"
+    },
+    {
+     "id": "c",
+     "narration": {
+      "text": "c",
+      "start_s": 2.15,
+      "end_s": 2.25
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "wipe"
+    }
+   ],
+   "expected": [
+    {
+     "id": "a",
+     "start": 2,
+     "end": 32,
+     "until": 44
+    },
+    {
+     "id": "b",
+     "start": 32,
+     "end": 65,
+     "until": 79
+    },
+    {
+     "id": "c",
+     "start": 65,
+     "end": 68,
+     "until": 68
+    }
+   ]
+  },
+  {
+   "name": "late first scene, gap, unknown transition",
+   "scenes": [
+    {
+     "id": "x",
+     "narration": {
+      "text": "x",
+      "start_s": 0.5,
+      "end_s": 1
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut"
+    },
+    {
+     "id": "y",
+     "narration": {
+      "text": "y",
+      "start_s": 1.4,
+      "end_s": 2
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "spin"
+    },
+    {
+     "id": "z",
+     "narration": {
+      "text": "z",
+      "start_s": 2,
+      "end_s": 2
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "crossfade"
+    }
+   ],
+   "expected": [
+    {
+     "id": "x",
+     "start": 15,
+     "end": 30,
+     "until": 30
+    },
+    {
+     "id": "y",
+     "start": 42,
+     "end": 60,
+     "until": 72
+    },
+    {
+     "id": "z",
+     "start": 60,
+     "end": 61,
+     "until": 61
+    }
+   ]
+  },
+  {
+   "name": "missing times fall back to cursor + 3 s",
+   "scenes": [
+    {
+     "id": "p",
+     "narration": {
+      "text": "p",
+      "start_s": null,
+      "end_s": null
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut"
+    },
+    {
+     "id": "q",
+     "narration": {
+      "text": "q",
+      "start_s": null,
+      "end_s": 4
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "wipe"
+    },
+    {
+     "id": "r",
+     "narration": {
+      "text": "r",
+      "start_s": 4,
+      "end_s": null
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "crossfade"
+    }
+   ],
+   "expected": [
+    {
+     "id": "p",
+     "start": 0,
+     "end": 90,
+     "until": 104
+    },
+    {
+     "id": "q",
+     "start": 90,
+     "end": 120,
+     "until": 132
+    },
+    {
+     "id": "r",
+     "start": 120,
+     "end": 210,
+     "until": 210
+    }
+   ]
+  }
+ ]
+}
