@@ -34,7 +34,7 @@ from ..config import language
 from ..tts import base
 from .naturalness import score
 from .post import postprocess
-from .prosody import split_marked, strip_emphasis
+from .prosody import PAUSE_S, split_marked, strip_emphasis
 from .settings import voice_settings
 from .textnorm import normalize_text
 
@@ -87,6 +87,9 @@ def plan_chunks(text: str, lang: str = "en") -> list[Chunk]:
             c = Chunk(carry.text + " " + c.text, c.pause, c.keep)
             carry = None
         if _words(c.text, lang) < MIN_WORDS and not c.keep:
+            if c.pause >= PAUSE_S["para"] and out and not out[-1].keep:   # ends a paragraph: join backwards, keep the break
+                out[-1] = Chunk(out[-1].text + " " + c.text, c.pause, c.keep)
+                continue
             carry = c
             continue
         out.append(c)

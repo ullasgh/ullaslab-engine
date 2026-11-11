@@ -261,3 +261,9 @@ def test_pause_marker_survives_number_verbalisation_end_to_end(eng):
     from ullaslab_engine.audio import max_silence_s
     assert 0.75 <= max_silence_s(w) <= 0.95                 # the 0.8 s marker pause, not the 0.42 s full stop
     assert N.spoken_text("Up 5% [[pause:1.5]] down *2%*", "en") == "Up five percent [[pause:1.5]] down two percent"
+
+
+def test_short_sentence_at_a_paragraph_end_keeps_the_paragraph_break():
+    plan = N.plan_chunks("Oil prices jumped this spring. Briefly.\n\nThen shipping fell sharply in March.")
+    assert [c.text for c in plan] == ["Oil prices jumped this spring. Briefly.", "Then shipping fell sharply in March."]
+    assert plan[0].pause == pytest.approx(0.8)
