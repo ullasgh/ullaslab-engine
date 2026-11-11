@@ -1,5 +1,6 @@
 // scenes.json contract consumed by SceneRenderer (produced by the director agent, WP1). Pure helpers, no React.
 import type { Topic } from "./palettes";
+import { isStyleId, type StyleId } from "./styles.ts";
 
 export const SCENE_TYPES = ["footage", "map", "globe", "chart", "timeline", "flow", "kinetic"] as const;
 export type SceneType = (typeof SCENE_TYPES)[number];
@@ -19,6 +20,7 @@ export type StudioScene = {
   palette?: Topic;
   camera_move?: CameraMove;
   transition?: TransitionKind;     // how this scene enters
+  style?: StyleId;                 // per-scene style preset (V2 M2); falls back to the item style
 };
 
 export const TRANSITION_FRAMES: Record<TransitionKind, number> = { cut: 0, crossfade: 12, wipe: 14, match_move: 16 };
@@ -35,6 +37,7 @@ export const validateScenes = (scenes: StudioScene[], refs: Record<string, unkno
     if (!Number.isInteger(s.start) || !Number.isInteger(s.end) || s.end <= s.start) errs.push(`${at}: bad frame range ${s.start}-${s.end}`);
     if (s.camera_move && !CAMERA_MOVES.includes(s.camera_move)) errs.push(`${at}: unknown camera_move "${s.camera_move}"`);
     if (s.transition && !TRANSITIONS.includes(s.transition)) errs.push(`${at}: unknown transition "${s.transition}"`);
+    if (s.style !== undefined && !isStyleId(s.style)) errs.push(`${at}: unknown style "${s.style}"`);
     if (s.data === undefined && s.data_ref && !(s.data_ref in refs)) errs.push(`${at}: data_ref "${s.data_ref}" not found`);
     if (s.data === undefined && !s.data_ref && s.type !== "kinetic") errs.push(`${at}: ${s.type} scene needs data or data_ref`);
     if (i > 0 && s.start < scenes[i - 1].start) errs.push(`${at}: scenes must be ordered by start`);

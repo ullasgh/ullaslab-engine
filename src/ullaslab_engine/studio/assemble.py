@@ -117,6 +117,9 @@ def default_visual(kind: str, text: str) -> dict | None:
     return None
 
 
+STYLES = ("data-story", "creator-motion", "chalk-talk", "clean-tech")   # keep in sync with remotion/src/studio/styles.ts (tested)
+
+
 def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str = "en", allow_placeholder: bool = False,
                 clip_prep=prepare_clip) -> tuple[dict, list[str]]:
     """Props for one output of the timed scenes document. Returns (props, warnings)."""
@@ -173,6 +176,16 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
     total = max(1, round(scenes[-1]["narration"]["end_s"] * FPS))
     last = scenes[-1]["narration"]
     card_from = max(round(last["start_s"] * FPS), total - round(END_CARD_S * FPS))   # last END_CARD_S s, or the whole last scene if shorter
-    return {"orientation": orient, "scenes": scenes, "refs": refs, "lang": lang, "numberLocale": NUMBER_LOCALE.get(nf, "en-US"),
+    if doc.get("style") in STYLES or any(sc.get("style") in STYLES for sc in scenes):   # styled charts need a source stamp
+        for sc in scenes:
+            r = (sc.get("data_ref") or {}).get("ref")
+            if sc["type"] in ("chart", "timeline", "flow") and r in refs and not (refs[r].get("meta", {}).get("source", {}).get("name")):
+                raise AssembleError(f"{name}/{sc['id']}: styled {sc['type']} scene needs a source name for its stamp (data-licensing gate)")
+    props_style = {"style": doc["style"]} if doc.get("style") in STYLES else {}   # V2 M2: item style (a scene's own style rides in scenes[])
+    for sc in scenes:   # an unknown per-scene style would only be ignored by the renderer; say so
+        if sc.get("style") is not None and sc["style"] not in STYLES:
+            warns.append(f"{name}/{sc['id']}: unknown style {sc['style']!r} ignored")
+            del sc["style"]
+    return {**props_style, "orientation": orient, "scenes": scenes, "refs": refs, "lang": lang, "numberLocale": NUMBER_LOCALE.get(nf, "en-US"),
             "captions": cues, "rtl": lang == "ar", "durationInFrames": total, "width": w, "height": h,
             "endCard": {"fromFrame": card_from, "durationInFrames": max(1, total - card_from)}}, warns

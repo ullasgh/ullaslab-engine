@@ -8,6 +8,7 @@ import { SceneRenderer } from "./studio/SceneRenderer";
 import { StudioDemo, demoProps, studioMetadata } from "./studio/StudioDemo";
 import { StudioVideo, studioVideoMetadata } from "./studio/StudioVideo";
 import { StudioThumb } from "./studio/StudioThumb";
+import { StyleDemo, styleDemoMetadata } from "./studio/StyleDemo";
 import { STORY_SAFE, StoryProps, clampDuration } from "./storyConfig";
 
 const empty: Props = {
@@ -58,6 +59,13 @@ export const Root: React.FC = () => (
     durationInFrames={900} fps={FPS} width={1920} height={1080}
     defaultProps={{ ...demoProps("horizontal"), captions: [], durationInFrames: 900 } as unknown as Record<string, unknown>}
     calculateMetadata={({ props }) => studioVideoMetadata(props as unknown as Parameters<typeof studioVideoMetadata>[0])}
+  />
+  <Composition
+    id="StudioStyle"
+    component={StyleDemo as unknown as React.FC<Record<string, unknown>>}
+    durationInFrames={270} fps={FPS} width={1920} height={1080}
+    defaultProps={{ orientation: "horizontal", style: "data-story" } as unknown as Record<string, unknown>}
+    calculateMetadata={({ props }) => styleDemoMetadata(props as unknown as Parameters<typeof styleDemoMetadata>[0])}
   />
   <Composition
     id="StudioThumb"

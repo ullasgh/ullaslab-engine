@@ -20,6 +20,35 @@ data, and it never will.** Inputs and outputs travel as presigned R2 URLs in a `
 | `src/ullaslab_engine/voice/` | WP11 voice layer: recording QA and clip selection, number verbalisation, sentence-level narration, post-processing, naturalness gate, local demo (`docs/voice.md`) |
 | `config/` | vendored copies of `languages.yaml` and `quality.yaml` (thresholds are not secret); `safe_zones.json` |
 
+## Video styles
+
+An item can carry an optional `style` (`data-story`, `creator-motion`, `chalk-talk`, `clean-tech`) at the item level of
+`scenes.json` and, optionally, on a single scene. Absent means the default look, so every existing item renders as before. The
+preset layer is `remotion/src/studio/styles.ts` (type scale, motion, layout, backdrop, caption treatment and chart rules, brand
+palette only) applied by `SceneRenderer`; the original scene components are in `StyleKit.tsx`, and the chart additions (scenario
+range band, zero baseline) are in `Charts.tsx`.
+
+| Style | For | What it adds |
+|---|---|---|
+| `data-story` | data and asset research | zero-based axes that always cover the data, scenario range band, annotations, timeline, source stamp required |
+| `creator-motion` | hooks, surprising numbers | large kinetic type, emphasis words, counters that end on the written figure, restrained camera |
+| `chalk-talk` | formulas, worked examples | stroke-on writing, step-by-step build, hand-drawn result box, no camera move |
+| `clean-tech` | systems, market structure | cards, flow diagrams, timelines, quiet motion |
+
+Only `chart`, `timeline`, `flow` and `kinetic` scenes are restyled; footage, map and globe render unchanged. Kinetic text markup:
+`*word*` emphasis (creator-motion), `|` separates chalk steps or clean-tech cards, a chalk step starting with `=` is the result and
+a card may be `Title: detail`. Numbers are never computed or rescaled by a style: counters end on the token as written, and charts
+draw only the data passed in. The end card ("Follow UllasLab. Education only."), the caption safe zones and the no-freshness-tag
+rule are unchanged by every style.
+
+Check the styles without a full render: `make style-stills` renders one still per scene of each style demo in both aspect ratios
+into `out/style-stills` and `python -m ullaslab_engine.studio.style_check out/style-stills` verifies size, content and safe zones
+(the same check runs in `RUN_RENDER=1 pytest tests/test_styles.py`). Stills are never committed.
+
+Seams for the next milestone (not built here): per-scene render cache and single-scene re-render would key on a hash of one scene
+object plus the item style and `refs` it uses, at the `Sequence` per scene in `SceneRenderer`; the music library and narration
+pace sit in `studio/audio.py` and `studio/timings.py`.
+
 ## Quick start
 
 ```
