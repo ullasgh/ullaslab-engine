@@ -370,6 +370,7 @@ def test_qc_output_runs_all_detectors_and_writes_contact_sheet(vids, tmp_path):
     assert Image.open(sheet).size[0] == 4 * 384
     by = {c.name: c.status for c in ok}
     assert by["faststart"] == by["integrated loudness"] == by["black frames"] == by["frozen frames"] == Q.PASS
+    assert "abrupt ending" in by and "narration ends cleanly" in by       # M2b ending checks are wired into qc_output
     bad, _ = Q.qc_output(vids["black"], size=SIZE, orient="vertical", voice=None, scenes=None, props=None, srt=None, item=item, name="long")
     assert Q.FAIL in [c.status for c in bad if c.name == "black frames"]
 
