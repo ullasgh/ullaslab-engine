@@ -1,4 +1,5 @@
 import { STUDIO_TYPE, type TypeScale } from "./palettes.ts";
+import { styledType, type StyleId } from "./styles.ts";
 
 export type Orientation = "horizontal" | "vertical";
 export const SIZES = { horizontal: { w: 1920, h: 1080 }, vertical: { w: 1080, h: 1920 } } as const;
@@ -29,11 +30,11 @@ export type StudioLayout = {
 // Bottom band (px) held back for burned-in captions: scene content stays above it, captions sit at the safe-box bottom.
 export const CAPTION_RESERVE = 176;
 
-export const studioLayout = (o: Orientation, reserveBottom = 0, platform: Platform = "both"): StudioLayout => {
+export const studioLayout = (o: Orientation, reserveBottom = 0, platform: Platform = "both", style?: StyleId): StudioLayout => {
   const { w, h } = SIZES[o];
   const s = safeBoxFor(o, platform);
   const x0 = s.left, x1 = w - s.right, y0 = s.top, y1 = h - s.bottom - reserveBottom;
-  return { o, vertical: o === "vertical", w, h, reserve: reserveBottom, x0, x1, y0, y1, cw: x1 - x0, ch: y1 - y0, type: STUDIO_TYPE[o] };
+  return { o, vertical: o === "vertical", w, h, reserve: reserveBottom, x0, x1, y0, y1, cw: x1 - x0, ch: y1 - y0, type: style ? styledType(o, style) : STUDIO_TYPE[o] };
 };
 
 export const inSafeBox = (L: StudioLayout, r: { x: number; y: number; w: number; h: number }) =>

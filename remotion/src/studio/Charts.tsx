@@ -4,7 +4,7 @@ import { scalePoint } from "d3-scale";
 import { ticks as d3ticks } from "d3-array";
 import { useRamp, useStudio } from "./context";
 import { ChartShell, type ChartMeta } from "./Stamp";
-import { counterValue, fmtNum, linePath, makeLinear, makeTimeScale, niceExtent, parseX, revealPoints, type XY } from "./chartMath";
+import { counterValue, fmtNum, linePath, makeLinear, makeTimeScale, niceExtent, parseX, plotValues, revealPoints, type Band, type XY } from "./chartMath";
 import type { Palette } from "./palettes";
 
 type ColorKey = "accent" | "accent2" | "accent3" | "negative" | "muted";
@@ -30,6 +30,8 @@ export type LineData = {
   meta: ChartMeta; headline?: string;
   series: { name: string; color?: ColorKey; points: { x: string | number; y: number }[] }[];
   annotations?: { x: string | number; label: string }[];
+  /** Scenario range: a shaded y-range (both edges are numbers from the data passed in) from `from` to the right edge. */
+  band?: Band;
   decimals?: number; includeZero?: boolean; revealFrames?: number;
 };
 
@@ -43,15 +45,16 @@ export const LineChart: React.FC<{ data: LineData }> = ({ data }) => (
 );
 
 const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w, h }) => {
-  const { L, pal, numberLocale } = useStudio();
+  const { L, pal, numberLocale, preset } = useStudio();
   const fs = L.type.label;
   const dec = data.decimals ?? 1;
   const multi = data.series.length > 1;
+  const band = preset.chart.band ? data.band : undefined;
   const m = { l: 18 + fs * 2.3, r: fs * 2.6, t: (multi ? fs * 1.9 : 20) + (data.annotations?.length ? fs * 2.4 : 0), b: fs * 2.1 };
   const xs = data.series.flatMap((s) => s.points.map((p) => parseX(p.x)));
-  const ys = data.series.flatMap((s) => s.points.map((p) => p.y));
+  const ys = plotValues(data.series, band);
   const X = makeTimeScale(xs, [m.l, w - m.r]);
-  const Yd = niceExtent(ys, 0.1, data.includeZero);
+  const Yd = niceExtent(ys, 0.1, data.includeZero ?? preset.chart.zeroBaseline);
   const Y = makeLinear(Yd, [h - m.b, m.t]);
   const span = (Math.max(...xs) - Math.min(...xs)) / 86400000;
   const xt = X.ticks(L.vertical ? 4 : 6);
@@ -66,6 +69,19 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
         </g>
       ))}
       {xt.map((d) => { const near = X(d) - m.l < fs * 1.4; return <text key={+d} x={near ? m.l : X(d)} y={h - m.b + fs * 1.3} textAnchor={near ? "start" : "middle"} fontSize={fs} fill={pal.muted}>{xTickLabel(d, span)}</text>; })}
+      {band && (() => {
+        const bx = Math.max(m.l, Math.min(w - m.r, band.from === undefined ? X(Math.max(...xs)) - (w - m.r - m.l) * 0.35 : X(parseX(band.from))));
+        const k = Math.min(1, Math.max(0, (reveal - (bx - m.l) / (w - m.r - m.l)) * 6));
+        const y0 = Y(band.hi), y1 = Y(band.lo);
+        return (
+          <g opacity={k}>
+            <rect x={bx} y={y0} width={w - m.r - bx} height={Math.max(2, y1 - y0)} fill={pal.accent2} opacity={0.18} />
+            <line x1={bx} x2={w - m.r} y1={y0} y2={y0} stroke={pal.accent2} strokeWidth={2.5} strokeDasharray="10 8" />
+            <line x1={bx} x2={w - m.r} y1={y1} y2={y1} stroke={pal.accent2} strokeWidth={2.5} strokeDasharray="10 8" />
+            <text x={bx + 10} y={Math.max(y0 + fs * 1.05, y1 - 10)} textAnchor="start" fontSize={fs} fontWeight={700} fill={pal.accent2} stroke={pal.bg} strokeWidth={8} paintOrder="stroke" data-audit="stamp">{band.label}</text>
+          </g>
+        );
+      })()}
       {multi && data.series.map((s, i) => {
         const lx = m.l + i * (L.vertical ? 330 : 420);
         return (
@@ -178,12 +194,12 @@ export const YieldCurve: React.FC<{ data: YieldData }> = ({ data }) => (
 );
 
 const YieldPlot: React.FC<{ data: YieldData; w: number; h: number }> = ({ data, w, h }) => {
-  const { L, pal, numberLocale } = useStudio();
+  const { L, pal, numberLocale, preset } = useStudio();
   const fs = L.type.label;
   const dec = data.decimals ?? 2;
   const m = { l: 18 + fs * 2.3, r: 30, t: fs * 2.2, b: fs * 1.7 };
   const X = scalePoint<string>().domain(data.tenors).range([m.l + 90, w - m.r - 60]);
-  const Yd = niceExtent([...data.now, ...(data.prior ?? [])], 0.15);
+  const Yd = niceExtent([...data.now, ...(data.prior ?? [])], 0.15, preset.chart.zeroBaseline);
   const Y = makeLinear(Yd, [h - m.b, m.t]);
   const reveal = useRamp(8, 70);
   const pts = (arr: number[]): XY[] => arr.map((v, i) => ({ x: X(data.tenors[i])!, y: Y(v) }));

@@ -5,6 +5,7 @@ import type { GlobeData, MapData } from "./geo";
 import type { ChartSceneData } from "./SceneRenderer";
 import type { TimelineData, FlowData } from "./Diagrams";
 import type { FootageData } from "./Footage";
+import type { StyleId } from "./styles";
 
 const FIXTURE_SOURCE = { name: "UllasLab fixture (synthetic, not real figures)", as_of: "2026-11" };
 const meta = (metric: string, unit: string, period: string): ChartMeta => ({
@@ -100,3 +101,39 @@ export const DEMO_SCENES: StudioScene[] = [
   seq("flow", "s9-flow", 8, { on_screen_text: "How a shock travels", data_ref: "flow", palette: "trade", transition: "crossfade" }),
   seq("kinetic", "s10-kinetic", 9, { on_screen_text: "Rates don't move *markets*|they move *expectations*", palette: "volatility", camera_move: "push", transition: "match_move" }),
 ];
+
+// ---- style demos (V2 M2). Layout-test numbers only, same synthetic fixture source as above. One signature scene first.
+const scenario = DEMO_REFS.line_rates as Extract<ChartSceneData, { kind: "line" }>;
+export const STYLE_DEMO_REFS: Record<string, unknown> = {
+  ...DEMO_REFS,
+  line_scenario: {
+    ...scenario, meta: meta("Policy rate vs inflation, scenario range", "% per year", "Jan 2021 - Dec 2025"),
+    band: { lo: 3, hi: 5, label: "Scenario range", from: "2024-07" },
+    annotations: [{ x: "2022-09", label: "Tightening" }],
+  } satisfies ChartSceneData,
+};
+const row = (style: StyleId, specs: Partial<StudioScene>[]): StudioScene[] =>
+  specs.map((x, i) => ({ id: `${style}-${i + 1}`, type: "kinetic", start: i * L, end: (i + 1) * L, palette: "policy", camera_move: "push", transition: i ? "crossfade" : "cut", ...x }) as StudioScene);
+export const STYLE_DEMO_SCENES: Record<StyleId, StudioScene[]> = {
+  "data-story": row("data-story", [
+    { type: "chart", data_ref: "line_scenario", on_screen_text: "Where rates could settle" },
+    { type: "chart", data_ref: "bar_lanes", on_screen_text: "Which lanes carry the load", palette: "commodities" },
+    { type: "timeline", data_ref: "timeline", on_screen_text: "How we got here", palette: "tech" },
+  ]),
+  "creator-motion": row("creator-motion", [
+    { on_screen_text: "Inflation hit *6.4%*|and rates held at *4.5%*" },
+    { on_screen_text: "A *$85* barrel|moves more than you think", palette: "commodities" },
+    { type: "chart", data_ref: "counter_cpi", on_screen_text: "The number to watch", palette: "volatility" },
+  ]),
+  "chalk-talk": row("chalk-talk", [
+    { on_screen_text: "Principal: 100|Rate: 5%|100 x 0.05|= Interest: 5" },
+    { on_screen_text: "Real rate = nominal - inflation|4.5% - 3.0%|= 1.5%" },
+    { type: "chart", data_ref: "line_rates", on_screen_text: "Rates chase inflation" },
+  ]),
+  "clean-tech": row("clean-tech", [
+    { on_screen_text: "Oil: the price rises|Imports: the bill grows|Currency: pressure builds|Policy: the response" },
+    { type: "flow", data_ref: "flow", on_screen_text: "How a shock travels", palette: "trade" },
+    { type: "timeline", data_ref: "timeline", on_screen_text: "How we got here", palette: "tech" },
+  ]),
+};
+export const STYLE_DEMO_CUE = { start: 0, end: 9, lines: [[{ w: "Inflation", start: 0, end: 1 }, { w: "reached", start: 1, end: 2 }, { w: "6.4", start: 2, end: 3 }, { w: "%", start: 3, end: 3.5 }, { w: "in", start: 3.5, end: 4 }, { w: "October", start: 4, end: 5 }]] };
