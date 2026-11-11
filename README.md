@@ -45,9 +45,72 @@ Check the styles without a full render: `make style-stills` renders one still pe
 into `out/style-stills` and `python -m ullaslab_engine.studio.style_check out/style-stills` verifies size, content and safe zones
 (the same check runs in `RUN_RENDER=1 pytest tests/test_styles.py`). Stills are never committed.
 
-Seams for the next milestone (not built here): per-scene render cache and single-scene re-render would key on a hash of one scene
-object plus the item style and `refs` it uses, at the `Sequence` per scene in `SceneRenderer`; the music library and narration
-pace sit in `studio/audio.py` and `studio/timings.py`.
+## Per-scene render cache and single-scene re-render
+
+`studio run` renders each output scene by scene and joins the clips (`src/ullaslab_engine/studio/scenecache.py`), so a scene
+that did not change is never rendered again.
+
+- **Segments.** An output is cut at every scene start. Each segment is rendered from the full `StudioVideo` composition with
+  Remotion's `frameRange` (`studio_render.mjs --segments`, one bundle for all segments), so its frames are exactly the frames
+  a full render draws: the outgoing scene under a crossfade or wipe, captions and the end card included. No neighbouring scene
+  is re-composited; instead a segment's key covers every scene visible in it, so editing a scene re-renders its own segment and
+  the next one when its picture runs under the next scene's enter transition.
+- **Key.** sha256 of: the absolute frame span and composition length; for every visible scene its index, frame range and
+  overlap, the scene object as rendered, the data its `data_ref` resolves to and the sha256 of any footage file it names; item
+  style, orientation, size, scale (preview or final), fps, language, number locale, RTL and platform; the caption cues and end
+  card overlapping the span; and a renderer stamp (every file under `remotion/src` and `remotion/public`, `studio_render.mjs`,
+  `package.json`, `package-lock.json`, the engine version). Changing any of them re-renders; nothing else does.
+- **Join.** Segment clips are H.264 High, yuv420p, 30 fps without B-frames, so the ffmpeg concat demuxer joins them by stream
+  copy with no dropped or repeated frame (with B-frames it repeats a frame at short boundaries). The join must have exactly
+  `durationInFrames` frames. Audio is mixed once over the joined video; after the mux the studio checks that the video has every
+  frame and that audio and video end together (within 50 ms).
+- **Safety.** A cached clip is used only after ffprobe confirms its frame count, size, codec and no B-frames; a damaged or
+  partial clip is deleted and rendered again. New clips are written under a temporary name first.
+- **Storage.** `<item>/work/scene_cache/<sha256>.mp4` plus `index.json`, never committed. Least recently used clips are pruned
+  above `ULLASLAB_SCENE_CACHE_MAX_MB` (default 4096); clips used by the current run are never pruned.
+
+Commands:
+
+```
+ullaslab-engine studio run <item>                          # renders only segments whose key changed (edit scenes.json, rerun)
+ullaslab-engine studio run <item> --scene s03              # re-render the spans showing s03 in every output that has it
+ullaslab-engine studio run <item> --scene s03,s05 --output reel
+ullaslab-engine studio run <item> --no-scene-cache         # one-pass render of each output (old behaviour)
+```
+
+An unknown scene id is an error and nothing runs. Packaging gives a new version file (`reel.v2.mp4`, `captions.reel.v2.srt`)
+only to an output whose final changed or that was named with `--scene`; unchanged outputs keep their files. QC runs on the
+result as before. Footage clips are re-cut only when their source, length or size changes.
+
+**Approval.** A re-render produces new files, so the owner's approval no longer covers them and must be given again. The signed
+studio approval is bound to a content hash over the script hash and every uploaded object of the item (key, etag, size), so
+uploading a new version changes the hash and the approval stops verifying. The engine never touches an approval file; when a
+local owner approval file exists and a re-render publishes a new version, `studio run` warns and QC reports "approval covers the
+current render" as WARN until the owner approves again.
+
+## Narration (long text, pace, markup)
+
+`voice/narrate.py` synthesises sentence by sentence (long sentences split at commas). Sentences under three words are said
+together with the next one unless a marker holds the pause after them: very short inputs made the clone engine fail and lose
+a whole long call. A failing chunk is retried on new seeds, then merged with the next chunk, and only then reported by name.
+With a chunk cache (`cache_dir=`, `ULLASLAB_TTS_CACHE`, or `ullaslab-engine voice-narrate --text script.txt --out voice.wav`,
+which caches under `work/tts_cache`) a crash or rerun resumes without redoing finished chunks; the cache key covers text,
+language, engine, settings, seed and the reference-voice bytes. Each chunk's model silence is trimmed, edges are faded and
+levels matched before the pauses go in.
+
+Pace is a target in words per minute including pauses (`voice_defaults.pace` in `config/languages.yaml`: `target_wpm` 150,
+`max_speedup` 1.15, `pause_floor` 0.6; a language may override it). It is met by shortening punctuation pauses first and then
+by a pitch-preserving tempo change of at most `max_speedup` (ffmpeg `atempo`); the voice itself is unchanged. A result still
+more than 10% under target is flagged, and the naturalness gate still checks pauses and rate. The pronunciation lexicon applies
+on every TTS path. Markup: `[[hook]]` and `[[payoff]]` lengthen the pause before a sentence, `[[pause]]` or `[[pause:0.8]]`
+inserts a pause anywhere (at most 2 s), and `*word*` emphasis is screen markup whose asterisks are never spoken.
+
+## Sound
+
+Music bed: licensed tracks from the ledger (none ship with the engine), else a generated CC0 pad; it sits about 20 dB under
+the voice and rises in pauses, intro and outro. Transition and emphasis SFX (`tick`, `whoosh`, `riser`, `hit`, `page_turn`,
+`ambient_low`) are synthesised in-house with ffmpeg lavfi (CC0, own work; no third-party audio). Two-pass loudnorm to -14 LUFS,
+true peak at most -1 dBTP. QC fails silence over 1.5 s, an ending that stops mid-sound and a narration track cut off mid-word.
 
 ## Quick start
 
