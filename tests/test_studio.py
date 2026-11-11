@@ -535,3 +535,21 @@ def test_qc_warns_when_pad_used_while_ledger_has_tracks(tmp_path):
     assert c.status == qc.WARN and "short" in c.detail
     (w / "audio.json").write_text(json.dumps({"short": {"music": {"id": "t1"}}}))
     assert qc.check_music_fallback(tmp_path, "final").status == qc.PASS
+
+
+@needs_ffmpeg
+def test_sfx_are_in_house_audible_short_and_land_on_their_cue(tmp_path):
+    import soundfile as sf
+    assert "CC0" in A.SFX_PROVENANCE["licence"] and A.SFX_PROVENANCE["cost_usd"] == 0     # generated here, no third-party audio
+    lib = A.make_sfx_library(tmp_path / "sfx")
+    assert set(lib) == set(A.SFX)
+    for name, p in lib.items():
+        x, sr = sf.read(str(p))
+        assert sr == A.SR and 0.04 <= len(x) / sr <= 3.0 and np.abs(x).max() > 0.05, name
+    A.run(A.sfx_stem_cmd([("hit", 2.0), ("tick", 5.0)], lib, 7.0, tmp_path / "s.wav"), "sfx")
+    s, sr = sf.read(str(tmp_path / "s.wav"))
+    assert abs(len(s) / sr - 7.0) < 0.01
+    env = np.abs(s)
+    onset = lambda a, b: a + np.flatnonzero(env[int(a * sr):int(b * sr)] > 0.01)[0] / sr
+    assert onset(0.0, 3.0) == pytest.approx(2.0, abs=0.02) and onset(3.0, 6.0) == pytest.approx(5.0, abs=0.02)
+    assert env[: int(1.9 * sr)].max() < 1e-4                    # nothing before the first cue
