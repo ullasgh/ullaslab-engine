@@ -136,7 +136,8 @@ def voice_budget(doc: dict, wpm: float) -> dict | None:
             "projected_min": round(speech_min * RUNNER_RTF, 1), "budget_min": float(raw)}
 
 
-def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "en", log: Callable = print) -> dict:
+def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "en", log: Callable = print,
+                attempt: int = 0) -> dict:
     """voice.<output>.wav for every output (identical narration is synthesised once). Clone reference: work/voice.wav (its
     sibling clips/clipN.wav win, per languages.yaml ref_clip). Returns numbers and engine names only."""
     if narrate_fn is None:
@@ -168,6 +169,8 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
             continue
         t0 = time.time()
         overrides = {"pace": {"target_wpm": st["target_wpm"], "words": gate_words(text)}} if st.get("target_wpm") else None
+        if attempt:   # a retry: a new deterministic seed (the chunk cache is keyed by seed, so attempt 1's audio is not replayed)
+            overrides = {**(overrides or {}), "seed": retry_seed(lang, attempt)}
         w = narrate_fn(text, lang, ref, cache_dir=work / "tts_cache", overrides=overrides)
         w.save(dst)
         pace = (getattr(w, "meta", None) or {}).get("pace") or {}
@@ -181,6 +184,62 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
 
 
 VOICE_GATES = "voice_gates.json"
+MAX_VOICE_ATTEMPTS = 3      # owner decision 2026-11-12: re-record up to 2 more times when ONLY the WER check fails
+SEED_STEP = 1000            # attempt i uses seed base + i * SEED_STEP (chunk retries use +100, naturalness retry +1: no collision)
+WER_ONLY = {("A3", "wer_pct")}
+
+
+def retry_seed(lang: str, attempt: int) -> int:
+    from ..voice.settings import voice_settings
+    return int(voice_settings(lang).get("seed", 0)) + SEED_STEP * attempt
+
+
+def _failed_checks(res: dict) -> set[tuple[str, str]]:
+    return {(g, c["name"]) for g, v in res["gates"].items() for c in v["checks"] if not c["passed"]}
+
+
+def _wer_of(res: dict):
+    return next((c["value"] for c in res["gates"]["A3"]["checks"] if c["name"] == "wer_pct"), None)
+
+
+def voice_phase(work: Path, *, narrate_fn: Callable | None = None, transcribe_fn: Callable | None = None,
+                wer_fn: Callable | None = None, log: Callable = print, clock: Callable = time.time,
+                max_attempts: int = MAX_VOICE_ATTEMPTS, _force_wer_fail: int = 0) -> dict:
+    """PHASE 2 with the owner's retry rule. Attempt 1 as before. If the voice gates fail and the ONLY failing check is the
+    A3 WER, narrate again with the next fixed seed and re-run the SAME gates (same limits), up to `max_attempts` in all; the
+    first attempt that passes every voice gate is used and the render starts. Any other failing check, or every attempt
+    failing WER, stops here (no render); a failing attempt is never picked as the best of. A retry only starts when the
+    measured time of the last attempt still fits ULLASLAB_VOICE_BUDGET_MIN (unset = no limit). Public lines are
+    `[voice-attempt] n=.. seed_index=.. wer_pct=.. PASS|FAIL` (numbers only); the WER diffs go to the private log.
+    `_force_wer_fail` is a test-only hook (not reachable from the CLI, the workflow or the environment): the first N
+    attempts report a failing WER."""
+    import os
+    work = Path(work)
+    budget_min = float(os.environ.get("ULLASLAB_VOICE_BUDGET_MIN") or 0)
+    t_start, attempts, res = clock(), [], None
+    for i in range(max_attempts):
+        t0 = clock()
+        make_voices(work, narrate_fn=narrate_fn, log=log, attempt=i)
+        w = wer_fn
+        if i < _force_wer_fail:
+            from ..asr import error_rate
+            real = wer_fn or error_rate
+            w = lambda r, h, l, real=real: max(real(r, h, l), 3.5)   # noqa: E731 - test hook only
+        res = voice_gates(work, transcribe_fn=transcribe_fn, wer_fn=w, log=log)
+        took = clock() - t0
+        wer = _wer_of(res)
+        attempts.append({"n": i + 1, "seed_index": i, "wer_pct": wer, "passed": res["passed"], "seconds": round(took, 1)})
+        log(f"[voice-attempt] n={i + 1} seed_index={i} wer_pct={wer} {'PASS' if res['passed'] else 'FAIL'}")
+        if res["passed"] or _failed_checks(res) != WER_ONLY or i + 1 >= max_attempts:
+            break
+        if budget_min and (clock() - t_start) + took > budget_min * 60:
+            log(f"voice budget: retry skipped, {round((clock() - t_start) / 60, 1)} min used, "
+                f"{round(took / 60, 1)} min needed, budget {budget_min:g} min")
+            break
+    res["attempts"] = attempts
+    res["used"] = attempts[-1]["n"] if res["passed"] else None
+    jdump(res, work / VOICE_GATES)
+    return res
 
 
 def voice_gates(work: Path, *, transcribe_fn: Callable | None = None, wer_fn: Callable | None = None,
@@ -189,7 +248,7 @@ def voice_gates(work: Path, *, transcribe_fn: Callable | None = None, wer_fn: Ca
     studio render starts: A3 (loudness, true peak, silence, wpm, sentence length, WER) and the duration limit, with the
     same functions and limits (config/quality.yaml) as the final QA. Writes work/voice_gates.json. A failure here costs the
     voice step only, not the 10-20 min render. Lines carry gate names and numbers only."""
-    from ..asr import error_rate, transcribe
+    from ..asr import error_rate, transcribe, wer_diff
     transcribe_fn, wer_fn = transcribe_fn or transcribe, wer_fn or error_rate
     work = Path(work).resolve()
     m = load_bundle(work / "bundle")
@@ -208,10 +267,13 @@ def voice_gates(work: Path, *, transcribe_fn: Callable | None = None, wer_fn: Ca
     pm = {"source_lang": src, "segments": [{"id": f"v{i}", "text": {src: t}} for i, t in enumerate(texts)]}
     tl = {"total_s": round(wav.duration, 3), "segments": [{"id": "v0", "start": round(words[0][1], 3),
                                                             "end": round(words[-1][2], 3)}], "scenes": [], "overruns": []}
-    gates = {"A3": gate_a3(pm, src, wav, tl, wer_fn(" ".join(texts), " ".join(w[0] for w in words), src)),
+    ref_text, hyp_text = " ".join(texts), " ".join(w[0] for w in words)
+    gates = {"A3": gate_a3(pm, src, wav, tl, wer_fn(ref_text, hyp_text, src)),
              "duration": gate_duration(tl, orientation_of(o["aspect"]), None)}
     res = {"passed": all(g["passed"] for g in gates.values()), "gates": gates}
     jdump(res, work / VOICE_GATES)
+    for d in wer_diff(ref_text, hyp_text, src):    # PRIVATE log only: these lines quote the script (the public step greps [voice-gate])
+        log(f"[wer-diff] {d}")
     for g, v in gates.items():
         for c in v["checks"]:
             log(f"[voice-gate] {g}.{c['name']}={c['value']} limit={c['limit']} {'PASS' if c['passed'] else 'FAIL'}")
@@ -389,9 +451,11 @@ def _export(work: Path, m: dict, asr_wer: Callable | None, audit_fn: Callable | 
     sdir.mkdir(parents=True, exist_ok=True)
     gates: dict[str, dict] = {"A1": gate_a1(m)}
     vg_p = work / VOICE_GATES
+    va = jload(vg_p) if vg_p.is_file() else {}
+    att = dict(attempts=va.get("attempts"), used=va.get("used"))
     if vg_p.is_file() and not jload(vg_p)["passed"]:   # phase 2 stopped the job before the render: report its gates
         gates.update(jload(vg_p)["gates"])
-        return _write_qa(m, gates, en / "master" / "qa.json")
+        return _write_qa(m, gates, en / "master" / "qa.json", **att)
     rc_p = work / "studio_rc"
     rc = int(rc_p.read_text().strip() or 1) if rc_p.is_file() else 1
     timed_p = item / "work" / "scenes.timed.json"
@@ -412,7 +476,7 @@ def _export(work: Path, m: dict, asr_wer: Callable | None, audit_fn: Callable | 
                                  _check("timings", "present" if timed_p.is_file() else "missing", "present", timed_p.is_file())])
     if not (final and timed_p.is_file()):
         gates["studio_qc"] = studio_qc_gate(qc)
-        return _write_qa(m, gates, en / "master" / "qa.json")
+        return _write_qa(m, gates, en / "master" / "qa.json", **att)
     doc = jload(timed_p)
     by = {o["output"]: o for o in doc["outputs"]}
     props = jload(item / "work" / "final" / f"props.{prim}.json")
@@ -463,12 +527,14 @@ def _export(work: Path, m: dict, asr_wer: Callable | None, audit_fn: Callable | 
     gates["A5"] = safe_zone_gate(item, doc, audit_fn)
     gates["duration"] = gate_duration(ptl, m["orientation"], None)
     gates["studio_qc"] = studio_qc_gate(qc)
-    return _write_qa(m, gates, en / "master" / "qa.json")
+    return _write_qa(m, gates, en / "master" / "qa.json", **att)
 
 
-def _write_qa(m: dict, gates: dict, path: Path) -> dict:
+def _write_qa(m: dict, gates: dict, path: Path, attempts: list | None = None, used=None) -> dict:
     qa = {"lang": m["source_lang"], "slug": m["slug"], "pipeline": "studio", "variant": "master",
           "passed": all(g["passed"] for g in gates.values()), "gates": gates}
+    if attempts:   # how often the voice had to be re-recorded (numbers only): count, WER per attempt, the attempt used
+        qa["voice_attempts"] = {"count": len(attempts), "wer_pct": [a["wer_pct"] for a in attempts], "used": used}
     jdump(qa, path)
     return qa
 

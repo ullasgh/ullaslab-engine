@@ -135,16 +135,8 @@ def _join_digit_runs(tokens: list[str]) -> list[str]:
     return out
 
 
-# The brand in the fixed sign-off ("Follow UllasLab. Education only.", in every video). The voice says "Ullas Lab" (lexicon)
-# and Whisper writes it as "Ullas lab", "Ullis lab", "Ulos' lab", "Ula's lab" or "Ula s lab": one name, spelled several ways, not a mispronounced
-# word. Both sides are mapped to one token (WER2: two word errors in every video against the 3% gate, live run 2026-11-12).
-_BRAND = re.compile(r"\bull?[aeio][\s']?s?'?[\s-]?lab\b", re.I)   # also "Ula s lab" (three words)
-
-
 def canonical_for_wer(text: str, lang: str = "en") -> str:
     t = text.replace("’", "'")
-    if lang == "en":
-        t = _BRAND.sub("ullaslab", t)
     t = re.sub(r"\bper cent\b", "percent", t, flags=re.I)
     t = re.sub(r"\b(\d+(?:\.\d+)?)\s?(?:bps|bp)\b", r"\1 basis points", t, flags=re.I)
     t = re.sub(r"\b(?:bps|bp)\b", "basis points", t, flags=re.I)
@@ -176,3 +168,55 @@ def merge_compounds(ref: list[str], hyp: list[str]) -> tuple[list[str], list[str
                 i += 1
         return out
     return merge(ref, set(hyp)), merge(hyp, set(ref))
+
+
+NAME_MATCH_MIN = 0.78   # similarity of a spelled-out hypothesis run to a proper name (difflib ratio over the joined letters)
+NAME_LEN_SLACK = 1      # the joined run is within this many letters of the name's length (rejects "us lab", "Ullas laugh")
+NAME_MAX_TOKENS = 4     # an unfamiliar name is heard as at most this many words ("Ula s lab")
+
+
+def proper_names(lang: str = "en") -> list[str]:
+    """Canonical tokens of the lexicon entries marked `name: true` (config/lexicon.yaml): names whose spelling no ASR can
+    know (the brand in the fixed sign-off). Lexicon-driven, so adding a name needs no code change."""
+    import yaml
+    from .voice.lexicon import lexicon_path
+    try:
+        doc = yaml.safe_load(lexicon_path().read_text(encoding="utf-8")) or {}
+    except OSError:
+        return []
+    out = []
+    for sec in ("common", lang):
+        for e in doc.get(sec) or []:
+            if isinstance(e, dict) and e.get("name") and "match" in e:
+                toks = canonical_for_wer(str(e["match"]), lang).split()
+                if len(toks) == 1 and toks[0] not in out:
+                    out.append(toks[0])
+    return out
+
+
+def merge_names(ref: list[str], hyp: list[str], names: list[str]) -> tuple[list[str], list[str]]:
+    """A proper name the script spells as one token (ullaslab) is heard as one to NAME_MAX_TOKENS words ("ulos lab", "ula s
+    lab"): a run of hypothesis words made only of words the script does not contain, whose letters joined are close to the
+    name (difflib ratio >= NAME_MATCH_MIN), counts as the name. Any other word, or a run too far from the name, stays an error."""
+    from difflib import SequenceMatcher
+    ref_words = set(ref)
+    hyp = list(hyp)
+    for name in names:
+        need = ref.count(name) - hyp.count(name)
+        for _ in range(max(0, need)):
+            best = (0.0, 0, 0)
+            for i in range(len(hyp)):
+                for n in range(1, NAME_MAX_TOKENS + 1):
+                    run = hyp[i:i + n]
+                    if len(run) < n or any(w in ref_words for w in run):
+                        break
+                    joined = "".join(run)
+                    if abs(len(joined) - len(name)) > NAME_LEN_SLACK:
+                        continue
+                    r = SequenceMatcher(None, name, joined).ratio()
+                    if r > best[0] + 1e-9:
+                        best = (r, i, n)
+            if best[0] < NAME_MATCH_MIN:
+                break
+            hyp[best[1]:best[1] + best[2]] = [name]
+    return ref, hyp
