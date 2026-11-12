@@ -97,7 +97,9 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
         const vis = revealPoints(pts, reveal);
         const tip = vis[vis.length - 1];
         const val = s.points[Math.min(s.points.length - 1, Math.round(reveal * (s.points.length - 1)))].y;
-        const flip = false;
+        // the tip value label goes left of the tip when it would run past the plot's right edge (WP8: the layout audit
+        // caught "112.0" at the end of a vertical chart 13 px outside the safe box; bold digits are about 0.62 em wide)
+        const flip = tip.x + 18 + fmtNum(val, dec, numberLocale).length * fs * 0.62 > w;
         // keep tip labels apart: a series whose tip sits within one text height below another puts its label underneath
         const lastY = (o: typeof s) => Y(o.points[Math.min(o.points.length - 1, Math.round(reveal * (o.points.length - 1)))].y);
         const crowdedAbove = data.series.some((o) => o !== s && lastY(o) <= tip.y && (tip.y - lastY(o) < fs * 1.1) && (lastY(o) < tip.y || data.series.indexOf(o) < data.series.indexOf(s)));
@@ -108,7 +110,7 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
             <path d={linePath(vis)} fill="none" stroke={c} strokeWidth={L.vertical ? 6 : 7} strokeLinecap="round" strokeLinejoin="round" />
             <circle cx={tip.x} cy={tip.y} r={11} fill={c} stroke={pal.bg} strokeWidth={4} />
             {reveal > 0.05 && (
-              <text x={tip.x + 18} y={labelY} textAnchor={flip ? "end" : "start"} fontSize={fs} fontWeight={700} fill={pal.ink}
+              <text x={flip ? tip.x - 18 : tip.x + 18} y={labelY} textAnchor={flip ? "end" : "start"} fontSize={fs} fontWeight={700} fill={pal.ink}
                 stroke={pal.bg} strokeWidth={7} paintOrder="stroke" data-audit="stamp">{fmtNum(val, dec, numberLocale)}</text>
             )}
           </g>

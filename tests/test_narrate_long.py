@@ -102,8 +102,8 @@ def test_persistent_failure_merges_into_next_then_raises_naming_the_chunk(eng):
     e = eng(FakeClone(fail={"Some analysts expected a quick recovery.": 99}))
     N.narrate(LONG, "en", engine="fakeclone", gate=False)
     assert any(t.startswith("Some analysts expected a quick recovery. Others did not.") for t, _ in e.calls)
-    eng(FakeClone(fail={"Follow UllasLab. Education only.": 99}))       # the last chunk has no next one to join
-    with pytest.raises(NoVoiceAvailable, match="Follow UllasLab"):
+    eng(FakeClone(fail={"Follow Ullas Lab. Education only.": 99}))      # the last chunk has no next one to join
+    with pytest.raises(NoVoiceAvailable, match="Follow Ullas Lab"):     # (the lexicon speaks the brand as two words)
         N.narrate(LONG, "en", engine="fakeclone", gate=False)
 
 
@@ -195,7 +195,7 @@ def test_pace_is_bounded_and_flags_a_script_that_is_too_slow(eng):
     assert any(f.startswith("pace:") for f in w.flags)
     eng(FakeClone(words_per_s=5.0))                     # far too fast (about 220 wpm): slowed as far as allowed, flagged
     w = N.narrate(LONG, "en", engine="fakeclone", gate=False, normalize=False)
-    assert w.meta["pace"]["speedup"] == round(1 / 1.15, 3) and w.meta["pace"]["pause_scale"] == 1.6
+    assert w.meta["pace"]["speedup"] == round(1 / 1.15, 3) and w.meta["pace"]["pause_scale"] == 1.3
     assert any(f.startswith("pace:") and "over" in f for f in w.flags)
 
 
@@ -209,8 +209,10 @@ def test_fast_engine_is_slowed_into_the_a3_range_without_changing_pitch(eng):
     eng(FakeClone(words_per_s=3.8))
     w = N.narrate(LONG, "en", engine="fakeclone", gate=False, normalize=False)
     p = w.meta["pace"]
-    assert p["raw_wpm"] > q["wpm_max"] and q["wpm_min"] <= p["wpm"] <= q["wpm_max"] and abs(p["wpm"] - 150) <= 6
-    assert p["speedup"] < 1.0 and p["pause_scale"] >= 1.0 and w.duration > raw.duration * 1.1
+    assert p["raw_wpm"] > q["wpm_max"] and q["wpm_min"] <= p["wpm"] <= 160
+    assert p["speedup"] < 1.0 and w.duration > raw.duration * 1.1
+    from ullaslab_engine.audio import max_silence_s
+    assert max_silence_s(w) <= q["max_silence_s"]                # longer pauses stay under the A3 silence limit
     assert abs(_f0_median(w) / _f0_median(raw) - 1) < 0.04       # same voice: pitch kept
     assert not any(f.startswith("pace:") for f in w.flags)
 
@@ -284,3 +286,13 @@ def test_short_sentence_at_a_paragraph_end_keeps_the_paragraph_break():
     plan = N.plan_chunks("Oil prices jumped this spring. Briefly.\n\nThen shipping fell sharply in March.")
     assert [c.text for c in plan] == ["Oil prices jumped this spring. Briefly.", "Then shipping fell sharply in March."]
     assert plan[0].pause == pytest.approx(0.8)
+
+
+def test_slow_down_never_stretches_an_inner_pause_past_the_cap():
+    """WP8: after slowing Chatterbox down, a mid-chunk pause of the engine's own grew to 1.2 s (A3 max_silence_s limit)."""
+    from ullaslab_engine.audio import max_silence_s, Wav
+    tone = (0.2 * np.sin(2 * np.pi * 220 * np.arange(SR) / SR)).astype(np.float32)
+    x = np.concatenate([tone, np.zeros(int(SR * 1.1), np.float32), tone])
+    y = N.cap_inner_silence(N.atempo(x, SR, 1 / 1.15), SR)
+    assert max_silence_s(Wav(y, SR)) <= N.PAUSE_CAP_S + 0.04
+    assert len(y) > 2 * SR                                         # the speech itself is kept

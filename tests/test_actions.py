@@ -322,7 +322,9 @@ def test_audit_frames_one_per_scene_inside_the_video():
 @pytest.mark.parametrize("a,b", [("from one hundred to one hundred and twelve", "from 100 to 112"),
                                  ("four point two five percent", "4.25%"),
                                  ("two thousand and twenty six", "2026"),
-                                 ("twenty five basis points", "25 bps")])
+                                 ("twenty five basis points", "25 bps"),
+                                 ("one hundred and twelve", "100 and 12"),     # Whisper split the number (runner run)
+                                 ("2026", "2000 26")])
 def test_spelled_and_written_numbers_compare_equal(a, b):
     assert canonical_for_wer(a) == canonical_for_wer(b)
 
@@ -331,6 +333,7 @@ def test_words_to_digits_leaves_other_words_and_splits_malformed_runs():
     assert words_to_digits("the rate rose".split()) == ["the", "rate", "rose"]
     assert words_to_digits("twenty twenty six".split()) == ["20", "26"]
     assert words_to_digits("one hundred and twelve and more".split()) == ["112", "and", "more"]
+    assert words_to_digits("10 5 and 100 and 1000".split()) == ["10", "5", "and", "100", "and", "1000"]   # not one number
 
 
 def test_wer_counts_a_real_word_error_after_canonicalisation():

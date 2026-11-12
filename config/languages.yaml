@@ -27,8 +27,8 @@ voice_defaults:
     target_wpm: 150
     max_speedup: 1.15
     pause_floor: 0.6
-    max_slowdown: 1.15    # WP8: a read faster than the target is slowed too (pauses up to pause_ceiling, then tempo)
-    pause_ceiling: 1.6
+    max_slowdown: 1.15    # WP8: a read faster than the target is slowed too (tempo first, then pauses up to pause_ceiling)
+    pause_ceiling: 1.3
 languages:
   - code: en
     name: English

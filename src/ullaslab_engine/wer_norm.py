@@ -112,6 +112,26 @@ def words_to_digits(tokens: list[str]) -> list[str]:
             j += 1
         out.append(str(total + cur) + frac)
         i = j
+    return _join_digit_runs(out)
+
+
+def _join_digit_runs(tokens: list[str]) -> list[str]:
+    """Whisper sometimes splits one spoken number: "one hundred and twelve" -> "100 and 12", "2000 26". A round number
+    (two or more trailing zeros) followed (optionally after "and") by a smaller number that fits in those zeros is one
+    number. Applied to both sides like the rest of the canonicalisation."""
+    out: list[str] = []
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t.isdigit() and int(t) > 0:
+            zeros = len(t) - len(t.rstrip("0"))
+            j = i + 1 + (i + 1 < len(tokens) and tokens[i + 1] == "and")
+            if zeros >= 2 and j < len(tokens) and tokens[j].isdigit() and len(tokens[j].lstrip("0") or "0") <= zeros:
+                out.append(str(int(t) + int(tokens[j])))
+                i = j + 1
+                continue
+        out.append(t)
+        i += 1
     return out
 
 
