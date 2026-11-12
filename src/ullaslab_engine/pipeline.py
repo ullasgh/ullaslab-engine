@@ -10,7 +10,7 @@ from . import captions as cap
 from .audio import Wav, normalize_loudness
 from .bundle import load_bundle, seg_text
 from .config import ROOT, language
-from .qa import run_qa, write_qa
+from .qa import _check, _gate, run_qa, write_qa
 from .synth import natural_timeline, slot_timeline, synth_segments, SR
 from .tts import NoVoiceAvailable, tts as _raw_tts
 from .voice.textnorm import normalize_text
@@ -157,3 +157,25 @@ def stage_qa(work: Path, lang: str, name: str | None, orientation: str, natural:
     qa["variant"] = name
     write_qa(qa, (d / name / "qa.json") if name else (d / "qa.json"))
     return qa
+
+
+def ensure_dub_result(work: Path, lang: str, variants: list[str]) -> list[str]:
+    """A dub that did not reach its QA step (TTS crash or timeout, weights missing, captions-only language) still leaves
+    a result file: the private repo moves the item to review only when every qa_<lang>.json exists, and a failed dub
+    must be reported, never hold the English master back. Writes a failing qa.json (numbers and names only) for the
+    language and for each of its variants when none exists; returns the files written."""
+    d = work / lang
+    d.mkdir(parents=True, exist_ok=True)
+    st = d / "status.json"
+    voiced = st.exists() and jload(st).get("voice") is not False
+    why = "dub stage did not finish" if not st.exists() else ("no voice for this language (captions only)" if not voiced else "dub stage failed after the voice")
+    if not st.exists():
+        jdump({"lang": lang, "voice": False, "failed": True}, st)
+    wrote = []
+    for path in [d / "qa.json"] + [d / v / "qa.json" for v in variants]:
+        if not path.exists():
+            qa = {"lang": lang, "slug": None, "passed": False, "variant": path.parent.name if path.parent != d else None,
+                  "gates": {"dub_result": _gate([_check("qa_result", why, "a QA report", False)])}}
+            jdump(qa, path)
+            wrote.append(str(path.relative_to(work)))
+    return wrote

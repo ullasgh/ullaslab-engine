@@ -156,7 +156,17 @@ def cmd_upload(a):
     """PUT whichever known outputs exist for a language. Unknown/absent outputs are skipped."""
     p = _payload(a)
     work, lang, outs = Path(a.work), a.lang, p["outputs"]
-    m = load_bundle(work / "bundle")
+    try:
+        m = load_bundle(work / "bundle")
+    except Exception:  # the job died before the bundle was fetched: a dub still reports, so the owner's review is not held up
+        m = None
+        print("bundle unavailable", file=sys.stderr)
+    if m is None:
+        if lang != P.SRC:
+            P.ensure_dub_result(work, lang, [])
+        m = {"source_lang": P.SRC, "variants": []}
+    elif lang != m["source_lang"]:
+        P.ensure_dub_result(work, lang, [v["name"] for v in m.get("variants", []) if v["lang"] == lang])
     items = [(f"audio_{lang}.wav", work / lang / "audio.wav", "audio/wav"),
              (f"captions_{lang}.srt", work / lang / "captions.srt", "application/x-subrip"),
              (f"captions_{lang}.vtt", work / lang / "captions.vtt", "text/vtt"),
@@ -186,6 +196,8 @@ def cmd_upload(a):
         if key in outs and path.exists():
             eio.upload(outs[key], path, ctype)
             n += 1
+            if key == f"qa_{lang}.json":  # the workflow's fallback reporter skips a language whose result is already in R2
+                (work / lang / ".qa_uploaded").touch()
     print(f"uploaded {n} files")
     return 0
 
