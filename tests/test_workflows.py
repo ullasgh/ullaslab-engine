@@ -173,10 +173,11 @@ def test_dub_job_skips_only_after_a_failed_master_and_has_step_timeouts_and_shar
     j = load(ROOT / ".github/workflows/render.yml")["jobs"]
     cond = j["dub"]["if"]
     assert "needs.master.result == 'success'" in cond and "needs.master.result == 'skipped'" in cond and "failure" not in cond
-    assert "always()" in cond  # evaluated even though the master job is skipped on the dub proof run
+    assert "!cancelled()" in cond and "always()" not in cond  # runs although master is skipped (proof run); a cancelled run stops
     assert j["master"]["if"] == "github.event.inputs.fixture != 'studio-short-dub'"
     steps = {s.get("name", ""): s for s in j["dub"]["steps"]}
-    assert steps["TTS (voice clone or stock voice per languages.yaml)"]["timeout-minutes"] < j["dub"]["timeout-minutes"]
+    capped = steps["TTS (voice clone or stock voice per languages.yaml)"]["timeout-minutes"] + steps["QA dubbed audio track (fails the job on breach)"]["timeout-minutes"]
+    assert capped <= j["dub"]["timeout-minutes"] - 15  # install, fetch and captions take ~5 min; >= 10 min stay for the upload / failure marker
     cache = next(s for s in j["dub"]["steps"] if str(s.get("uses", "")).startswith("actions/cache") and "huggingface" in str(s["with"]["path"]))
     assert "matrix.lang" not in cache["with"]["key"] and "matrix.cache" in cache["with"]["key"]
 
@@ -188,6 +189,8 @@ def test_every_dub_always_reports_a_result_and_the_fixture_dub_uploads_nothing()
     rep = next(s for s in steps if s.get("name", "").startswith("Report a failed dub"))
     assert rep["if"].startswith("always()") and ".qa_uploaded" in rep["run"] and "qa_${LANG_CODE}.json" in rep["run"]
     assert "set +x" in rep["run"] and "-v" not in rep["run"].replace("--max-time", "")
+    assert "echo" not in rep["run"] and "set -x" not in rep["run"] and "--verbose" not in rep["run"]
+    assert "> /dev/null 2>&1" in rep["run"]  # curl output (which can name the host) goes nowhere
     for s in steps:
         r = s.get("run", "")
         if "fetch --payload" in r or "upload --payload" in r:

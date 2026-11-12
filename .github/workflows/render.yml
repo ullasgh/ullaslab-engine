@@ -172,7 +172,7 @@ jobs:
   dub:
     needs: [plan, master]
     # success() would also skip the dubs when the master job was skipped (dub proof run); a failed master still skips them.
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.has_dubs == 'true' && (needs.master.result == 'success' || needs.master.result == 'skipped')
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.has_dubs == 'true' && (needs.master.result == 'success' || needs.master.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions: {}
@@ -241,7 +241,7 @@ jobs:
         run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --timing --music
       - name: TTS (voice clone or stock voice per languages.yaml)
         id: tts
-        timeout-minutes: 35   # a hung engine must not eat the job: the upload step below still runs and reports the failed dub
+        timeout-minutes: 25   # capped steps (25 + 10) plus install and fetch leave >= 10 min of the 50 for the upload / failure-marker steps
         env:
           PARLER_HUB: ${{ steps.model.outputs.hub }}
         run: |
@@ -256,7 +256,7 @@ jobs:
         run: uv run --no-sync python -m ullaslab_engine captions --work work --lang "$LANG_CODE" --no-asr
       - name: QA dubbed audio track (fails the job on breach)
         if: steps.tts.outputs.mode == 'voice'
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: uv run --no-sync python -m ullaslab_engine qa --work work --lang "$LANG_CODE"
       - name: Visual variants (for example the Hindi vertical cut) and their QA
         if: steps.tts.outputs.mode == 'voice'
