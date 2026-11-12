@@ -89,7 +89,7 @@ present, must equal the SHA-256 of the canonical JSON without that key (`qa.char
 2. `master` (WP8, the V2 studio path, `docs/studio.md` "On GitHub Actions"): fetch, rebuild the studio item, one narration
    per output (Chatterbox clone of the reference, pace target), `studio run --asr faster` (per-scene cache, styles, mix,
    package, studio QC), export and QA, upload. Writes `timing_en.json` (the manifest's English segments aligned to the
-   published output's words) so the dubs line up with `master.mp4`. Timeout 125 min.
+   published output's words) so the dubs line up with `master.mp4`. Timeout 120 min.
 3. `dub` (matrix, one job per language): TTS (clone or stock voice per `config/languages.yaml`), translated
    captions timed from the English segment windows, slot-aligned dub audio, A1 to A5 QA, upload. A language
    with no usable voice (for example Arabic when cloning fails) degrades to captions only.
