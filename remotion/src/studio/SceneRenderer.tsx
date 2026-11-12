@@ -7,6 +7,8 @@ import { FlowDiagram, Timeline, type FlowData, type TimelineData } from "./Diagr
 import { FootageScene, type FootageData } from "./Footage";
 import { GlobeScene, MapScene, type GlobeData, type MapData } from "./geo";
 import { KineticText } from "./Kinetic";
+import { CardStack, ChalkSteps, CreatorKinetic } from "./StyleKit";
+import { isStyledType, resolveStyle, type StyleId } from "./styles";
 import type { Orientation, Platform } from "./layout";
 import { normalizeScenes, type DirectorScene } from "./director";
 import { overlapAfter, resolveData, transitionProgress, validateScenes, type StudioScene, type TransitionKind } from "./scenes";
@@ -22,12 +24,31 @@ export type SceneRendererProps = {
   numberLocale?: string;
   platform?: Platform;      // safe-area template: "both" (stricter union, default) or one platform
   reserveBottom?: number;   // px held back at the bottom of the safe box (burned-in captions)
+  style?: StyleId;          // item video style (V2 M2); a scene's own `style` wins; absent = the default look
+};
+
+// Data-licensing gate: a styled chart, timeline or flow scene must carry its source (the stamp is always drawn by ChartShell).
+const assertSource = (scene: StudioScene, data: unknown, required: boolean) => {
+  if (!required || scene.type === "kinetic" || scene.type === "footage") return;
+  const src = (data as { meta?: { source?: { name?: string } } } | undefined)?.meta?.source?.name;
+  if (!src) throw new Error(`scene ${scene.id}: ${scene.type} scene has no meta.source, a source stamp is required`);
+};
+
+const StyledKinetic: React.FC<{ text: string }> = ({ text }) => {
+  const { style } = useStudio();
+  switch (style) {
+    case "creator-motion": return <CreatorKinetic text={text} />;
+    case "chalk-talk": return <ChalkSteps text={text} />;
+    case "clean-tech": return <CardStack text={text} />;
+    default: return <KineticText text={text} />;
+  }
 };
 
 const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) => {
   const text = scene.on_screen_text;
   const cam = useCameraStyle(scene.camera_move);
-  const { pal } = useStudio();
+  const { pal, preset } = useStudio();
+  assertSource(scene, data, preset.chart.requireSource);
   const withBackdrop = (node: React.ReactNode) => (
     <AbsoluteFill style={{ background: pal.bg }}>
       <div style={{ position: "absolute", inset: 0, ...cam }}><Backdrop /></div>
@@ -51,7 +72,7 @@ const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) =
     }
     case "timeline": return withBackdrop(<Timeline data={{ ...(data as TimelineData), headline: text ?? (data as TimelineData).headline }} />);
     case "flow": return withBackdrop(<FlowDiagram data={{ ...(data as FlowData), headline: text ?? (data as FlowData).headline }} />);
-    case "kinetic": return withBackdrop(<KineticText text={text ?? ""} />);
+    case "kinetic": return withBackdrop(<StyledKinetic text={text ?? ""} />);
   }
 };
 
@@ -76,7 +97,7 @@ const Enter: React.FC<{ kind: TransitionKind; first: boolean; accent: string; ch
   return <AbsoluteFill style={{ opacity: p }}>{children}</AbsoluteFill>;
 };
 
-export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale, reserveBottom, platform }) => {
+export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale, reserveBottom, platform, style: itemStyle }) => {
   const scenes = normalizeScenes(raw);
   const errs = validateScenes(scenes, refs);
   if (errs.length) throw new Error(`scenes.json invalid:\n${errs.join("\n")}`);
@@ -84,9 +105,10 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scene
     <AbsoluteFill>
       {scenes.map((s, i) => {
         const data = resolveData(s, refs);
+        const style = isStyledType(s.type) ? resolveStyle(itemStyle, s.style) : undefined;   // footage, map and globe render unchanged
         return (
           <Sequence key={s.id} from={s.start} durationInFrames={s.end - s.start + overlapAfter(scenes, i)} name={`${s.type}:${s.id}`}>
-            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom} platform={platform}>
+            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom} platform={platform} style={style}>
               <SceneEnter scene={s} first={i === 0}><Art scene={s} data={data} /></SceneEnter>
             </StudioProvider>
           </Sequence>

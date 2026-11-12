@@ -13,7 +13,7 @@ export const StudioVideo: React.FC<StudioVideoProps> = ({ captions, rtl, duratio
   <AbsoluteFill>
     <SceneRenderer {...scene} reserveBottom={CAPTION_RESERVE} />
     {endCard && <EndCard orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} card={endCard} reserveBottom={CAPTION_RESERVE} platform={scene.platform} />}
-    <StudioCaptions cues={captions} orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} platform={scene.platform} />
+    <StudioCaptions cues={captions} orientation={scene.orientation} lang={scene.lang ?? "en"} rtl={rtl} platform={scene.platform} style={scene.style} />
   </AbsoluteFill>
 );
 

@@ -370,6 +370,7 @@ def test_qc_output_runs_all_detectors_and_writes_contact_sheet(vids, tmp_path):
     assert Image.open(sheet).size[0] == 4 * 384
     by = {c.name: c.status for c in ok}
     assert by["faststart"] == by["integrated loudness"] == by["black frames"] == by["frozen frames"] == Q.PASS
+    assert "abrupt ending" in by and "narration ends cleanly" in by       # M2b ending checks are wired into qc_output
     bad, _ = Q.qc_output(vids["black"], size=SIZE, orient="vertical", voice=None, scenes=None, props=None, srt=None, item=item, name="long")
     assert Q.FAIL in [c.status for c in bad if c.name == "black frames"]
 
@@ -477,3 +478,63 @@ def test_caption_frames_per_platform_override(tmp_path):
     assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "instagram_reels").status == Q.PASS
     assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "both").status == Q.FAIL
     assert Q.check_caption_frames(v, props, None, (540, 960), "vertical", T, "youtube_shorts").status == Q.FAIL
+
+
+# ---------------------------------------------------------------- abrupt endings and approval currency (M2b)
+def test_abrupt_ending_detected_and_faded_ending_passes(tmp_path):
+    T = Q.thresholds()
+    loud = speechlike(3)                                   # never silent: the file stops mid-sound
+    cut = build(tmp_path / "cut.mp4", ["A"], audio=loud)
+    faded = loud.copy()
+    faded[-48000:] *= np.linspace(1, 0, 48000, dtype=np.float32) ** 2
+    ok = build(tmp_path / "ok.mp4", ["A"], audio=faded)
+    assert status(Q.check_ending(cut, None, T), "abrupt ending") == [Q.FAIL]
+    assert status(Q.check_ending(ok, None, T), "abrupt ending") == [Q.PASS]
+    voice_cut = tmp_path / "v_cut.wav"
+    sf.write(str(voice_cut), loud, 48000)
+    voice_ok = tmp_path / "v_ok.wav"
+    sf.write(str(voice_ok), np.concatenate([loud, np.zeros(9600, np.float32)]), 48000)
+    assert status(Q.check_ending(ok, voice_cut, T), "narration ends cleanly") == [Q.FAIL]
+    assert status(Q.check_ending(ok, voice_ok, T), "narration ends cleanly") == [Q.PASS]
+
+
+def test_qc_output_fails_an_abrupt_ending_through_its_own_wiring(tmp_path):
+    """V2 M7: qc_output itself must run the ending checks. A cut-off mix and a cut-off voice track have to come out
+    of qc_output as FAIL (not as a missing check, and not as a guarded "could not run" error)."""
+    item = tmp_path / "item"
+    item.mkdir()
+    loud = speechlike(3)
+    cut = build(tmp_path / "cut.mp4", ["A"], audio=loud)
+    voice_cut = tmp_path / "v_cut.wav"
+    sf.write(str(voice_cut), loud, 48000)
+    checks, _ = Q.qc_output(cut, size=SIZE, orient="vertical", voice=voice_cut, scenes=None, props=None, srt=None,
+                            item=item, name="long")
+    ending = [c for c in checks if c.name == "abrupt ending"]
+    voice = [c for c in checks if c.name == "narration ends cleanly"]
+    assert [c.status for c in ending] == [Q.FAIL] and "could not run" not in ending[0].detail
+    assert [c.status for c in voice] == [Q.FAIL] and "could not run" not in voice[0].detail
+    faded = loud.copy()
+    faded[-48000:] *= np.linspace(1, 0, 48000, dtype=np.float32) ** 2
+    ok = build(tmp_path / "ok.mp4", ["A"], audio=faded)
+    checks, _ = Q.qc_output(ok, size=SIZE, orient="vertical", voice=None, scenes=None, props=None, srt=None,
+                            item=item, name="long")
+    assert [c.status for c in checks if c.name == "abrupt ending"] == [Q.PASS]
+
+
+def test_approval_older_than_a_final_warns(tmp_path):
+    import os
+    item = tmp_path / "item"
+    item.mkdir()
+    assert Q.check_approval_current(item, False) is None
+    (item / "long.mp4").write_bytes(b"x")
+    m = item / ("APPR" + "OVED")          # fixture in a temp dir
+    m.write_text("ok")
+    os.utime(m, (1_000_000, 1_000_000))
+    (item / "long.v2.mp4").write_bytes(b"y")
+    c = Q.check_approval_current(item, False)
+    assert c.status == Q.WARN and "long.v2.mp4" in c.detail
+    os.utime(m, None)
+    for p in item.glob("*.mp4"):
+        os.utime(p, (1_000_000, 1_000_000))
+    assert Q.check_approval_current(item, False).status == Q.PASS
+    assert Q.check_approval_current(item, True) is None

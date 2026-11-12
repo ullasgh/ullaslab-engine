@@ -234,6 +234,14 @@
           }
         }
       }
+    },
+    "style": {
+      "enum": [
+        "data-story",
+        "creator-motion",
+        "chalk-talk",
+        "clean-tech"
+      ]
     }
   }
 }

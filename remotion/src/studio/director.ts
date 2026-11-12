@@ -1,6 +1,7 @@
 // Adapter from the director's scenes.json (content repo schemas/scenes.schema.json v1) to the kit's StudioScene.
 // Pure, no React. SceneRenderer accepts either shape; normalizeScenes is idempotent.
 import type { Topic } from "./palettes";
+import { isStyleId } from "./styles.ts";
 import type { CameraMove, StudioScene, TransitionKind } from "./scenes";
 
 export type DirectorScene = {
@@ -13,7 +14,7 @@ export type DirectorScene = {
   [k: string]: unknown;
 };
 export type DirectorOutput = { output: "long" | "short" | "reel"; aspect: "16:9" | "9:16"; scenes: DirectorScene[] };
-export type DirectorFile = { schema_version: 1; item: string; outputs: DirectorOutput[] };
+export type DirectorFile = { schema_version: 1; item: string; style?: string; outputs: DirectorOutput[] };
 
 export const CAMERA_MAP: Record<string, CameraMove> = {
   static: "none", slow_push: "push", pull_back: "pull", pan_left: "pan_left", pan_right: "pan_right",
@@ -37,6 +38,7 @@ export const fromDirectorScenes = (scenes: DirectorScene[], fps = 30, fallbackSe
       id: d.id, type: d.type, start, end, palette: d.palette,
       camera_move: CAMERA_MAP[d.camera_move] ?? "none", transition: TRANSITION_MAP[d.transition] ?? "cut",
     };
+    if (isStyleId(d.style)) out.style = d.style;
     if (d.on_screen_text) out.on_screen_text = d.on_screen_text;
     if (d.data_ref?.ref) out.data_ref = d.data_ref.ref;
     else if (d.type === "footage") out.data = { illustrative: d.illustrative !== false };

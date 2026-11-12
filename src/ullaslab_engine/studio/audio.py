@@ -355,7 +355,10 @@ def measure(path: Path) -> dict:
     return {"lufs": float(i.group(1)), "true_peak_dbtp": float(p.group(1))}
 
 
-def mux_cmd(video: Path, audio: Path, dst: Path) -> list[str]:
-    """H.264 video copied (already High / yuv420p / 30 fps), AAC 48 kHz, faststart."""
+def mux_cmd(video: Path, audio: Path, dst: Path, seconds: float | None = None) -> list[str]:
+    """H.264 video copied (already High / yuv420p / 30 fps), AAC 48 kHz, faststart.
+    No `-shortest`: with a stream-copied video it ended the file up to a few frames early (the last frames and the end of the
+    sign-off were lost). The audio stem is built to the exact video length; `seconds` (the video length) caps the audio."""
+    cap = ["-t", f"{seconds:.6f}"] if seconds else []
     return ["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(audio), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), "-shortest", "-movflags", "+faststart", str(dst)]
+            "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), *cap, "-movflags", "+faststart", str(dst)]

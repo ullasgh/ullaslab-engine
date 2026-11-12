@@ -1,4 +1,4 @@
-.PHONY: studio-e2e setup test test-py test-js test-render render-fixture clean
+.PHONY: style-stills studio-e2e setup test test-py test-js test-render render-fixture clean
 PY := .venv/bin/python
 
 setup:
@@ -28,3 +28,7 @@ clean:
 # Real studio dry-run (macOS: say + mlx-whisper + Remotion), 3 outputs at preview resolution.
 studio-e2e:
 	RUN_STUDIO_E2E=1 $(PY) -m pytest tests/test_studio.py -q -k e2e
+
+# One still per scene of every video style demo, both aspect ratios (Remotion + Chrome). Never commit the output.
+style-stills:
+	cd remotion && node scripts/style-stills.mjs ../out/style-stills

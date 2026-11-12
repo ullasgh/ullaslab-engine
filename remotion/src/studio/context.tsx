@@ -4,13 +4,14 @@ import { fontFor } from "../brand";
 import { studioLayout, type Orientation, type Platform, type StudioLayout } from "./layout";
 import { paletteFor, type Palette } from "./palettes";
 import { cameraTransform, type CameraMove } from "./scenes";
+import { presetFor, restrainCamera, type StyleId, type StylePreset } from "./styles";
 
-export type StudioCtx = { L: StudioLayout; pal: Palette; lang: string; numberLocale: string };
+export type StudioCtx = { L: StudioLayout; pal: Palette; lang: string; numberLocale: string; style?: StyleId; preset: StylePreset };
 const Ctx = createContext<StudioCtx | null>(null);
 
-export const StudioProvider: React.FC<{ orientation: Orientation; topic?: string; lang?: string; numberLocale?: string; reserveBottom?: number; platform?: Platform; children: React.ReactNode }> = ({
-  orientation, topic, lang = "en", numberLocale = "en-US", reserveBottom = 0, platform = "both", children,
-}) => <Ctx.Provider value={{ L: studioLayout(orientation, reserveBottom, platform), pal: paletteFor(topic), lang, numberLocale }}>{children}</Ctx.Provider>;
+export const StudioProvider: React.FC<{ orientation: Orientation; topic?: string; lang?: string; numberLocale?: string; reserveBottom?: number; platform?: Platform; style?: StyleId; children: React.ReactNode }> = ({
+  orientation, topic, lang = "en", numberLocale = "en-US", reserveBottom = 0, platform = "both", style, children,
+}) => <Ctx.Provider value={{ L: studioLayout(orientation, reserveBottom, platform, style), pal: paletteFor(topic), lang, numberLocale, style, preset: presetFor(style) }}>{children}</Ctx.Provider>;
 
 export const useStudio = (): StudioCtx => {
   const c = useContext(Ctx);
@@ -31,6 +32,7 @@ export const useRamp = (from: number, to: number) => {
 export const useCameraStyle = (move: CameraMove | undefined): React.CSSProperties => {
   const f = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
-  const c = cameraTransform(move, f / Math.max(1, durationInFrames - 1));
+  const { style } = useStudio();
+  const c = restrainCamera(cameraTransform(move, f / Math.max(1, durationInFrames - 1)), style);
   return { transform: `translate(${c.x}%, ${c.y}%) scale(${c.scale})`, transformOrigin: "50% 50%" };
 };
