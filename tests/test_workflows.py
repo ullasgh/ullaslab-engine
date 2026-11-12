@@ -64,6 +64,8 @@ def test_studio_steps_log_privately_and_print_only_for_the_fixture():
             if "work/logs/studio.log" in l and ("tail" in l or "cat " in l):
                 assert l.strip().startswith('if [ "$FIXTURE" = true ]'), l
     txt = (ROOT / ".github/workflows/render.yml").read_text()
+    # the public log shows which stage failed (stage name + error class only; the failure marker carries no message)
+    assert "^\\[failed\\] [a-z]+ [A-Za-z]+$" in txt
     assert "FIXTURE: ${{ github.event_name == 'workflow_dispatch' }}" in txt
 
 

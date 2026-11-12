@@ -144,7 +144,7 @@ jobs:
           rc=$?
           echo "$rc" > work/studio_rc
           echo "studio run exit $rc (1 = QC FAIL or a stage error; the gates below say which)"
-          grep -E '^\[(timings|broll|assemble|render|mix|package|qc)\] (running|skipped)' work/logs/studio.log || true
+          grep -E '^\[(timings|broll|assemble|render|mix|package|qc)\] (running|skipped)|^\[failed\] [a-z]+ [A-Za-z]+$' work/logs/studio.log || true
           if [ "$FIXTURE" = true ]; then tail -n 60 work/logs/studio.log; fi
       - name: QA gates (fails the job on breach)
         id: qa
