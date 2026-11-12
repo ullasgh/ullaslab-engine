@@ -52,8 +52,9 @@ def validate_payload(p: dict) -> dict:
                 and re.fullmatch(r"[0-9a-f]{40}", str(model["revision"]))
                 and isinstance(model["size"], int) and 0 < model["size"] <= MAX_MODEL_BYTES):
             raise TransferError("bad model")
+    music = studio_music(p)
     urls = ([p["bundle_url"], p.get("voice_url"), p.get("timing_url"), p.get("music_url")] + list(p["outputs"].values())
-            + list(clips.values()) + [(model or {}).get("url")])
+            + list(clips.values()) + [(model or {}).get("url")] + list(music.values()))
     for name in p["outputs"]:
         if not _NAME.match(name):
             raise TransferError("bad output name")
@@ -62,13 +63,44 @@ def validate_payload(p: dict) -> dict:
             raise TransferError("url rejected: host not allow-listed")
     if not all(re.fullmatch(r"[a-z]{2}", str(l)) for l in p["languages"]):
         raise TransferError("bad language code")
+    _schema_check(p)
     return p
+
+
+_MUSIC_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(mp3|wav|m4a|ogg|flac)$")
+
+
+def studio_music(p: dict) -> dict:
+    """WP8: {ledger file name: presigned GET} of the licensed music bed files (payload `studio.music_urls`), or {}."""
+    st = p.get("studio")
+    if st is None:
+        return {}
+    if not isinstance(st, dict) or set(st) - {"music_urls"}:
+        raise TransferError("bad studio")
+    m = st.get("music_urls") or {}
+    if not isinstance(m, dict) or len(m) > 20 or not all(isinstance(k, str) and _MUSIC_FILE.match(k) for k in m):
+        raise TransferError("bad studio music")
+    return m
+
+
+def _schema_check(p: dict) -> None:
+    """The shape contract shared with the private repo (schema/payload.schema.json). Errors name the path only."""
+    import jsonschema
+    from .config import ROOT
+    schema = json.loads((ROOT / "schema" / "payload.schema.json").read_text(encoding="utf-8"))
+    if os.environ.get("ULLASLAB_ALLOWED_HOSTS"):   # tests only: local http hosts are allowed by allowed_hosts_ok
+        schema["$defs"]["url"] = {"type": "string"}
+    try:
+        jsonschema.validate(p, schema)
+    except jsonschema.ValidationError as e:
+        raise TransferError(f"payload does not match schema at {list(e.absolute_path)} ({e.validator})") from None
 
 
 def mask_lines(p: dict) -> list[str]:
     """GitHub Actions ::add-mask:: commands for every URL in the payload and its query/path parts."""
     vals = ([p.get("bundle_url"), p.get("voice_url"), p.get("timing_url"), p.get("music_url")] + list(p.get("outputs", {}).values())
-            + list((p.get("voice_clip_urls") or {}).values()) + [(p.get("model") or {}).get("url")])
+            + list((p.get("voice_clip_urls") or {}).values()) + [(p.get("model") or {}).get("url")]
+            + list(((p.get("studio") or {}).get("music_urls") or {}).values()))
     out = []
     for v in vals:
         if not v:
