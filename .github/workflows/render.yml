@@ -135,6 +135,7 @@ jobs:
       - name: Studio render (studio run; output goes to the private log only)
         env:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          ULLASLAB_MUSIC_FETCH: "off"   # licensed music arrives by presigned URL (fetch --studio); never wrangler on a runner
         run: |
           set +e
           uv run --no-sync python -m ullaslab_engine studio run work/item --asr faster >> work/logs/studio.log 2>&1

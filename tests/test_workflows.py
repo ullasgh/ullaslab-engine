@@ -44,7 +44,8 @@ def test_only_secret_is_the_footage_key_on_the_studio_step():
     txt = (ROOT / ".github/workflows/render.yml").read_text()
     assert re.findall(r"secrets\.[A-Za-z_]+", txt) == ["secrets.PIXABAY_API_KEY"]
     holders = [s for s in _steps("master") if "secrets." in str(s.get("env", {}))]
-    assert len(holders) == 1 and "studio run" in holders[0]["run"] and set(holders[0]["env"]) == {"PIXABAY_API_KEY"}
+    assert len(holders) == 1 and "studio run" in holders[0]["run"]
+    assert set(holders[0]["env"]) == {"PIXABAY_API_KEY", "ULLASLAB_MUSIC_FETCH"} and holders[0]["env"]["ULLASLAB_MUSIC_FETCH"] == "off"
     for p in WF:
         if p.name != "render.yml":
             assert "secrets." not in p.read_text(), p.name

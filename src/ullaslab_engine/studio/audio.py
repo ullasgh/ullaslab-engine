@@ -127,6 +127,9 @@ def fetch_missing_tracks(ledger: list[dict], music_dir: Path = MUSIC_DIR, env: d
     missing = [t for t in ledger if t.get("file") and not (music_dir / t["file"]).is_file()]
     if not missing:
         return out
+    if env.get("ULLASLAB_MUSIC_FETCH") == "off":   # WP8 Actions: the music came by presigned URL; no R2 keys, no wrangler
+        out["failed"] = {t.get("id", "?"): "fetch off (ULLASLAB_MUSIC_FETCH=off)" for t in missing}
+        return out
     if getter is None:
         have_s3 = all(env.get(k) for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"))
         getter = _r2_get_s3 if have_s3 else _r2_get_wrangler

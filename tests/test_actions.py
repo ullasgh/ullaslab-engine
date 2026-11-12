@@ -382,3 +382,11 @@ def test_install_music_moves_only_ledger_files(tmp_path):
     dst = tmp_path / "music"
     assert AC.install_music(tmp_path, dst) == 1
     assert [p.name for p in dst.iterdir()] == ["ambient-calm-atlasaudio-606216.mp3"]
+
+
+def test_music_fetch_off_never_calls_r2_or_wrangler(tmp_path):
+    from ullaslab_engine.studio import audio as A
+    calls = []
+    led = [{"id": "t1", "file": "t1.mp3", "sha256": "0" * 64}]
+    r = A.fetch_missing_tracks(led, tmp_path, env={"ULLASLAB_MUSIC_FETCH": "off"}, getter=lambda *a: calls.append(a))
+    assert calls == [] and r["fetched"] == [] and "fetch off" in r["failed"]["t1"]
