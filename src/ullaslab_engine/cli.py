@@ -233,9 +233,8 @@ def cmd_studio_prepare(a):
 
 def cmd_studio_voice(a):
     """WP8: voice.<output>.wav for every scenes.json output (cloned voice when the reference was fetched)."""
-    from .studio.actions import make_voices, voice_gates
-    make_voices(Path(a.work))
-    res = voice_gates(Path(a.work))   # phase 2: A3 + duration on the voice alone, before the render starts
+    from .studio.actions import voice_phase
+    res = voice_phase(Path(a.work))   # phase 2: A3 + duration on the voice alone (re-recorded up to 2 more times on a WER-only fail)
     if not res["passed"]:
         print("voice gates FAIL:", [g for g, v in res["gates"].items() if not v["passed"]])
     return 0 if res["passed"] else 1

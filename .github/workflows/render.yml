@@ -133,7 +133,7 @@ jobs:
           uv run --no-sync python -m ullaslab_engine studio-voice --work work >> work/logs/studio.log 2>&1
           rc=$?
           echo "voice exit $rc"
-          grep -E '^\[voice-gate\] [A-Za-z0-9_]+\.[a-z_]+=[-0-9.a-z_]+ limit=[-0-9.a-zA-Z_ +]+ (PASS|FAIL)$|^voice (gates|budget)' work/logs/studio.log || true
+          grep -E '^\[voice-gate\] [A-Za-z0-9_]+\.[a-z_]+=[-0-9.a-z_]+ limit=[-0-9.a-zA-Z_ +]+ (PASS|FAIL)$|^\[voice-attempt\] n=[1-3] seed_index=[0-2] wer_pct=[0-9.]+ (PASS|FAIL)$|^voice (gates|budget)' work/logs/studio.log || true
           if [ "$FIXTURE" = true ]; then tail -n 40 work/logs/studio.log; fi
           exit $rc
       - name: Studio render (studio run; output goes to the private log only)

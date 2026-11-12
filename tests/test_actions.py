@@ -716,3 +716,135 @@ def test_captions_only_dub_reports_why(tmp_path):
     assert P.ensure_dub_result(w, "ar", []) == ["ar/qa.json"]
     c = json.loads((w / "ar" / "qa.json").read_text())["gates"]["dub_result"]["checks"][0]
     assert "captions only" in c["value"] and c["passed"] is False
+
+
+# ------------------------------------------------------------------ voice retry on a WER-only failure (owner decision 2026-11-12)
+class _Phase:
+    """Fakes for voice_phase: no synthesis, no ASR. `wers` is the WER each attempt scores; `other` makes attempt k fail wpm instead."""
+
+    def __init__(self, tmp_path, wers, other=None, secs=42.0):
+        self.w, self.words = _voiced(tmp_path, secs=secs)
+        self.wers, self.other, self.calls, self.seeds, self.t = list(wers), other, 0, [], 0.0
+
+    def narrate(self, text, lang, ref, cache_dir=None, overrides=None):
+        self.seeds.append((overrides or {}).get("seed"))
+        x = speechlike(42.0 if self.other != self.calls else 200.0)    # 200 s of audio breaks the duration gate
+        x.engine, x.meta = "chatterbox", {"pace": {"wpm": 150.0}}
+        self.calls += 1
+        return x
+
+    def wer(self, r, h, l):
+        return self.wers[min(self.calls - 1, len(self.wers) - 1)]
+
+    def clock(self):
+        self.t += self.step
+        return self.t
+
+    step = 10.0
+
+    def run(self, **kw):
+        lines = []
+        res = AC.voice_phase(self.w, narrate_fn=self.narrate, transcribe_fn=lambda p, l: self.words, wer_fn=self.wer,
+                             log=lines.append, clock=self.clock, **kw)
+        return res, lines
+
+
+def test_a_wer_only_failure_is_re_recorded_with_a_new_seed_and_the_first_passing_attempt_is_used(tmp_path):
+    p = _Phase(tmp_path, [3.5, 1.2])
+    res, lines = p.run()
+    assert res["passed"] and res["used"] == 2 and [a["wer_pct"] for a in res["attempts"]] == [3.5, 1.2]
+    assert p.calls == 2 and p.seeds[0] is None and p.seeds[1] == AC.retry_seed("en", 1) != AC.retry_seed("en", 0)
+    att = [l for l in lines if l.startswith("[voice-attempt]")]
+    assert att == ["[voice-attempt] n=1 seed_index=0 wer_pct=3.5 FAIL", "[voice-attempt] n=2 seed_index=1 wer_pct=1.2 PASS"]
+
+
+def test_the_retry_limit_is_unchanged_each_attempt_must_pass_the_same_3_percent(tmp_path):
+    p = _Phase(tmp_path, [3.0001, 3.01, 2.9])
+    res, _ = p.run()
+    assert res["passed"] and res["used"] == 3 and p.calls == 3        # 3.0001 and 3.01 fail the limit of 3 as before
+
+
+def test_three_wer_failures_stop_and_no_attempt_is_picked_as_best(tmp_path):
+    p = _Phase(tmp_path, [3.5, 3.2, 3.1])
+    res, lines = p.run()
+    assert not res["passed"] and res["used"] is None and p.calls == 3 and len(res["attempts"]) == 3
+    assert AC.jload(p.w / "voice_gates.json")["passed"] is False
+
+
+def test_a_non_wer_failure_does_not_retry(tmp_path):
+    p = _Phase(tmp_path, [1.0], other=0)          # attempt 1 breaks the duration gate while WER is fine
+    res, _ = p.run()
+    assert not res["passed"] and p.calls == 1 and len(res["attempts"]) == 1
+
+
+def test_wer_plus_another_failure_does_not_retry(tmp_path):
+    p = _Phase(tmp_path, [3.5], other=0)
+    res, _ = p.run()
+    assert p.calls == 1 and not res["passed"]
+
+
+def test_a_retry_that_cannot_fit_the_voice_budget_is_not_started(tmp_path, monkeypatch):
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.3 min of synthesis: it fits)
+    p = _Phase(tmp_path, [3.5, 1.0])
+    p.step = 200.0                                              # attempt 1 measures 200 s, 600 s are used: a second does not fit
+    res, lines = p.run()
+    assert p.calls == 1 and not res["passed"]
+    assert any(l.startswith("voice budget: retry skipped") for l in lines)
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
+    p2 = _Phase(tmp_path / "b", [3.5, 1.0])
+    assert p2.run()[0]["used"] == 2
+
+
+def test_the_chunk_cache_does_not_replay_attempt_one(tmp_path):
+    """The cache key carries the seed; a retry seed differs from every seed attempt 1 used (base, +1 naturalness, +100 chunk retries)."""
+    from ullaslab_engine.voice.narrate import chunk_key
+    base = AC.retry_seed("en", 0)
+    k0 = chunk_key("same text", "en", "chatterbox", {"seed": base}, "ref")
+    k1 = chunk_key("same text", "en", "chatterbox", {"seed": AC.retry_seed("en", 1)}, "ref")
+    assert k0 != k1
+    used = {base + o for o in (0, 1, 100, 101, 200, 201)}
+    assert not used & {AC.retry_seed("en", 1), AC.retry_seed("en", 2)}
+
+
+def test_the_qa_json_records_the_attempts_and_the_attempt_used(tmp_path):
+    p = _Phase(tmp_path, [3.5, 1.2])
+    p.run()
+    w, _ = _ready(tmp_path / "x")
+    AC.jdump(AC.jload(p.w / "voice_gates.json"), w / "voice_gates.json")
+    qa = AC.export(w, asr_wer=lambda r, h, l: 1.0, audit_fn=_audit_ok)
+    assert qa["voice_attempts"] == {"count": 2, "wer_pct": [3.5, 1.2], "used": 2}
+    assert json.loads((w / "en" / "master" / "qa.json").read_text())["voice_attempts"]["count"] == 2
+
+
+def test_failed_attempts_are_reported_when_the_job_stops(tmp_path):
+    p = _Phase(tmp_path, [3.5, 3.5, 3.5])
+    p.run()
+    (p.w / "logs").mkdir()
+    (p.w / "logs" / "studio.log").write_text("private")
+    qa = AC.export(p.w)
+    assert not qa["passed"] and qa["voice_attempts"] == {"count": 3, "wer_pct": [3.5, 3.5, 3.5], "used": None}
+
+
+def test_the_forced_failure_hook_is_python_only(tmp_path, monkeypatch):
+    import inspect
+    from ullaslab_engine import cli
+    assert "_force_wer_fail" not in inspect.getsource(cli) and "_force_wer_fail" not in (ROOT / ".github/workflows/render.yml").read_text()
+    monkeypatch.setenv("_force_wer_fail", "2")
+    p = _Phase(tmp_path, [1.0])
+    res, _ = p.run()
+    assert res["used"] == 1                                       # the environment cannot force a failure
+    p2 = _Phase(tmp_path / "f", [1.0])
+    r2, _ = p2.run(_force_wer_fail=1)
+    assert r2["used"] == 2 and r2["attempts"][0]["wer_pct"] >= 3.5
+
+
+def test_the_workflow_allows_only_the_attempt_line_pattern():
+    import re
+    txt = (ROOT / ".github/workflows/render.yml").read_text()
+    line = next(l for l in txt.splitlines() if "voice-attempt" in l)
+    start = line.index("^\\[voice-attempt\\]")
+    pat = [line[start:line.index("$", start) + 1]]
+    rx = re.compile(pat[0])
+    assert rx.match("[voice-attempt] n=2 seed_index=1 wer_pct=1.504 PASS")
+    assert not rx.match("[voice-attempt] n=2 seed_index=1 wer_pct=1.504 PASS follow us")
+    assert not rx.match("[voice-attempt] n=4 seed_index=3 wer_pct=1 PASS")
