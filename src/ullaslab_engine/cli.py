@@ -29,12 +29,25 @@ def _extras(code: str) -> str:
     return ",".join(sorted(extras))
 
 
+def cmd_studio_dub_fixture(a):
+    """Dub proof run (workflow_dispatch): bundle, reference voice and synthetic master timing for one dub language."""
+    from .studio.fixture import dub_fixture
+    dub_fixture(Path(a.work), a.lang)
+    print("dub fixture ready")
+    return 0
+
+
+def _cache_key(code: str) -> str:
+    """Model-cache key part per engine set (actions/cache keys may not contain commas)."""
+    return _extras(code).replace(",", "-") or "none"
+
+
 def cmd_plan(a):
     """Emit GitHub outputs: dub matrix (non-source languages), engine extras, has_dubs. No URLs.
     --fixture (workflow_dispatch proof run): no payload, English master only."""
     if a.fixture:
         from .studio.fixture import payload_free_plan
-        for line in payload_free_plan():
+        for line in payload_free_plan("es" if a.dub else None):
             print(line)
         print("master_extras=" + _extras("en"))
         return 0
@@ -44,7 +57,7 @@ def cmd_plan(a):
         cfg = language(code)
         if not cfg.get("dub"):
             continue
-        rows.append({"lang": code, "extras": _extras(code)})
+        rows.append({"lang": code, "extras": _extras(code), "cache": _cache_key(code)})
     print("matrix=" + json.dumps({"include": rows}))
     print("has_dubs=" + ("true" if rows else "false"))
     print("master_extras=" + _extras("en"))
@@ -156,7 +169,17 @@ def cmd_upload(a):
     """PUT whichever known outputs exist for a language. Unknown/absent outputs are skipped."""
     p = _payload(a)
     work, lang, outs = Path(a.work), a.lang, p["outputs"]
-    m = load_bundle(work / "bundle")
+    try:
+        m = load_bundle(work / "bundle")
+    except Exception:  # the job died before the bundle was fetched: a dub still reports, so the owner's review is not held up
+        m = None
+        print("bundle unavailable", file=sys.stderr)
+    if m is None:
+        if lang != P.SRC:
+            P.ensure_dub_result(work, lang, [])
+        m = {"source_lang": P.SRC, "variants": []}
+    elif lang != m["source_lang"]:
+        P.ensure_dub_result(work, lang, [v["name"] for v in m.get("variants", []) if v["lang"] == lang])
     items = [(f"audio_{lang}.wav", work / lang / "audio.wav", "audio/wav"),
              (f"captions_{lang}.srt", work / lang / "captions.srt", "application/x-subrip"),
              (f"captions_{lang}.vtt", work / lang / "captions.vtt", "text/vtt"),
@@ -186,6 +209,8 @@ def cmd_upload(a):
         if key in outs and path.exists():
             eio.upload(outs[key], path, ctype)
             n += 1
+            if key == f"qa_{lang}.json":  # the workflow's fallback reporter skips a language whose result is already in R2
+                (work / lang / ".qa_uploaded").touch()
     print(f"uploaded {n} files")
     return 0
 
@@ -308,7 +333,8 @@ def main(argv=None) -> int:
         return sp
 
     add("mask", cmd_mask, payload=dict(required=True))
-    add("plan", cmd_plan, payload=dict(default=None), fixture=dict(action="store_true"))
+    add("plan", cmd_plan, payload=dict(default=None), fixture=dict(action="store_true"), dub=dict(action="store_true"))
+    add("studio-dub-fixture", cmd_studio_dub_fixture, work=dict(required=True), lang=dict(default="es"))
     add("variants", cmd_variants, work=dict(required=True), lang=dict(required=True))
     add("fetch", cmd_fetch, payload=dict(required=True), work=dict(required=True),
         voice=dict(action="store_true"), timing=dict(action="store_true"), music=dict(action="store_true"),

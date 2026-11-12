@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       fixture:
-        description: "Synthetic public-safe studio item (generic text, stock reference voice, generated footage); nothing is uploaded"
+        description: "Synthetic public-safe item (generic text, stock reference voice). studio-short: English master. studio-short-dub: one dub language (es) on the dub job, no master; nothing is uploaded"
         type: choice
-        options: [studio-short]
+        options: [studio-short, studio-short-dub]
         default: studio-short
 
 permissions: {}
@@ -58,13 +58,14 @@ jobs:
         run: |
           uv sync --no-dev --frozen
           if [ "$FIXTURE" = true ]; then
-            uv run --no-sync python -m ullaslab_engine plan --fixture >> "$GITHUB_OUTPUT"
+            uv run --no-sync python -m ullaslab_engine plan --fixture ${{ github.event.inputs.fixture == 'studio-short-dub' && '--dub' || '' }} >> "$GITHUB_OUTPUT"
           else
             uv run --no-sync python -m ullaslab_engine plan --payload "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
           fi
 
   master:
     needs: plan
+    if: github.event.inputs.fixture != 'studio-short-dub'   # the dub proof run needs no master (the dub job builds its own synthetic timing)
     runs-on: ubuntu-24.04
     # The whole render (plan, master, then the dub matrix) must finish inside the private repo's 3 h poll window and the
     # presigned URL lifetime (3 h 15 min): plan 5 + master 120 + dub 50 = 175 min.
@@ -170,7 +171,8 @@ jobs:
 
   dub:
     needs: [plan, master]
-    if: needs.plan.outputs.has_dubs == 'true'
+    # success() would also skip the dubs when the master job was skipped (dub proof run); a failed master still skips them.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.has_dubs == 'true' && (needs.master.result == 'success' || needs.master.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions: {}
@@ -205,7 +207,8 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/huggingface
-          key: hf-${{ matrix.lang }}-v1-${{ hashFiles('uv.lock') }}
+          # one cache per engine set (not per language): 12 per-language caches of several GB each would thrash the 10 GB repo limit
+          key: hf-${{ matrix.cache }}-v2-${{ hashFiles('uv.lock') }}
       - name: Install
         env:
           EXTRAS: ${{ matrix.extras }}
@@ -224,10 +227,21 @@ jobs:
         id: model
         if: contains(matrix.extras, 'parler')
         run: uv run --no-sync python -m ullaslab_engine fetch-model --payload "$GITHUB_EVENT_PATH" --dest "$HOME/.cache/ullaslab-parler" >> "$GITHUB_OUTPUT"
+      - name: Synthetic dub fixture (proof run, public-safe)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # the Kokoro stock voice that records the fixture's reference clip needs the pinned spaCy English model (as in the master job)
+          whl=en_core_web_sm-3.8.0-py3-none-any.whl
+          curl -fsSL -o "$RUNNER_TEMP/$whl" "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/$whl"
+          echo "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85  $RUNNER_TEMP/$whl" | sha256sum -c --quiet -
+          uv pip install --no-deps "$RUNNER_TEMP/$whl"
+          uv run --no-sync python -m ullaslab_engine studio-dub-fixture --work work --lang "$LANG_CODE"
       - name: Fetch bundle, voice sample and master timing
+        if: github.event_name == 'repository_dispatch'
         run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --timing --music
       - name: TTS (voice clone or stock voice per languages.yaml)
         id: tts
+        timeout-minutes: 25   # capped steps (25 + 10) plus install and fetch leave >= 10 min of the 50 for the upload / failure-marker steps
         env:
           PARLER_HUB: ${{ steps.model.outputs.hub }}
         run: |
@@ -242,6 +256,7 @@ jobs:
         run: uv run --no-sync python -m ullaslab_engine captions --work work --lang "$LANG_CODE" --no-asr
       - name: QA dubbed audio track (fails the job on breach)
         if: steps.tts.outputs.mode == 'voice'
+        timeout-minutes: 10
         run: uv run --no-sync python -m ullaslab_engine qa --work work --lang "$LANG_CODE"
       - name: Visual variants (for example the Hindi vertical cut) and their QA
         if: steps.tts.outputs.mode == 'voice'
@@ -254,5 +269,22 @@ jobs:
         continue-on-error: true
         run: uv run --no-sync python -m ullaslab_engine story --work work --lang "$LANG_CODE"
       - name: Upload outputs
-        if: always()
+        id: upload
+        if: always() && github.event_name == 'repository_dispatch'
         run: uv run --no-sync python -m ullaslab_engine upload --payload "$GITHUB_EVENT_PATH" --work work --lang "$LANG_CODE"
+      # The private poll moves the item to review only when every qa_<lang>.json exists. If even the upload command could not
+      # run (install failure), report this language as failed by a plain PUT, so a broken dub never holds the English master back.
+      - name: Report a failed dub when no result was uploaded
+        if: always() && github.event_name == 'repository_dispatch'
+        run: |
+          set +x
+          [ -f "work/$LANG_CODE/.qa_uploaded" ] && exit 0
+          url=$(jq -r --arg k "qa_${LANG_CODE}.json" '.client_payload.outputs[$k] // empty' "$GITHUB_EVENT_PATH")
+          [ -n "$url" ] || exit 0
+          printf '{"lang":"%s","passed":false,"gates":{"dub_result":{"passed":false,"checks":[{"name":"qa_result","value":"dub job failed before reporting","limit":"a QA report","passed":false}]}}}' "$LANG_CODE" > "$RUNNER_TEMP/qa_failed.json"
+          curl -sS --max-time 60 -X PUT -H 'content-type: application/json' --data-binary @"$RUNNER_TEMP/qa_failed.json" "$url" > /dev/null 2>&1 || true
+      - name: Fixture dub summary (numbers only; nothing is uploaded)
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          cat "work/$LANG_CODE/status.json" || true
+          ls -la "work/$LANG_CODE" || true
