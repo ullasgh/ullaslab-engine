@@ -49,3 +49,37 @@ QC reads the render's own props (`work/<mode>/props.<output>.json`) and `work/sc
 
 ## Video ending and on-screen labels (owner decision 2026-11-09)
 Every video (Short, Reel, long-form, all 13 languages) ends with "Follow UllasLab. Education only." spoken and on the end card (`remotion/src/studio/EndCard.tsx`, last 3 s, inside the safe area; strings in `src/ullaslab_engine/endline.py` and `remotion/src/brand.ts`). The full disclaimer is the first line of the YouTube description and the Instagram caption (`publish.md`). Freshness tags are never drawn: charts show only "Source: <name> · <as-of>"; the tags stay in the data ledgers and QC still requires every number to be tagged there.
+
+## On GitHub Actions (WP8)
+The unattended render runs the studio in `.github/workflows/render.yml` (`master` job, ubuntu-24.04, CPU, headless Chrome,
+ffmpeg from apt). Code: `studio/actions.py`, `studio/safe_audit.py`, `studio/fixture.py`.
+
+1. `fetch --studio` (presigned bundle, the owner's reference and clips, licensed music files) and `studio-prepare`
+   (rebuilds the queue item in `work/item` from `bundle/studio/`, checks it against the manifest `studio` block).
+2. `studio-voice`: one narration per output (`narrate()`, Chatterbox clone of `work/voice.wav` / `work/clips/clipN.wav`,
+   pace target from the bundle, 150 wpm); outputs with the same narration share one synthesis. The chunk cache lives in
+   `work/tts_cache` and is never cached by Actions.
+3. `studio run work/item --asr faster` (faster-whisper large-v3 int8; mlx-whisper is macOS only).
+4. `studio-export`: `master.mp4` = the published output (manifest `studio.primary`), `studio_<output>.mp4` for the others,
+   captions (SRT + VTT), `audio_en.wav` (the published output's narration at -14 LUFS), `timing_en.json` for the dubs and
+   the story, `status_en.json`, and `qa_en.json`.
+
+`qa_en.json` gates (limits from `config/quality.yaml`, unchanged): A1 (claim ids and chart hashes), A2 (chart scenes in the
+published output), A3 on the published narration (loudness, true peak, silence, wpm 135-175, sentence length, WER <= 3%
+against the narrated text with the words the timings stage transcribed), A5 from a layout audit of every rendered output
+(one still per scene with `audit` on: headlines, body lines and stamps inside the content box, captions, end card and footage
+tag inside the safe box, text at least the A5 px floors), duration (30-60 s Short, 6-10 min long-form), and the studio QC
+verdict (any FAIL fails). A4 of the pre-V2 templates (planned beat spacing) does not apply to voice-timed studio scenes; QC's
+black, frozen and duplicate-shot checks cover the picture.
+
+Logs: everything the voice and studio steps print goes to `work/logs/studio.log`, uploaded privately as `studio_log.txt`; the
+public log shows exit codes, stage names and gate numbers (`tests/test_workflows.py` enforces this). Proof runs:
+`gh workflow run render --ref <branch> -f fixture=studio-short` renders the synthetic fixture and uploads nothing.
+
+WER on the studio path: Whisper writes numbers as digits while scripts often spell them, and it heard the sign-off brand as
+"Ullis lab". `wer_norm.words_to_digits` turns spelled cardinals into digits on both sides and the ASR prompt carries the
+sign-off spelling; on the fixture the same audio went from 7.5% to 2.0% WER (limit 3% unchanged).
+
+Known limits: the footage search needs the repository secret `PIXABAY_API_KEY` (without it a footage scene fails the render
+unless the director used none); the b-roll history that avoids reusing a clip across episodes starts empty on every runner;
+the CLIP ranker (`rank` extra) is not installed on the runner, so the keyword ranker picks footage.
