@@ -160,7 +160,7 @@ def dub_fixture(work: Path, lang: str = "es", total_s: float = 48.0) -> None:
 
 def payload_free_plan(dub: str | None = None) -> list[str]:
     """`plan --fixture`: English master only, or (fixture=studio-short-dub) also one dub language for the dub job."""
-    rows = [{"lang": dub, "extras": "chatterbox,kokoro"}] if dub else []
+    rows = [{"lang": dub, "extras": "chatterbox,kokoro", "cache": "chatterbox-kokoro"}] if dub else []
     return ["matrix=" + json.dumps({"include": rows}), "has_dubs=" + ("true" if rows else "false")]
 
 

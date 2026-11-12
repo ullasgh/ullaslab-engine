@@ -208,7 +208,7 @@ jobs:
         with:
           path: ~/.cache/huggingface
           # one cache per engine set (not per language): 12 per-language caches of several GB each would thrash the 10 GB repo limit
-          key: hf-${{ matrix.extras }}-v2-${{ hashFiles('uv.lock') }}
+          key: hf-${{ matrix.cache }}-v2-${{ hashFiles('uv.lock') }}
       - name: Install
         env:
           EXTRAS: ${{ matrix.extras }}

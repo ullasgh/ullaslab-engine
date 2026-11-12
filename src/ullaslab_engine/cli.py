@@ -37,6 +37,11 @@ def cmd_studio_dub_fixture(a):
     return 0
 
 
+def _cache_key(code: str) -> str:
+    """Model-cache key part per engine set (actions/cache keys may not contain commas)."""
+    return _extras(code).replace(",", "-") or "none"
+
+
 def cmd_plan(a):
     """Emit GitHub outputs: dub matrix (non-source languages), engine extras, has_dubs. No URLs.
     --fixture (workflow_dispatch proof run): no payload, English master only."""
@@ -52,7 +57,7 @@ def cmd_plan(a):
         cfg = language(code)
         if not cfg.get("dub"):
             continue
-        rows.append({"lang": code, "extras": _extras(code)})
+        rows.append({"lang": code, "extras": _extras(code), "cache": _cache_key(code)})
     print("matrix=" + json.dumps({"include": rows}))
     print("has_dubs=" + ("true" if rows else "false"))
     print("master_extras=" + _extras("en"))

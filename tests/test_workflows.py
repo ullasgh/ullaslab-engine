@@ -178,7 +178,7 @@ def test_dub_job_skips_only_after_a_failed_master_and_has_step_timeouts_and_shar
     steps = {s.get("name", ""): s for s in j["dub"]["steps"]}
     assert steps["TTS (voice clone or stock voice per languages.yaml)"]["timeout-minutes"] < j["dub"]["timeout-minutes"]
     cache = next(s for s in j["dub"]["steps"] if str(s.get("uses", "")).startswith("actions/cache") and "huggingface" in str(s["with"]["path"]))
-    assert "matrix.lang" not in cache["with"]["key"] and "matrix.extras" in cache["with"]["key"]
+    assert "matrix.lang" not in cache["with"]["key"] and "matrix.cache" in cache["with"]["key"]
 
 
 def test_every_dub_always_reports_a_result_and_the_fixture_dub_uploads_nothing():
@@ -200,3 +200,16 @@ def test_dub_fixture_inputs_and_plan():
     from ullaslab_engine.studio.fixture import payload_free_plan
     assert payload_free_plan() == ['matrix={"include": []}', "has_dubs=false"]
     assert '"lang": "es"' in payload_free_plan("es")[0] and payload_free_plan("es")[1] == "has_dubs=true"
+
+
+def test_cache_key_part_has_no_comma_for_any_language(capsys):
+    """actions/cache rejects commas in a key (the one dub fixture run failed on `chatterbox,kokoro`): plan emits a comma-free part."""
+    import json as _j
+    from ullaslab_engine import cli
+    from ullaslab_engine.config import languages
+    for code, cfg in languages().items():
+        if cfg.get("dub"):
+            k = cli._cache_key(code)
+            assert k and "," not in k and " " not in k, code
+    from ullaslab_engine.studio.fixture import payload_free_plan
+    assert "," not in _j.loads(payload_free_plan("es")[0].removeprefix("matrix="))["include"][0]["cache"]
