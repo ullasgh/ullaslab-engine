@@ -89,9 +89,16 @@ Logs: everything the voice and studio steps print goes to `work/logs/studio.log`
 public log shows exit codes, stage names and gate numbers (`tests/test_workflows.py` enforces this). Proof runs:
 `gh workflow run render --ref <branch> -f fixture=studio-short` renders the synthetic fixture and uploads nothing.
 
-WER on the studio path: Whisper writes numbers as digits while scripts often spell them, and it heard the sign-off brand as
-"Ullis lab". `wer_norm.words_to_digits` turns spelled cardinals into digits on both sides and the ASR prompt carries the
-sign-off spelling; on the fixture the same audio went from 7.5% to 2.0% WER (limit 3% unchanged).
+What the first Actions fixture runs showed, and the fixes (no limit changed):
+- A3 wpm 172-183 (limit 175): Chatterbox read faster than the 150 wpm target and the pacer only ever sped speech up. The
+  pacer now works both ways (`voice/narrate.py fit_pace`): a fast read is slowed by tempo (at most `max_slowdown` 1.15),
+  then punctuation pauses grow (at most `pause_ceiling` 1.3, never past 0.55 s), and the engine's own mid-sentence pauses
+  stretched by the slow-down are capped too, so A3 max_silence_s (1.2 s) still holds. Fixture: 153.9 wpm, 1.02 s.
+- A3 WER: Whisper writes numbers as digits while scripts often spell them, splits some ("100 and 12"), and heard the
+  sign-off brand as "Ullis lab". `wer_norm` turns spelled cardinals into digits and joins split numbers on both sides, the
+  ASR prompt carries the sign-off spelling, and the lexicon speaks the brand as "Ullas Lab". Fixture: 7.5% -> 2.0%.
+- A5: the audit found a chart's end value label 13 px past the safe box on a vertical chart; the label now goes left of
+  the line's tip when it would not fit.
 
 Known limits: the footage search needs the repository secret `PIXABAY_API_KEY` (without it a footage scene fails the render
 unless the director used none); the b-roll history that avoids reusing a clip across episodes starts empty on every runner;
