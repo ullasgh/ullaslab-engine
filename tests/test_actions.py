@@ -527,14 +527,54 @@ def pace_words_override_reaches_once():
     return N.pace_settings("en")["words"] == 0
 
 
-def test_brand_spellings_are_one_token_in_the_wer_and_real_errors_still_count():
-    c = canonical_for_wer
-    for hyp in ("Follow Ulos' lab, education only.", "Follow Ullas lab. Education only.", "Follow Ullis Lab education only", "follow Ula s lab, education only", "Follow Ula's lab. Education only."):
-        assert c(hyp) == c("Follow UllasLab. Education only.") == "follow ullaslab education only"
-    assert c("the lab") == "the lab" and c("Hullas lab") != "ullaslab"
+SIGN_OFF = "Follow UllasLab. Education only."
+
+
+@pytest.mark.parametrize("heard", ["Follow Ulos' lab, education only.", "Follow Ullas lab. Education only.", "Follow Ullis Lab education only",
+                                   "follow Ula s lab, education only", "Follow Ula's lab. Education only.", "Follow Ulaslab. Education only.",
+                                   "Follow Ola's lab education only", "Follow Ullah slab. Education only."])
+def test_the_lexicon_name_is_accepted_in_every_spelling_the_asr_gives_it(heard):
+    """The brand is a proper name no ASR can spell; its entry in config/lexicon.yaml carries `name: true`."""
     from ullaslab_engine.asr import error_rate
-    assert error_rate("Follow UllasLab. Education only.", "Follow Ulos lab education only", "en") == 0.0
-    assert error_rate("Follow UllasLab. Education only.", "Follow Ulos lab education on", "en") > 0
+    assert error_rate(SIGN_OFF, heard, "en") == 0.0
+
+
+@pytest.mark.parametrize("heard", ["Follow Google lab. Education only.", "Follow Ulysses. Education only.", "Follow us. Education only.",
+                                   "Follow Ullas lab. Education on.", "Follow Ullas lab education only now", "Follow the lab. Education only."])
+def test_other_words_around_the_name_still_count_as_errors(heard):
+    from ullaslab_engine.asr import error_rate
+    assert error_rate(SIGN_OFF, heard, "en") > 0
+
+
+def test_names_come_from_the_lexicon_not_from_code(tmp_path, monkeypatch):
+    from ullaslab_engine import wer_norm as W
+    assert W.proper_names("en") == ["ullaslab"]
+    lex = tmp_path / "lex.yaml"
+    lex.write_text('version: 1\ncommon:\n  - {match: "UllasLab", say: "Ullas Lab"}\n')
+    monkeypatch.setenv("ULLASLAB_LEXICON", str(lex))
+    assert W.proper_names("en") == []
+    from ullaslab_engine.asr import error_rate
+    assert error_rate(SIGN_OFF, "Follow Ulos lab. Education only.", "en") > 0       # no `name: true`, no leniency
+
+
+def test_wer_diff_lists_the_differing_tokens_for_the_private_log():
+    from ullaslab_engine.asr import wer_diff
+    d = wer_diff("It was 4.95 percent on the day. " + SIGN_OFF, "It was 4.95 percent percent on the day. Follow Ula's lab. Education on.", "en")
+    assert d == ["I ->percent", "S only->on"]
+    assert wer_diff("a b c", "a b c", "en") == []
+
+
+def test_voice_gate_and_final_qa_compute_wer_through_the_same_function(tmp_path, monkeypatch):
+    """One implementation: the runner's voice gate (phase 2) and the final QA (phase 4) both call asr.error_rate."""
+    from ullaslab_engine import asr
+    calls = []
+    real = asr.error_rate
+    monkeypatch.setattr(asr, "error_rate", lambda r, h, l: (calls.append(("rate", r, h)), real(r, h, l))[1])
+    w, words = _voiced(tmp_path, secs=42.0)
+    AC.voice_gates(w, transcribe_fn=lambda p, l: words, log=lambda *_: None)
+    w2, _ = _ready(tmp_path / "second")
+    AC.export(w2, audit_fn=_audit_ok)
+    assert len(calls) == 2 and all(c[0] == "rate" for c in calls)
 
 
 def _voiced(tmp_path, wpm_words=None, secs=None):
@@ -593,3 +633,17 @@ def test_chart_stamp_drops_the_freshness_tag_before_it_is_drawn():
     assert k["meta"]["source"]["name"] == "Source: FRED, St. Louis Fed, DGS10. As of 2026-11-09."
     assert k["meta"]["freshness"] == c.get("freshness", "RECENT")           # the tag stays in the data
     assert A.stamp_name("Source: x [LAGGED]") == "Source: x" and A.stamp_name("Source: [x] plan") == "Source: [x] plan"
+
+
+def test_voice_gate_writes_the_wer_diff_to_the_private_log_only(tmp_path):
+    import re
+    w, words = _voiced(tmp_path, secs=42.0)
+    words = list(words)
+    words[3] = ("SECRETWORD", *words[3][1:])
+    lines = []
+    AC.voice_gates(w, transcribe_fn=lambda p, l: words, log=lines.append)
+    diff = [l for l in lines if l.startswith("[wer-diff] ")]
+    assert diff and any("SECRETWORD".lower() in l.lower() for l in diff)
+    public = re.compile(r"^\[voice-gate\] [A-Za-z0-9_]+\.[a-z_]+=[-0-9.a-z_]+ limit=[-0-9.a-zA-Z_ +]+ (PASS|FAIL)$|^voice (gates|budget)")
+    assert not any(public.match(l) for l in diff)        # the workflow prints only lines matching this
+    assert not any("secretword" in l.lower() for l in lines if public.match(l))

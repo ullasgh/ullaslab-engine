@@ -4,6 +4,8 @@
 # Entry: {match: <text>, say: <spoken form>}
 #   regex: true        match is a regular expression (say may use \1 backrefs)
 #   ci: true           case-insensitive (default is case-sensitive, whole-token match)
+#   name: true         a proper name no ASR can spell: the WER gate accepts a heard run of 1-4 words whose letters are close to it
+#                      (wer_norm.merge_names); every other word still counts as an error
 #
 # Keep `say` as real, plain words or spaced letters ("G D P"): the A3 WER gate compares the ASR transcript with the
 # script after canonicalisation, so phonetic respellings ("en-VID-ee-uh") would count as mispronunciations.
@@ -12,7 +14,7 @@
 version: 1
 
 common:            # every language: company names, tickers, symbols
-  - {match: "UllasLab", say: "Ullas Lab"}   # the brand in the fixed sign-off: two plain words (WP8: Whisper heard "Ullislab")
+  - {match: "UllasLab", say: "Ullas Lab", name: true}   # the brand in the fixed sign-off: two plain words (WP8: Whisper heard "Ullislab")
   - {match: "M&A", say: "M and A"}
   - {match: "P&L", say: "P and L"}
   - {match: "Q&A", say: "Q and A"}

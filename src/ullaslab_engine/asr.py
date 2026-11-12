@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .wer_norm import canonical_for_wer, merge_compounds
+from .wer_norm import canonical_for_wer, merge_compounds, merge_names, proper_names
 from .captions import NO_SPACE_LANGS
 
 _MODEL = {}
@@ -53,5 +53,28 @@ def error_rate(reference: str, hypothesis: str, lang: str) -> float:
         return 0.0
     if lang in NO_SPACE_LANGS:
         return 100 * jiwer.cer(ref.replace(" ", ""), hyp.replace(" ", "") or "_")
-    r, h = merge_compounds(ref.split(), hyp.split())
+    r, h = aligned_tokens(reference, hypothesis, lang)
     return 100 * jiwer.wer(" ".join(r), " ".join(h) or "_")
+
+
+def aligned_tokens(reference: str, hypothesis: str, lang: str = "en") -> tuple[list[str], list[str]]:
+    """The two token lists WER compares: canonical text, compounds and lexicon proper names merged. The ONE place that
+    builds them, used by the voice gate (phase 2) and the final QA alike."""
+    r, h = merge_compounds(canonical_for_wer(reference, lang).split(), canonical_for_wer(hypothesis, lang).split())
+    return merge_names(r, h, proper_names(lang))
+
+
+def wer_diff(reference: str, hypothesis: str, lang: str = "en", max_items: int = 40) -> list[str]:
+    """Compact list of the differing tokens ("S ref->hyp", "I ->hyp", "D ref->") for the PRIVATE log: it quotes script text."""
+    import jiwer
+    r, h = aligned_tokens(reference, hypothesis, lang)
+    if not r:
+        return []
+    o = jiwer.process_words(" ".join(r), " ".join(h) or "_")
+    out = []
+    for chunk in o.alignments[0]:
+        if chunk.type == "equal":
+            continue
+        a, b = " ".join(r[chunk.ref_start_idx:chunk.ref_end_idx]), " ".join(h[chunk.hyp_start_idx:chunk.hyp_end_idx])
+        out.append(f"{chunk.type[0].upper()} {a}->{b}")
+    return out[:max_items]

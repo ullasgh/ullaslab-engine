@@ -189,7 +189,7 @@ def voice_gates(work: Path, *, transcribe_fn: Callable | None = None, wer_fn: Ca
     studio render starts: A3 (loudness, true peak, silence, wpm, sentence length, WER) and the duration limit, with the
     same functions and limits (config/quality.yaml) as the final QA. Writes work/voice_gates.json. A failure here costs the
     voice step only, not the 10-20 min render. Lines carry gate names and numbers only."""
-    from ..asr import error_rate, transcribe
+    from ..asr import error_rate, transcribe, wer_diff
     transcribe_fn, wer_fn = transcribe_fn or transcribe, wer_fn or error_rate
     work = Path(work).resolve()
     m = load_bundle(work / "bundle")
@@ -208,10 +208,13 @@ def voice_gates(work: Path, *, transcribe_fn: Callable | None = None, wer_fn: Ca
     pm = {"source_lang": src, "segments": [{"id": f"v{i}", "text": {src: t}} for i, t in enumerate(texts)]}
     tl = {"total_s": round(wav.duration, 3), "segments": [{"id": "v0", "start": round(words[0][1], 3),
                                                             "end": round(words[-1][2], 3)}], "scenes": [], "overruns": []}
-    gates = {"A3": gate_a3(pm, src, wav, tl, wer_fn(" ".join(texts), " ".join(w[0] for w in words), src)),
+    ref_text, hyp_text = " ".join(texts), " ".join(w[0] for w in words)
+    gates = {"A3": gate_a3(pm, src, wav, tl, wer_fn(ref_text, hyp_text, src)),
              "duration": gate_duration(tl, orientation_of(o["aspect"]), None)}
     res = {"passed": all(g["passed"] for g in gates.values()), "gates": gates}
     jdump(res, work / VOICE_GATES)
+    for d in wer_diff(ref_text, hyp_text, src):    # PRIVATE log only: these lines quote the script (the public step greps [voice-gate])
+        log(f"[wer-diff] {d}")
     for g, v in gates.items():
         for c in v["checks"]:
             log(f"[voice-gate] {g}.{c['name']}={c['value']} limit={c['limit']} {'PASS' if c['passed'] else 'FAIL'}")
