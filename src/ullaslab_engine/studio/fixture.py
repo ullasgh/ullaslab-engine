@@ -35,7 +35,7 @@ def chart() -> dict:
     pts = [{"x": f"Year {y} Q{q}", "y": round(100 + (4 * (y - 1)) + q, 1)} for y in (1, 2, 3) for q in (1, 2, 3, 4)]
     c = {"type": "line", "title": "Price index (synthetic)", "unit": "index, start = 100", "decimals": 1,
          "series": [{"name": "Index", "color": "primary", "points": pts}],
-         "source": {"name": "UllasLab test fixture (synthetic, not real figures)", "as_of": "2026-11"}, "freshness": "INFERRED",
+         "source": {"name": "UllasLab test fixture (synthetic, not real figures)", "as_of": "2026-11-01"}, "freshness": "INFERRED",
          "claim_id": "c1"}
     c["chart_hash"] = chart_hash(c)
     return c
@@ -66,7 +66,7 @@ def manifest() -> dict:
               for i in range(len(segs))]
     scenes[2]["chart"] = "charts/c1.json"
     scenes[-1]["kind"] = "disclaimer"
-    return {"version": 1, "slug": SLUG, "orientation": "vertical", "format": 7, "template": "fixture", "hook_style": "question",
+    return {"version": 1, "slug": SLUG, "orientation": "vertical", "format": 7, "template": "fixture", "hook_style": "H2",
             "source_lang": "en", "languages": ["en"], "voice_ref": None, "synthetic_voice": True, "disclaimer": {"en": DISCLAIMER},
             "segments": segs, "scenes": scenes,
             "studio": {"primary": "short", "outputs": ["short", "reel"], "target_wpm": 150,

@@ -56,6 +56,65 @@ def _acronyms(tokens: list[str]) -> list[str]:
     return out
 
 
+_UNITS = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+                                     "fifteen sixteen seventeen eighteen nineteen".split())}
+_TENS = {w: 10 * i for i, w in enumerate("_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()) if i >= 2}
+_SCALES = {"thousand": 10**3, "million": 10**6, "billion": 10**9, "trillion": 10**12}
+
+
+def _num_word(w: str) -> bool:
+    return w in _UNITS or w in _TENS or w == "hundred" or w in _SCALES
+
+
+def words_to_digits(tokens: list[str]) -> list[str]:
+    """English: a spelled-out cardinal becomes one digit token ("one hundred and twelve" -> "112", "four point two five"
+    -> "4.25" then "425" like any written decimal), so the script and the ASR compare equal whichever way either side
+    wrote the number. Applied to both sides; a run that is not a well-formed number is split where it stops being one."""
+    out: list[str] = []
+    i, n = 0, len(tokens)
+    while i < n:
+        if not _num_word(tokens[i]):
+            out.append(tokens[i])
+            i += 1
+            continue
+        total = cur = 0
+        frac = ""
+        j = i
+        while j < n:
+            w = tokens[j]
+            if w in _UNITS:
+                v = _UNITS[w]
+                if (v >= 10 and cur % 100) or (v < 10 and cur % 10):
+                    break
+                cur += v
+            elif w in _TENS:
+                if cur % 100:
+                    break
+                cur += _TENS[w]
+            elif w == "hundred":
+                if cur % 100 == 0 and cur:
+                    break
+                cur = (cur or 1) * 100
+            elif w in _SCALES:
+                total += (cur or 1) * _SCALES[w]
+                cur = 0
+            elif w == "and" and j + 1 < n and _num_word(tokens[j + 1]) and (cur >= 100 or total):
+                pass
+            elif w == "point" and j + 1 < n and tokens[j + 1] in _UNITS and _UNITS[tokens[j + 1]] < 10:
+                k = j + 1
+                while k < n and tokens[k] in _UNITS and _UNITS[tokens[k]] < 10:
+                    frac += str(_UNITS[tokens[k]])
+                    k += 1
+                j = k
+                break
+            else:
+                break
+            j += 1
+        out.append(str(total + cur) + frac)
+        i = j
+    return out
+
+
 def canonical_for_wer(text: str, lang: str = "en") -> str:
     t = text.replace("’", "'")
     t = re.sub(r"\bper cent\b", "percent", t, flags=re.I)
@@ -72,7 +131,7 @@ def canonical_for_wer(text: str, lang: str = "en") -> str:
     t = _RE_NUM.sub(lambda m: re.sub(r"[\s.,]", "", m[0]), t)
     t = t.replace("-", " ").replace("/", " ")
     toks = normalise_for_wer(t).split()
-    return " ".join(_acronyms(toks) if lang == "en" else toks)
+    return " ".join(words_to_digits(_acronyms(toks)) if lang == "en" else toks)
 
 
 def merge_compounds(ref: list[str], hyp: list[str]) -> tuple[list[str], list[str]]:
