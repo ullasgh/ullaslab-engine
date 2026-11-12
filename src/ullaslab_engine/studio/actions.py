@@ -17,6 +17,7 @@ text sizes, contrast, word budget from a layout audit of every timed scene), dur
 fails) and, when the voice step refused the item, runner_budget."""
 from __future__ import annotations
 import json
+import re
 import shutil
 import time
 from pathlib import Path
@@ -26,6 +27,7 @@ from ..audio import Wav, normalize_loudness
 from ..bundle import load_bundle, seg_text
 from ..config import quality
 from ..qa import _check, _gate, gate_a1, gate_a3, gate_duration
+from ..voice.delivery import NEUTRAL, TAGS, marker, strip_delivery
 from ..voice.prosody import strip_markers
 from . import FPS
 from .qc import FAIL, latest_version
@@ -106,9 +108,29 @@ def install_music(work: Path, music_dir: Path | None = None) -> int:
 
 
 # ------------------------------------------------------------------ voice
+_LEAD_PACING = re.compile(r"^(?:\s*\[\[(?:hook|payoff|pause(?::\d+(?:\.\d+)?)?)\]\])*\s*")
+
+
 def output_text(o: dict) -> str:
-    """The narration of one output, scene by scene, as the director wrote it (pacing markup is kept for narrate())."""
-    return " ".join(t for t in ((sc.get("narration") or {}).get("text", "").strip() for sc in o["scenes"]) if t)
+    """The narration of one output, scene by scene, as the director wrote it (pacing markup is kept for narrate()). When any
+    scene carries `narration.delivery`, each scene's text is preceded by its delivery marker (`[[d:tag]]`, or `[[d:neutral]]`
+    for an untagged scene between tagged ones), after any leading pacing marker; with no tag anywhere the text is exactly as
+    before. The markers are never spoken or counted (prosody.strip_markers)."""
+    scenes = [(sc.get("narration") or {}) for sc in o["scenes"]]
+    tagged = any(n.get("delivery") for n in scenes)
+    parts = []
+    for n in scenes:
+        t = n.get("text", "").strip()
+        if not t:
+            continue
+        if tagged:
+            tag = n.get("delivery") or NEUTRAL
+            if tag != NEUTRAL and tag not in TAGS:
+                raise ActionsError(f"scene narration.delivery {tag!r}: expected one of {', '.join(TAGS)}")
+            lead = _LEAD_PACING.match(t).end()
+            t = f"{t[:lead]}{marker(tag)} {t[lead:]}".strip()
+        parts.append(t)
+    return " ".join(parts)
 
 
 def gate_words(text: str) -> int:
@@ -130,7 +152,7 @@ def voice_budget(doc: dict, wpm: float) -> dict | None:
     raw = os.environ.get("ULLASLAB_VOICE_BUDGET_MIN")
     if not raw:
         return None
-    words = sum(len(t.split()) for t in {output_text(o) for o in doc["outputs"]})
+    words = sum(len(strip_markers(t).split()) for t in {output_text(o) for o in doc["outputs"]})
     speech_min = words / max(wpm, 1.0)
     return {"words": words, "speech_min": round(speech_min, 1), "rtf": RUNNER_RTF,
             "projected_min": round(speech_min * RUNNER_RTF, 1), "budget_min": float(raw)}

@@ -33,6 +33,7 @@ import soundfile as sf
 from ..audio import Wav, normalize_loudness
 from ..config import language
 from ..tts import base
+from .delivery import load_profile, synth_overrides, take_delivery, default_profile
 from .naturalness import score
 from .post import postprocess
 from .prosody import PAUSE_S, split_marked, strip_emphasis
@@ -51,16 +52,17 @@ PACE_DEFAULTS = {"target_wpm": 150, "max_speedup": 1.15, "pause_floor": 0.6, "ma
 PAUSE_CAP_S = 0.55  # longest pause the slow-down may create (A3 max_silence_s 1.2 s also counts trimmed chunk edges)
 _UNSPACED = {"ja", "zh", "th"}
 _SETTING_KEYS = ("exaggeration", "temperature", "effective_cfg_weight", "accent", "ref_clip", "speaker", "seed")
+_TEMP_FACTOR = "temp_factor"   # the naturalness retry's 0.85 on the base temperature; kept when a tag sets its own
 
 
 class Chunk:
-    __slots__ = ("text", "pause", "keep")
+    __slots__ = ("text", "pause", "keep", "delivery")
 
-    def __init__(self, text: str, pause: float, keep: bool):
-        self.text, self.pause, self.keep = text, pause, keep
+    def __init__(self, text: str, pause: float, keep: bool, delivery: str | None = None):
+        self.text, self.pause, self.keep, self.delivery = text, pause, keep, delivery
 
     def __repr__(self) -> str:   # pragma: no cover - debugging aid
-        return f"Chunk({self.text!r}, {self.pause}, {self.keep})"
+        return f"Chunk({self.text!r}, {self.pause}, {self.keep}, {self.delivery})"
 
 
 def resolve_ref(ref: Path | None, ref_clip: int) -> Path | None:
@@ -83,21 +85,23 @@ def plan_chunks(text: str, lang: str = "en") -> list[Chunk]:
     one (the last into the previous) unless a marker asked for the pause after them."""
     out: list[Chunk] = []
     carry: Chunk | None = None
+    sticky: str | None = None
     for t, p, k in split_marked(text):
-        c = Chunk(t, p, k)
+        t, tag, sticky = take_delivery(t, sticky)      # delivery markers ([[d:tag]]) never reach the engine or the word count
+        c = Chunk(t, p, k, tag)
         if carry is not None:
-            c = Chunk(carry.text + " " + c.text, c.pause, c.keep)
+            c = Chunk(carry.text + " " + c.text, c.pause, c.keep, carry.delivery)
             carry = None
         if _words(c.text, lang) < MIN_WORDS and not c.keep:
             if c.pause >= PAUSE_S["para"] and out and not out[-1].keep:   # ends a paragraph: join backwards, keep the break
-                out[-1] = Chunk(out[-1].text + " " + c.text, c.pause, c.keep)
+                out[-1] = Chunk(out[-1].text + " " + c.text, c.pause, c.keep, out[-1].delivery)
                 continue
             carry = c
             continue
         out.append(c)
     if carry is not None:
         if out and not out[-1].keep:
-            out[-1] = Chunk(out[-1].text + " " + carry.text, carry.pause, carry.keep)
+            out[-1] = Chunk(out[-1].text + " " + carry.text, carry.pause, carry.keep, out[-1].delivery)
         else:
             out.append(carry)
     return out
@@ -308,8 +312,44 @@ def fit_pace(chunks: list[np.ndarray], pauses: list[float], keep: list[bool], wo
     return chunks, pauses, info
 
 
+def apply_delivery(parts: list[np.ndarray], pauses: list[float], keeps: list[bool], tags: list[str | None],
+                   profile: dict[str, dict], sr: int):
+    """Per-tag tempo, gain and pauses on the joined-up chunks, before the pacer fits the whole read to its wpm target (the
+    pacer keeps pauses marked `keep`, and scales every chunk's tempo alike, so the differences between lines survive).
+    Returns (parts, pauses, keeps, {tag: lines}). Lines without a tag or a profile entry are left exactly as they are."""
+    parts, pauses, keeps = list(parts), list(pauses), list(keeps)
+    used: dict[str, int] = {}
+    for i, tag in enumerate(tags):
+        st = profile.get(tag or "")
+        if not st:
+            continue
+        used[tag] = used.get(tag, 0) + 1
+        if st.get("tempo", 1.0) != 1.0:
+            parts[i] = atempo(parts[i], sr, st["tempo"])
+        if st.get("gain_db"):
+            parts[i] = (parts[i] * np.float32(10 ** (st["gain_db"] / 20))).astype(np.float32)
+        if st.get("pause_before", 0) > 0 and i > 0:
+            pauses[i - 1] = max(pauses[i - 1], st["pause_before"])
+            keeps[i - 1] = True
+        if st.get("pause_after", 0) > 0 and i + 1 < len(parts):   # the last line has no pause after it
+            pauses[i] = max(pauses[i], st["pause_after"])
+            keeps[i] = True
+    return parts, pauses, keeps, used
+
+
+def _chunk_settings(settings: dict, tag: str | None, profile: dict | None, lang: str) -> dict:
+    """Global settings overlaid with the tag's synthesis settings (profile None or no tag: unchanged)."""
+    if not profile or not tag:
+        return settings
+    forced = settings.get("accent") == "native" and lang != "en"      # upstream: native accent on a non-English target => cfg 0
+    ov = synth_overrides(tag, profile, cfg_forced=forced)
+    if "temperature" in ov:
+        ov["temperature"] = ov["temperature"] * float(settings.get(_TEMP_FACTOR, 1.0))
+    return dict(settings, **ov)
+
+
 def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: dict, cache: Path | None = None,
-          pace: dict | None = None) -> Wav:
+          pace: dict | None = None, profile: dict | None = None) -> Wav:
     plan = plan_chunks(text, lang)
     if not plan:
         raise ValueError("nothing to narrate")
@@ -320,11 +360,11 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
     while i < len(plan):
         c = plan[i]
         try:
-            w = _synth(c.text, lang, ref, eng, settings, cache, ref_sha)
+            w = _synth(c.text, lang, ref, eng, _chunk_settings(settings, c.delivery, profile, lang), cache, ref_sha)
         except base.NoVoiceAvailable:
             if i + 1 < len(plan):            # last resort: say it together with the next chunk
                 log.warning("merging failed chunk %r into the next one", c.text[:60])
-                plan[i + 1] = Chunk(c.text + " " + plan[i + 1].text, plan[i + 1].pause, plan[i + 1].keep)
+                plan[i + 1] = Chunk(c.text + " " + plan[i + 1].text, plan[i + 1].pause, plan[i + 1].keep, c.delivery)
                 del plan[i]
                 continue
             raise
@@ -336,12 +376,16 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
         raise ValueError("sample-rate mismatch between chunks")
     parts = level_match([_trim(w.samples, sr) for w in waves], sr)
     pauses = [c.pause for c in plan]
+    keeps = [c.keep for c in plan]
+    used_tags: dict[str, int] = {}
+    if profile:
+        parts, pauses, keeps, used_tags = apply_delivery(parts, pauses, keeps, [c.delivery for c in plan], profile, sr)
     info = None
     if pace is not None:
         # words: the count the A3 wpm gate will use (whitespace tokens of the script text, see studio/actions.make_voices);
         # without it the spoken words after number verbalisation ("4.95" is four words) are counted, which reads a
         # number-heavy script 15-20% faster than the gate measures it
-        parts, pauses, info = fit_pace(parts, pauses, [c.keep for c in plan],
+        parts, pauses, info = fit_pace(parts, pauses, keeps,
                                        pace.get("words") or _words(" ".join(c.text for c in plan), lang), sr, pace)
     out = []
     for x, p in zip(parts, pauses):
@@ -352,6 +396,8 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
     if info is not None:
         w.meta["pace"] = info
     w.meta["chunks"] = len(plan)
+    if used_tags:
+        w.meta["delivery"] = used_tags
     return w
 
 
@@ -369,16 +415,20 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
             engine: str | None = None, gate: bool = True, overrides: dict | None = None,
             cache_dir: Path | str | None = None, pace: bool = True) -> Wav:
     cfg = language(lang)
-    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k != "pace"})
+    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile")})
     spoken = spoken_text(text, lang, cfg.get("number_format"))
     ref = resolve_ref(Path(ref_wav) if ref_wav else None, st["ref_clip"])
     pc = pace_settings(lang, overrides) if pace else None
+    prof_name = (overrides or {}).get("delivery_profile") or default_profile(lang)
+    profile = load_profile(prof_name) or None          # `baseline` (the default) = {} = today's behaviour exactly
     cache = _cache_dir(cache_dir)
     flags: list[str] = []
     w = None
     for attempt in (0, 1):
         s = dict(st, seed=int(st.get("seed", 0)) + attempt, temperature=st["temperature"] * (0.85 if attempt else 1.0))
-        w = _once(spoken, lang, ref, engine, s, cache, pc)
+        if profile:
+            s[_TEMP_FACTOR] = 0.85 if attempt else 1.0
+        w = _once(spoken, lang, ref, engine, s, cache, pc, profile)
         meta = dict(w.meta)
         w = postprocess(w)
         w.meta = meta
