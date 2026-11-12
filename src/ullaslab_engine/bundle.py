@@ -2,13 +2,18 @@
 from __future__ import annotations
 import json
 import re
+import unicodedata
 from pathlib import Path
 import jsonschema
 
 from .config import ROOT
 
 SCHEMA_DIR = ROOT / "schema"
-_TAG = re.compile(r"[^\w\s]", re.UNICODE)
+# Kept in the comparison text: letters, marks (Mn/Mc: Indic vowel signs and viramas, Arabic marks) and numbers.
+# Python's \w treats marks as non-word, so the old pattern split every Indic word at each vowel sign. Joiners and
+# Arabic short-vowel marks are removed (not split on); everything else (punctuation, symbols) becomes a space.
+_JOINERS = {0x200C, 0x200D}                      # ZWNJ, ZWJ: invisible, differ between script and ASR output
+_ARABIC_VOWELS = set(range(0x064B, 0x0653)) | {0x0640, 0x0670}   # tanwin..sukun, shadda, tatweel, superscript alef
 
 
 class BundleError(ValueError):
@@ -74,7 +79,15 @@ def words(text: str) -> list[str]:
 
 
 def normalise_for_wer(text: str) -> str:
-    import unicodedata
     t = unicodedata.normalize("NFKC", text).casefold().replace("%", " percent ")
     t = re.sub(r"(?<=\d),(?=\d{3})", "", t)  # 1,234 -> 1234
-    return " ".join(_TAG.sub(" ", t).split())
+    return " ".join("".join(_wer_char(c) for c in t).split())
+
+
+def _wer_char(c: str) -> str:
+    o = ord(c)
+    if o in _JOINERS or o in _ARABIC_VOWELS:
+        return ""
+    if c == "_" or c.isspace() or unicodedata.category(c)[0] in "LMN":
+        return c
+    return " "

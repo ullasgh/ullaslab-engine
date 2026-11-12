@@ -848,3 +848,28 @@ def test_the_workflow_allows_only_the_attempt_line_pattern():
     assert rx.match("[voice-attempt] n=2 seed_index=1 wer_pct=1.504 PASS")
     assert not rx.match("[voice-attempt] n=2 seed_index=1 wer_pct=1.504 PASS follow us")
     assert not rx.match("[voice-attempt] n=4 seed_index=3 wer_pct=1 PASS")
+
+
+def test_asr_prompt_is_english_only():
+    from ullaslab_engine import asr
+    assert asr.initial_prompt("en") == asr._PROMPT
+    for lang in ("hi", "ta", "bn", "es", "ja", "ar", "xx"):
+        assert asr.initial_prompt(lang) is None
+
+
+def test_asr_passes_the_prompt_for_the_language(monkeypatch, tmp_path):
+    import sys, types
+    from ullaslab_engine import asr
+    seen = []
+
+    class M:
+        def __init__(self, *a, **k): pass
+        def transcribe(self, audio, **kw):
+            seen.append(kw["initial_prompt"]); return iter([]), None
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=M))
+    monkeypatch.setattr(asr, "_MODEL", {})
+    from ullaslab_engine.audio import Wav
+    import numpy as np
+    Wav(np.zeros(1600, dtype=np.float32), 16000).save(tmp_path / "a.wav")
+    asr.transcribe(tmp_path / "a.wav", "en"); asr.transcribe(tmp_path / "a.wav", "hi")
+    assert seen == [asr._PROMPT, None]

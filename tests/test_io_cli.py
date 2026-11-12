@@ -131,11 +131,28 @@ from ullaslab_engine import model as emodel  # noqa: E402
 REV = "a" * 40
 
 
-def make_archive(path, evil=False):
+@pytest.fixture(autouse=True)
+def _small_weights(monkeypatch):
+    monkeypatch.setattr(emodel, "MIN_WEIGHT_BYTES", 1000)  # the real floor is 1 GiB; fake weights are a few KB
+
+
+def make_archive(path, evil=False, layout="real", weight_bytes=4000):
+    """layout real: snapshot files are regular files. links: the HF CLI layout (snapshot symlinks into a shared blobs
+    folder) archived as links only, which is what the broken mirror shipped. no_weights: config only."""
     src = path.parent / "src"
     snap = src / "models--ai4bharat--indic-parler-tts" / "snapshots" / REV
     snap.mkdir(parents=True)
     (snap / "config.json").write_text("{}")
+    if layout == "real":
+        (snap / "model.safetensors").write_bytes(b"w" * weight_bytes)
+    elif layout == "links":
+        shared = src / "blobs" / "ab"          # shared blobs folder of the hub: NOT inside models--org--name, so not archived
+        shared.mkdir(parents=True)
+        (shared / "abc").write_bytes(b"w" * weight_bytes)
+        blobs = src / "models--ai4bharat--indic-parler-tts" / "blobs"
+        blobs.mkdir()
+        (blobs / "abc").symlink_to("../../blobs/ab/abc")
+        (snap / "model.safetensors").symlink_to("../../blobs/abc")
     (src / "models--ai4bharat--indic-parler-tts" / "refs").mkdir()
     (src / "models--ai4bharat--indic-parler-tts" / "refs" / "main").write_text(REV)
     with tarfile.open(path, "w") as t:
@@ -194,6 +211,43 @@ def test_fetch_model_verifies_extracts_and_marks(tmp_path, local_hosts):
     assert (hub / ("models--" + MODEL.replace("/", "--")) / "refs/main").exists()  # the name the engine loads offline
     assert not (dest / "model.tar").exists() and (dest / f".ok-{sha}").exists()
     assert emodel.fetch_model(p, dest) == hub and len(hits) == 1  # cache restored: no second download
+    srv.shutdown()
+
+
+def test_fetch_model_extracts_real_weights_not_links(tmp_path, local_hosts):
+    tar = tmp_path / "m.tar"
+    sha = make_archive(tar)
+    srv = serve_file(tmp_path, "m.tar", [])
+    hub = emodel.fetch_model({"model": model_obj(tar, sha, f"http://127.0.0.1:{srv.server_address[1]}/m.tar")}, tmp_path / "cache")
+    w = hub / "models--ai4bharat--indic-parler-tts/snapshots" / REV / "model.safetensors"
+    assert w.is_file() and not w.is_symlink() and w.stat().st_size == 4000
+    srv.shutdown()
+
+
+@pytest.mark.parametrize("kw", [{"layout": "links"}, {"layout": "no_weights"}, {"weight_bytes": 10}])
+def test_fetch_model_refuses_link_only_missing_or_tiny_weights(tmp_path, local_hosts, kw):
+    tar = tmp_path / "m.tar"
+    sha = make_archive(tar, **kw)
+    srv = serve_file(tmp_path, "m.tar", [])
+    url = f"http://127.0.0.1:{srv.server_address[1]}/m.tar?sig=SECRETSIG"
+    with pytest.raises(eio.TransferError) as e:
+        emodel.fetch_model({"model": model_obj(tar, sha, url)}, tmp_path / "cache")
+    assert "weights" in str(e.value) or "model files" in str(e.value)
+    assert "SECRETSIG" not in str(e.value) and "127.0.0.1" not in str(e.value) and "/" not in str(e.value).replace("model files", "")
+    assert not (tmp_path / "cache").exists()
+    srv.shutdown()
+
+
+def test_fetch_model_does_not_reuse_a_link_only_marked_cache(tmp_path, local_hosts):
+    tar = tmp_path / "m.tar"
+    sha = make_archive(tar)
+    hits = []
+    srv = serve_file(tmp_path, "m.tar", hits)
+    p = {"model": model_obj(tar, sha, f"http://127.0.0.1:{srv.server_address[1]}/m.tar")}
+    dest = tmp_path / "cache"
+    hub = emodel.fetch_model(p, dest)
+    (hub / "models--ai4bharat--indic-parler-tts/snapshots" / REV / "model.safetensors").unlink()  # a stale, broken restored cache
+    assert emodel.fetch_model(p, dest) == hub and len(hits) == 2
     srv.shutdown()
 
 

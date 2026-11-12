@@ -13,6 +13,18 @@ _MODEL = {}
 _PROMPT = "The rate is 5.25 percent, up 0.5 percentage points. The ratio is 3.5%. Follow UllasLab. Education only."
 
 
+def initial_prompt(lang: str) -> str | None:
+    """The English style hint is English text: sent with another language it pushes Whisper toward English output.
+    Other languages get no prompt, or the optional `asr_prompt` of their languages.yaml entry."""
+    if lang == "en":
+        return _PROMPT
+    try:
+        from .config import language
+        return language(lang).get("asr_prompt") or None
+    except Exception:
+        return None
+
+
 def model_size() -> str:
     return os.environ.get("ULLASLAB_ASR_MODEL", "large-v3")
 
@@ -25,7 +37,7 @@ def transcribe(path: Path, lang: str) -> list[tuple[str, float, float]]:
         _MODEL[size] = WhisperModel(size, device="cpu", compute_type="int8")
     from .audio import Wav, resample
     audio = resample(Wav.load(path), 16000).samples  # decode ourselves: no dependency on PyAV decoding
-    segs, _ = _MODEL[size].transcribe(audio, language=lang, word_timestamps=True, beam_size=5, initial_prompt=_PROMPT,
+    segs, _ = _MODEL[size].transcribe(audio, language=lang, word_timestamps=True, beam_size=5, initial_prompt=initial_prompt(lang),
                                        vad_filter=False, condition_on_previous_text=False)
     out = []
     for s in segs:

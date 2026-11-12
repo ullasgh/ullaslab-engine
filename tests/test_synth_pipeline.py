@@ -67,9 +67,36 @@ def test_stage_flow_en_then_dub_with_fake_tts(work):
     assert "headline" not in json.dumps(p["timeline"])
 
 
-def test_no_voice_marks_captions_only(work, monkeypatch):
+def test_engine_failure_is_a_failed_dub_not_captions_only(work):
     from ullaslab_engine.tts import NoVoiceAvailable
+
+    def boom(*a, **k):
+        raise NoVoiceAvailable("chunk 'SECRET SCRIPT TEXT' failed", [("indic_parler", "OSError")])
+    r = P.stage_tts(work, "en", tts_fn=boom)
+    assert r == {"voice": False, "failed": True, "engine": "indic_parler", "error": "OSError"}
+    st = json.loads((work / "en" / "status.json").read_text())
+    assert st["failed"] is True and st["engine"] == "indic_parler" and st["error"] == "OSError"
+    assert "SECRET" not in json.dumps(st)
+    wrote = P.ensure_dub_result(work, "en", [])           # the QA marker carries the engine and the class, no script text
+    qa = json.loads((work / "en" / "qa.json").read_text())
+    assert wrote and qa["passed"] is False and qa["engine"] == "indic_parler" and qa["error"] == "OSError"
+    why = qa["gates"]["dub_result"]["checks"][0]["value"]
+    assert "indic_parler" in why and "OSError" in why and "SECRET" not in json.dumps(qa)
+
+
+def test_unconfigured_engine_stays_captions_only(work, monkeypatch):
+    from ullaslab_engine.tts import NoVoiceAvailable
+    monkeypatch.setattr(P, "plan_engines", lambda lang: [])
 
     def boom(*a, **k):
         raise NoVoiceAvailable("x")
     assert P.stage_tts(work, "en", tts_fn=boom) == {"voice": False}
+    assert "failed" not in json.loads((work / "en" / "status.json").read_text())
+
+
+def test_cli_tts_exits_nonzero_and_names_engine_and_class_only(work, monkeypatch, capsys):
+    from ullaslab_engine import cli
+    monkeypatch.setattr(P, "stage_tts", lambda *a, **k: {"voice": False, "failed": True, "engine": "indic_parler", "error": "ImportError"})
+    rc = cli.main(["tts", "--work", str(work), "--lang", "ta"])
+    cap = capsys.readouterr()
+    assert rc == 1 and "engine=indic_parler error=ImportError" in cap.err and "captions-only" not in cap.out

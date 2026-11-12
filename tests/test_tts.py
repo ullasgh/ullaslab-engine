@@ -97,3 +97,22 @@ def test_engine_pinned_per_track(bundle_dir):
         w = speechlike(1.0); w.engine = "kokoro"; return w
     synth_segments(load_bundle(bundle_dir), "en", None, tts_fn)
     assert calls[0] is None and set(calls[1:]) == {"kokoro"}
+
+
+def test_failures_name_engine_and_exception_class_only():
+    class Boom(Fake):
+        def synth(self, text, lang, ref):
+            raise EngineUnavailable("indic_parler failed: ValueError", "ValueError")
+    base.register_engine("indic_parler", lambda: Boom("indic_parler", ["ta"]))
+    with pytest.raises(NoVoiceAvailable) as e:
+        T.tts("வணக்கம்", "ta", None)
+    assert e.value.failures == [("indic_parler", "ValueError")]
+
+
+def test_engine_that_cannot_load_is_recorded_with_its_class():
+    def factory():
+        raise OSError("/secret/path/weights missing")
+    base.register_engine("chatterbox", factory)
+    with pytest.raises(NoVoiceAvailable) as e:
+        T.tts("مرحبا", "ar", "ref.wav")
+    assert e.value.failures == [("chatterbox", "OSError")]
