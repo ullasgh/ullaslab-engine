@@ -159,6 +159,7 @@ jobs:
         if: always() && github.event_name == 'workflow_dispatch'
         run: |
           cat work/voice_stats.json || true
+          if [ "$FIXTURE" = true ]; then grep -A40 '^\[export\]' work/logs/studio.log | tail -n 40 || true; fi
           for f in work/en/master/video.mp4 work/en/studio/studio_reel.mp4; do
             [ -f "$f" ] && ffprobe -v error -show_entries format=duration,size -of default=nw=1 "$f"
           done
