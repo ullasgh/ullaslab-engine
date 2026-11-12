@@ -78,10 +78,11 @@ ffmpeg from apt). Code: `studio/actions.py`, `studio/safe_audit.py`, `studio/fix
   line is `axis` (exempt from the word budget like axis tick labels in `qa.gate_a5`).
 - Studio QC verdict (any FAIL fails), and `runner_budget` when the voice step refused the item (below).
 
-Runner budget: Chatterbox on the runner's CPU ran at about 12x real time (37 s of speech took 429 s). `studio-voice` projects
+Runner budget: Chatterbox on the runner's CPU ran at 11.6x to 15.6x real time (37 s of speech took 429 s; 41 s took 641 s on
+run 43178997058); the guard uses 16 (`RUNNER_RTF`). `studio-voice` projects
 the synthesis time of the item's distinct narrations at 150 wpm and that rate and refuses, before any synthesis, an item over
 `ULLASLAB_VOICE_BUDGET_MIN` (60 in render.yml), so the job fails in seconds with a `runner_budget` gate instead of timing out.
-A daily Short (about 130 words, about 11 min of synthesis per distinct narration) fits; a 6-10 min long-form does not and
+A daily Short (about 130 words, about 14 min of synthesis per distinct narration) fits; a 6-10 min long-form does not and
 renders locally (`studio run`) until a faster voice path exists. Job timeouts: plan 5, master 120, dub 50 minutes (175 min,
 inside the private repo's 3 h poll window and the 3 h 15 min URL lifetime).
 

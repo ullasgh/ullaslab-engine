@@ -476,14 +476,14 @@ def test_a4_pacing_fails_each_limit(doc, qc, failing):
 def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp_path, monkeypatch):
     w = _bundle(tmp_path, target_wpm=150)
     AC.prepare_item(w)
-    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 106 words at 150 wpm x 12 = 8.5 min > 1
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 106 words at 150 wpm x 16 = 11.3 min > 1
     called = []
     with pytest.raises(AC.ActionsError, match="voice budget"):
         AC.make_voices(w, narrate_fn=lambda *a, **k: called.append(1), log=lambda *_: None)
     assert called == []
     qa = AC.export(w)
     g = qa["gates"]["runner_budget"]
-    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 8.5
+    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 11.3
 
 
 def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
@@ -492,3 +492,4 @@ def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
     b = AC.voice_budget(F.scenes_doc(), 150)
     assert b["words"] == 106 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration
+    assert b["rtf"] == AC.RUNNER_RTF >= 15.6     # never below the slowest runner rate measured (run 43178997058)

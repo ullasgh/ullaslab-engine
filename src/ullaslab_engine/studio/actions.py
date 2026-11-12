@@ -111,9 +111,10 @@ def output_text(o: dict) -> str:
     return " ".join(t for t in ((sc.get("narration") or {}).get("text", "").strip() for sc in o["scenes"]) if t)
 
 
-# Measured on the first Actions fixture run (ubuntu-24.04, 4 vCPU, Chatterbox on CPU): 429 s of synthesis for 37 s of
-# speech. Used only to refuse, before any synthesis, an item whose narration cannot finish inside the job.
-RUNNER_RTF = 12.0
+# Synthesis seconds per second of speech, Chatterbox on the Actions runner's CPU (ubuntu-24.04, 4 vCPU): 11.6 on run
+# 43172041796 (429 s for 37 s), 15.6 on run 43178997058 (641 s for 41 s, with the slow-down pacer). The slower figure,
+# rounded up, so the guard is not optimistic. Used only to refuse, before any synthesis, an item that cannot finish.
+RUNNER_RTF = 16.0
 
 
 def voice_budget(doc: dict, wpm: float) -> dict | None:
