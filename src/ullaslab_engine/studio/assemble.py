@@ -185,6 +185,10 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
             if t != "kinetic":
                 refs[ref] = data
                 sc["data_ref"] = {"kind": "data_point", "ref": ref}
+            else:
+                # A kinetic scene (as written, or downgraded above for lack of visual data) renders its text only. Drop the
+                # director's data_ref: the renderer rejects a data_ref that has no entry in refs ("data_ref ... not found").
+                sc["data_ref"] = None
         if sc["type"] == "kinetic" and not text:
             sc["on_screen_text"] = " ".join(nar["text"].split()[:7]).rstrip(",;:")
             warns.append(f"{name}/{sid}: kinetic scene without on_screen_text, used the first words of the narration")

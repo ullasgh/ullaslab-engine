@@ -44,12 +44,18 @@ def sha(paths: list[Path], extra: str = "") -> str:
     return h.hexdigest()[:20]
 
 
+def _err_excerpt(text: str, head: int = 500, tail: int = 600) -> str:
+    """Start and end of a long error. The tail alone is a stack trace; the cause is in the first lines (private log only)."""
+    text = text or ""
+    return text if len(text) <= head + tail else f"{text[:head]} ... {text[-tail:]}"
+
+
 def node_render(props: Path, public: Path, out: Path, *, comp: str = "StudioVideo", scale: float = 1.0, frame: int | None = None) -> None:
     cmd = ["node", str(REMOTION / "studio_render.mjs"), "--props", str(props), "--public", str(public), "--out", str(out), "--id", comp]
     cmd += ["--scale", str(scale)] if frame is None else ["--frame", str(frame)]
     r = subprocess.run(cmd, cwd=REMOTION, capture_output=True, text=True)
     if r.returncode:
-        raise StudioError(f"remotion render failed: {(r.stderr or r.stdout)[-600:]}")
+        raise StudioError(f"remotion render failed: {_err_excerpt(r.stderr or r.stdout)}")
 
 
 def node_render_segments(props: Path, public: Path, jobs: list[dict], *, scale: float = 1.0) -> None:
@@ -60,7 +66,7 @@ def node_render_segments(props: Path, public: Path, jobs: list[dict], *, scale: 
            "--scale", str(scale)]
     r = subprocess.run(cmd, cwd=REMOTION, capture_output=True, text=True)
     if r.returncode:
-        raise StudioError(f"remotion segment render failed: {(r.stderr or r.stdout)[-600:]}")
+        raise StudioError(f"remotion segment render failed: {_err_excerpt(r.stderr or r.stdout)}")
 
 
 def ffprobe(path: Path) -> dict:
@@ -499,10 +505,15 @@ class Studio:
         steps = [("timings", self.s_timings), ("broll", self.s_broll), ("assemble", self.s_assemble), ("render", self.s_render),
                  ("mix", self.s_mix), ("package", None)]
         for name, fn in steps:
-            if name == "package":
-                made = self.s_package()
-            else:
-                fn()
+            try:
+                if name == "package":
+                    made = self.s_package()
+                else:
+                    fn()
+            except Exception as e:
+                # Safe summary for the public CI log: stage name and error class only, never the message (it can carry content).
+                self.log(f"[failed] {name} {type(e).__name__}")
+                raise
             if name == until:
                 break
         return made

@@ -23,7 +23,9 @@ NARRATION = [
     "So next time a number looks large, ask what it buys. Follow UllasLab. Education only.",
 ]
 ROLES = ["hook", "setup", "evidence", "mechanism", "consequence", "disclaimer"]
-TYPES = {"short": ["kinetic", "footage", "chart", "kinetic", "kinetic", "kinetic"],
+# One `flow` scene that carries a data_point ref but has no visual_data.json entry: the shape the live item had, which the
+# engine downgrades to kinetic text (the proof run then covers that path too).
+TYPES = {"short": ["kinetic", "footage", "chart", "flow", "kinetic", "kinetic"],
          "reel": ["kinetic", "chart", "footage", "kinetic", "kinetic", "kinetic"]}
 ON_SCREEN = ["Why does saved money shrink?", "Prices up, basket smaller", "Price index (made-up numbers)",
              "Real return = gap", "Check what it buys", "Follow UllasLab"]
@@ -51,6 +53,8 @@ def scene(i: int, typ: str) -> dict:
                  illustrative=True)
     if typ == "chart":
         s["data_ref"] = {"kind": "chart", "ref": "c1"}
+    if typ == "flow":
+        s["data_ref"] = {"kind": "data_point", "ref": "FIXTURE-POINT"}
     return s
 
 

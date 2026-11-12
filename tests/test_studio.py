@@ -553,3 +553,82 @@ def test_sfx_are_in_house_audible_short_and_land_on_their_cue(tmp_path):
     onset = lambda a, b: a + np.flatnonzero(env[int(a * sr):int(b * sr)] > 0.01)[0] / sr
     assert onset(0.0, 3.0) == pytest.approx(2.0, abs=0.02) and onset(3.0, 6.0) == pytest.approx(5.0, abs=0.02)
     assert env[: int(1.9 * sr)].max() < 1e-4                    # nothing before the first cue
+
+
+# ---------------------------------------------------------------- live-render regression (data_ref left on a kinetic scene)
+def _renderer_ref_problems(props: dict) -> list[str]:
+    """Mirror of remotion/src/studio/scenes.ts validation: a scene's data_ref must have an entry in refs (footage and kinetic
+    scenes excepted when they carry no ref)."""
+    bad = []
+    for sc in props["scenes"]:
+        r = (sc.get("data_ref") or {}).get("ref")
+        if r and r not in props["refs"]:
+            bad.append(f"{sc['id']}: data_ref {r} not found")
+    return bad
+
+
+def test_flow_scene_without_visual_data_downgrades_to_kinetic_and_drops_its_data_ref(tmp_path):
+    """Live item 2026-11-12: `flow` scenes with a data_point ref and no visual_data.json were downgraded to kinetic text but kept the
+    ref, and the renderer rejected it ("data_ref ... not found") at frame 0."""
+    item = make_item(tmp_path, voice=False)
+    doc = timed_doc()
+    out = doc["outputs"][0]
+    s = next(x for x in out["scenes"] if x["type"] == "flow") if any(x["type"] == "flow" for x in out["scenes"]) else out["scenes"][3]
+    s["type"], s["data_ref"], s["on_screen_text"] = "flow", {"kind": "data_point", "ref": "DGS10-DGS2"}, "Curve flips"
+    k = out["scenes"][0]
+    k["type"], k["data_ref"] = "kinetic", {"kind": "data_point", "ref": "DGS3MO"}   # a kinetic scene with a ref is dropped too
+    props, warns = build_props(item, doc, out, tmp_path / "pub", clip_prep=lambda *a: None)
+    got = {x["id"]: x for x in props["scenes"]}
+    assert got[s["id"]]["type"] == "kinetic" and got[s["id"]]["data_ref"] is None
+    assert got[k["id"]]["data_ref"] is None
+    assert any("rendered as kinetic text" in w for w in warns)
+    assert _renderer_ref_problems(props) == []
+
+
+@needs_ffmpeg
+def test_fixture_through_the_runner_layout_builds_props_the_renderer_accepts(tmp_path):
+    """The fixture bundle is zipped and unpacked as the runner does (fetch: safe_unzip; then studio-prepare) and carries the live
+    item's flow-without-data shape; every output's props must pass the renderer's ref check, so fixture-green means live-green."""
+    import zipfile
+    from ullaslab_engine import io as eio
+    from ullaslab_engine.studio import fixture as F
+    from ullaslab_engine.studio.actions import jload, prepare_item
+    src = tmp_path / "src"
+    F.build(src, ref_voice=False)
+    z = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        for p in sorted((src / "bundle").rglob("*")):
+            if p.is_file():
+                zf.write(p, p.relative_to(src / "bundle").as_posix())
+    work = tmp_path / "runner"
+    eio.safe_unzip(z, work / "bundle")
+    item = prepare_item(work)
+    doc = jload(item / "scenes.json")
+    assert any(sc["type"] == "flow" and sc["data_ref"]["kind"] == "data_point" for sc in doc["outputs"][0]["scenes"])
+    words = fake_asr_words(" ".join(F.NARRATION))
+    for o in doc["outputs"]:
+        time_output(o["scenes"], words, 22.0, o["output"])
+        props, warns = build_props(item, doc, o, tmp_path / "pub", allow_placeholder=True, clip_prep=lambda *a: None)   # footage comes from the broll stage
+        assert _renderer_ref_problems(props) == [], o["output"]
+        assert any("rendered as kinetic text" in w for w in warns) == (o["output"] == "short")
+
+
+def test_failed_stage_is_logged_as_stage_and_error_class_only(studio_item):
+    """The public CI log can only show a safe summary: stage name and exception class, never the message."""
+    logs = []
+
+    def boom(*a, **k):
+        raise RuntimeError("secret script words")
+    s = Studio(studio_item, preview=True, asr=lambda p, l: (fake_asr_words(" ".join(NARRATION)), "fake"), render=boom, log=logs.append)
+    with pytest.raises(RuntimeError):
+        s.run()
+    assert "[failed] render RuntimeError" in logs
+    assert not any("secret" in m for m in logs if m.startswith("[failed]"))
+
+
+def test_error_excerpt_keeps_the_head_and_the_tail():
+    from ullaslab_engine.studio.run import _err_excerpt
+    t = "HEAD-CAUSE " + "x" * 5000 + " TAIL-STACK"
+    e = _err_excerpt(t)
+    assert e.startswith("HEAD-CAUSE") and e.endswith("TAIL-STACK") and len(e) < 1200
+    assert _err_excerpt("short") == "short"
