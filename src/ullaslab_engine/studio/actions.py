@@ -244,7 +244,7 @@ def export(work: Path, *, asr_wer: Callable | None = None, audit_fn: Callable | 
     """Copy the studio outputs into the upload layout and write qa_en.json. Always writes a qa file (a failed or partial
     studio run gives passed=false), so the private repo sees which gate broke. An unexpected error becomes a failed
     `export` gate carrying only the exception type; its message goes to the private log (it can quote script text)."""
-    work = Path(work)
+    work = Path(work).resolve()   # the layout audit runs node in remotion/: paths must not be relative
     m = load_bundle(work / "bundle")
     try:
         qa = _export(work, m, asr_wer, audit_fn)

@@ -390,3 +390,20 @@ def test_music_fetch_off_never_calls_r2_or_wrangler(tmp_path):
     led = [{"id": "t1", "file": "t1.mp3", "sha256": "0" * 64}]
     r = A.fetch_missing_tracks(led, tmp_path, env={"ULLASLAB_MUSIC_FETCH": "off"}, getter=lambda *a: calls.append(a))
     assert calls == [] and r["fetched"] == [] and "fetch off" in r["failed"]["t1"]
+
+
+def test_layout_audit_hands_node_absolute_paths(tmp_path, monkeypatch):
+    """Regression (first Actions fixture run): node runs with cwd=remotion/, so a relative work dir broke the audit."""
+    import subprocess
+    seen = {}
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True):
+        seen["cmd"] = cmd
+        Path(cmd[cmd.index("--audit-out") + 1]).write_text('{"width": 1080, "height": 1920, "frames": []}')
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(SA.subprocess, "run", fake_run)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "w").mkdir()
+    SA.node_audit(Path("w/props.json"), Path("w/public"), [1], Path("w/a.json"))
+    for flag in ("--props", "--public", "--audit-out"):
+        assert Path(seen["cmd"][seen["cmd"].index(flag) + 1]).is_absolute(), flag

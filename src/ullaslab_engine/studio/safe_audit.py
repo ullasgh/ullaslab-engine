@@ -69,6 +69,7 @@ def check_audit(audit: dict, orientation: str) -> dict:
 
 def node_audit(props: Path, public: Path, frames: list[int], out: Path) -> dict:
     from .run import REMOTION, StudioError
+    props, public, out = Path(props).resolve(), Path(public).resolve(), Path(out).resolve()   # node runs in remotion/
     cmd = ["node", str(REMOTION / "studio_render.mjs"), "--props", str(props), "--public", str(public),
            "--audit-frames", ",".join(map(str, frames)), "--audit-out", str(out)]
     r = subprocess.run(cmd, cwd=REMOTION, capture_output=True, text=True)
