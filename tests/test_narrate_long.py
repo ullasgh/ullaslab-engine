@@ -193,9 +193,26 @@ def test_pace_is_bounded_and_flags_a_script_that_is_too_slow(eng):
     w = N.narrate(LONG, "en", engine="fakeclone", gate=False, normalize=False)
     assert w.meta["pace"]["speedup"] == 1.15
     assert any(f.startswith("pace:") for f in w.flags)
-    eng(FakeClone(words_per_s=3.5))                     # already fast: untouched
+    eng(FakeClone(words_per_s=5.0))                     # far too fast (about 220 wpm): slowed as far as allowed, flagged
     w = N.narrate(LONG, "en", engine="fakeclone", gate=False, normalize=False)
-    assert w.meta["pace"]["speedup"] == 1.0 and w.meta["pace"]["pause_scale"] == 1.0
+    assert w.meta["pace"]["speedup"] == round(1 / 1.15, 3) and w.meta["pace"]["pause_scale"] == 1.6
+    assert any(f.startswith("pace:") and "over" in f for f in w.flags)
+
+
+def test_fast_engine_is_slowed_into_the_a3_range_without_changing_pitch(eng):
+    """WP8 regression: Chatterbox read the Actions fixture at 172-183 wpm (A3 allows 135-175) and the pacer only ever sped
+    speech up. A read about 20% too fast must come back to the target with the pitch kept."""
+    from ullaslab_engine.config import quality
+    q = quality()["A3_narration"]
+    eng(FakeClone(words_per_s=3.8))                     # about 180 wpm once pauses are added (the runner read 172-183)
+    raw = N.narrate(LONG, "en", engine="fakeclone", gate=False, normalize=False, pace=False)
+    eng(FakeClone(words_per_s=3.8))
+    w = N.narrate(LONG, "en", engine="fakeclone", gate=False, normalize=False)
+    p = w.meta["pace"]
+    assert p["raw_wpm"] > q["wpm_max"] and q["wpm_min"] <= p["wpm"] <= q["wpm_max"] and abs(p["wpm"] - 150) <= 6
+    assert p["speedup"] < 1.0 and p["pause_scale"] >= 1.0 and w.duration > raw.duration * 1.1
+    assert abs(_f0_median(w) / _f0_median(raw) - 1) < 0.04       # same voice: pitch kept
+    assert not any(f.startswith("pace:") for f in w.flags)
 
 
 def test_explicit_pauses_are_kept_when_pacing(eng):
