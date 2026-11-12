@@ -4,7 +4,7 @@ import { scalePoint } from "d3-scale";
 import { ticks as d3ticks } from "d3-array";
 import { useRamp, useStudio } from "./context";
 import { ChartShell, type ChartMeta } from "./Stamp";
-import { counterValue, fmtNum, linePath, makeLinear, makeTimeScale, niceExtent, parseX, plotValues, revealPoints, type Band, type XY } from "./chartMath";
+import { counterValue, fmtNum, linePath, makeLinear, makeTimeScale, niceExtent, parseX, pickTicks, plotValues, revealPoints, type Band, type XY } from "./chartMath";
 import type { Palette } from "./palettes";
 
 type ColorKey = "accent" | "accent2" | "accent3" | "negative" | "muted";
@@ -63,7 +63,10 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
   const Yd = niceExtent(ys, 0.1, data.includeZero ?? preset.chart.zeroBaseline, preset.chart.zeroBaseline);
   const Y = makeLinear(Yd, [h - m.b, m.t]);
   const span = (Math.max(...xs) - Math.min(...xs)) / 86400000;
-  const xt = X.ticks(L.vertical ? 4 : 6);
+  const xtAll = X.ticks(L.vertical ? 4 : 6);
+  // labels are drawn at fs size (bold-free digits ~0.6 em wide); the first one is clamped to the left edge. Drop any that would touch.
+  const lw = (d: Date) => xTickLabel(d, span).length * fs * 0.62;
+  const xt = pickTicks(xtAll.map((d) => Math.max(X(d), m.l + lw(d) / 2)), xtAll.map(lw), fs * 0.8).map((i) => xtAll[i]);
   const yt = d3ticks(Yd[0], Yd[1], Y_TICKS);
   const reveal = useRamp(10, 10 + (data.revealFrames ?? 80));
   const frame = useCurrentFrame();
