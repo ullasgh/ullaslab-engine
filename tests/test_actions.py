@@ -134,7 +134,8 @@ def test_make_voices_one_synthesis_per_distinct_narration_with_clone_ref_and_pac
     assert len(calls) == 1          # short and reel share their narration
     text, lang, ref, ov, cache = calls[0]
     assert text == " ".join(F.NARRATION) and lang == "en" and ref == w / "voice.wav"
-    assert ov == {"pace": {"target_wpm": 150}} and cache == w / "tts_cache"
+    # the pacer fits to the A3 gate's word count (whitespace tokens of the script), not to the spoken words
+    assert ov == {"pace": {"target_wpm": 150, "words": len(text.split())}} and cache == w / "tts_cache"
     assert (w / "item" / "voice.short.wav").is_file() and (w / "item" / "voice.reel.wav").is_file()
     assert st["reel"]["same_as"] == "short" and st["short"]["clone_ref"] is True
     assert set(json.loads((w / "voice_stats.json").read_text())["outputs"]) == {"short", "reel"}
@@ -493,3 +494,102 @@ def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
     b = AC.voice_budget(F.scenes_doc(), 150)
     assert b["words"] == 106 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration
     assert b["rtf"] == AC.RUNNER_RTF >= 15.6     # never below the slowest runner rate measured (run 43178997058)
+
+
+# ------------------------------------------------------------------ live QA fixes (2026-11-12)
+def test_gate_words_counts_like_gate_a3_and_not_like_the_spoken_words():
+    from ullaslab_engine.voice.narrate import _words
+    from ullaslab_engine.voice.textnorm import normalize_text
+    t = "It was 4.95 percent on November 3rd, [[pause:0.5]] and 4.88 on 10-year bonds."
+    assert AC.gate_words(t) == 12          # whitespace tokens without the marker
+    spoken = _words(normalize_text("It was 4.95 percent on November 3rd, and 4.88 on 10-year bonds.", "en"), "en")
+    assert spoken > AC.gate_words(t) + 4   # numbers verbalise to several words: the old pacer count
+
+
+def test_pacer_fits_the_gate_word_count_so_a_number_heavy_script_is_not_read_too_slowly():
+    import numpy as np
+    from ullaslab_engine.voice import narrate as N
+    sr = 24000
+    chunks = [np.ones(int(sr * 6.0), dtype=np.float32) * 0.1 for _ in range(4)]   # 24 s of speech
+    pauses, keep = [0.4] * 4, [False] * 4
+    pace = dict(N.PACE_DEFAULTS)
+    # 40 gate words in 25.6 s is 94 wpm: the pacer must shorten to 150 wpm (16 s) as far as its caps allow
+    _, _, old = N.fit_pace(chunks, pauses, keep, 40 * 2, sr, pace)      # the old count: 80 spoken words
+    _, _, new = N.fit_pace(chunks, pauses, keep, 40, sr, pace)
+    assert old["raw_wpm"] > new["raw_wpm"]            # the old count flattered the raw rate by the verbalisation factor
+    assert new["speedup"] == pace["max_speedup"]      # and the true rate needs the full speed-up
+    assert pace_words_override_reaches_once()
+
+
+def pace_words_override_reaches_once():
+    from ullaslab_engine.voice import narrate as N
+    assert N.pace_settings("en", {"pace": {"target_wpm": 150, "words": 125}})["words"] == 125
+    return N.pace_settings("en")["words"] == 0
+
+
+def test_brand_spellings_are_one_token_in_the_wer_and_real_errors_still_count():
+    c = canonical_for_wer
+    for hyp in ("Follow Ulos' lab, education only.", "Follow Ullas lab. Education only.", "Follow Ullis Lab education only", "follow Ula s lab, education only", "Follow Ula's lab. Education only."):
+        assert c(hyp) == c("Follow UllasLab. Education only.") == "follow ullaslab education only"
+    assert c("the lab") == "the lab" and c("Hullas lab") != "ullaslab"
+    from ullaslab_engine.asr import error_rate
+    assert error_rate("Follow UllasLab. Education only.", "Follow Ulos lab education only", "en") == 0.0
+    assert error_rate("Follow UllasLab. Education only.", "Follow Ulos lab education on", "en") > 0
+
+
+def _voiced(tmp_path, wpm_words=None, secs=None):
+    w = _bundle(tmp_path)
+    AC.prepare_item(w)
+    text = " ".join(F.NARRATION)
+    n = len(text.split())
+    dur = secs if secs is not None else n / 150 * 60 + 0.6
+    for o in ("short", "reel"):
+        speechlike(dur).save(w / "item" / f"voice.{o}.wav")
+    words = [(t, 0.3 + i * (dur - 0.6) / n, 0.3 + (i + 0.9) * (dur - 0.6) / n) for i, t in enumerate(text.split())]
+    return w, words
+
+
+def test_voice_gates_pass_at_target_pace_and_write_numbers_only(tmp_path):
+    w, words = _voiced(tmp_path, secs=42.0)
+    lines = []
+    res = AC.voice_gates(w, transcribe_fn=lambda p, l: words, wer_fn=lambda r, h, l: 1.0, log=lines.append)
+    a3 = {c["name"]: c for c in res["gates"]["A3"]["checks"]}
+    assert res["passed"] and 135 <= a3["wpm"]["value"] <= 175 and a3["wer_pct"]["limit"] == 3
+    assert res["gates"]["duration"]["checks"][0]["limit"] == "30.0-60.0"
+    assert (w / "voice_gates.json").is_file()
+    assert lines and all(l.startswith("[voice-gate] ") and l.endswith(("PASS", "FAIL")) for l in lines)
+
+
+@pytest.mark.parametrize("secs,wer,failing", [(120.0, 1.0, {"A3", "duration"}), (42.0, 3.01, {"A3"}), (62.0, 1.0, {"A3", "duration"})])
+def test_voice_gates_fail_each_unchanged_limit_before_the_render(tmp_path, secs, wer, failing):
+    w, words = _voiced(tmp_path, secs=secs)
+    res = AC.voice_gates(w, transcribe_fn=lambda p, l: words, wer_fn=lambda r, h, l: wer, log=lambda *_: None)
+    assert {g for g, v in res["gates"].items() if not v["passed"]} == failing and not res["passed"]
+
+
+def test_export_reports_the_voice_gate_failure_without_a_render(tmp_path):
+    w, words = _voiced(tmp_path, secs=42.0)
+    (w / "logs").mkdir()
+    (w / "logs" / "studio.log").write_text("private")
+    AC.voice_gates(w, transcribe_fn=lambda p, l: words, wer_fn=lambda r, h, l: 3.5, log=lambda *_: None)
+    qa = AC.export(w)
+    assert not qa["passed"] and not qa["gates"]["A3"]["passed"] and "studio_run" not in qa["gates"]
+    assert json.loads((w / "en" / "master" / "qa.json").read_text())["passed"] is False
+
+
+def test_studio_voice_command_fails_when_a_voice_gate_fails(tmp_path, monkeypatch):
+    from ullaslab_engine import cli
+    monkeypatch.setattr(AC, "make_voices", lambda *a, **k: {})
+    monkeypatch.setattr(AC, "voice_gates", lambda *a, **k: {"passed": False, "gates": {"A3": {"passed": False, "checks": []}}})
+    assert cli.cmd_studio_voice(type("A", (), {"work": str(tmp_path)})()) == 1
+
+
+def test_chart_stamp_drops_the_freshness_tag_before_it_is_drawn():
+    """Live run 2026-11-12: the content stamp ended with '[RECENT]' and studio QC (no freshness labels on screen) failed."""
+    from ullaslab_engine.studio import assemble as A
+    c = F.chart()
+    c["source"] = {"name": "Source: FRED, St. Louis Fed, DGS10. As of 2026-11-09. [RECENT]", "as_of": "2026-11-09"}
+    k = A.to_kit_chart("c1", c)
+    assert k["meta"]["source"]["name"] == "Source: FRED, St. Louis Fed, DGS10. As of 2026-11-09."
+    assert k["meta"]["freshness"] == c.get("freshness", "RECENT")           # the tag stays in the data
+    assert A.stamp_name("Source: x [LAGGED]") == "Source: x" and A.stamp_name("Source: [x] plan") == "Source: [x] plan"

@@ -231,6 +231,7 @@ def pace_settings(lang: str, overrides: dict | None = None) -> dict:
     p["pause_floor"] = min(1.0, max(0.0, float(p["pause_floor"])))
     p["max_slowdown"] = max(1.0, float(p["max_slowdown"]))
     p["pause_ceiling"] = max(1.0, float(p["pause_ceiling"]))
+    p["words"] = int(p.get("words") or 0)
     return p
 
 
@@ -337,7 +338,11 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
     pauses = [c.pause for c in plan]
     info = None
     if pace is not None:
-        parts, pauses, info = fit_pace(parts, pauses, [c.keep for c in plan], _words(" ".join(c.text for c in plan), lang), sr, pace)
+        # words: the count the A3 wpm gate will use (whitespace tokens of the script text, see studio/actions.make_voices);
+        # without it the spoken words after number verbalisation ("4.95" is four words) are counted, which reads a
+        # number-heavy script 15-20% faster than the gate measures it
+        parts, pauses, info = fit_pace(parts, pauses, [c.keep for c in plan],
+                                       pace.get("words") or _words(" ".join(c.text for c in plan), lang), sr, pace)
     out = []
     for x, p in zip(parts, pauses):
         out.append(x)
