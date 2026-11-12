@@ -12,8 +12,9 @@ Long text (M2b fixes for the long-synthesis crash and the slow pace)
   - Joins are clean: each chunk's leading and trailing silence is trimmed, short fades remove clicks, and chunk levels are
     matched to their median (at most +-MAX_LEVEL_DB) before the pauses are inserted.
   - Pace: a target in words per minute (voice_defaults.pace in config/languages.yaml, default 150; a language entry may
-    override it) is met first by shortening punctuation pauses (never below pause_floor of their length; explicit markers
-    are kept) and then by a pitch-preserving tempo change (ffmpeg atempo) of at most max_speedup. The voice is not
+    override it), both ways: a slow read gets shorter punctuation pauses (never below pause_floor of their length) and then
+    a pitch-preserving tempo change (ffmpeg atempo) of at most max_speedup; a fast read gets a slow-down of at most
+    max_slowdown and then longer pauses (at most pause_ceiling, never past PAUSE_CAP_S). Explicit markers keep their pauses. The voice is not
     re-cloned or re-pitched. The achieved rate goes to Wav.meta["pace"]; a result still more than 10% under target adds a
     flag. The naturalness gate (pause_max_s, syllable_rate, ...) still checks the result."""
 from __future__ import annotations
@@ -46,7 +47,8 @@ MAX_LEVEL_DB = 6.0
 FADE_S = 0.008
 TRIM_DB = -45.0
 CHUNK_CACHE_VERSION = 1
-PACE_DEFAULTS = {"target_wpm": 150, "max_speedup": 1.15, "pause_floor": 0.6}
+PACE_DEFAULTS = {"target_wpm": 150, "max_speedup": 1.15, "pause_floor": 0.6, "max_slowdown": 1.15, "pause_ceiling": 1.3}
+PAUSE_CAP_S = 0.55  # longest pause the slow-down may create (A3 max_silence_s 1.2 s also counts trimmed chunk edges)
 _UNSPACED = {"ja", "zh", "th"}
 _SETTING_KEYS = ("exaggeration", "temperature", "effective_cfg_weight", "accent", "ref_clip", "speaker", "seed")
 
@@ -227,20 +229,68 @@ def pace_settings(lang: str, overrides: dict | None = None) -> dict:
     p["target_wpm"] = float(p["target_wpm"] or 0)
     p["max_speedup"] = max(1.0, float(p["max_speedup"]))
     p["pause_floor"] = min(1.0, max(0.0, float(p["pause_floor"])))
+    p["max_slowdown"] = max(1.0, float(p["max_slowdown"]))
+    p["pause_ceiling"] = max(1.0, float(p["pause_ceiling"]))
     return p
+
+
+def cap_inner_silence(x: np.ndarray, sr: int, cap_s: float = PAUSE_CAP_S, thresh_db: float = -45.0,
+                      frame_s: float = 0.02) -> np.ndarray:
+    """Shorten every silent run inside a chunk (same -45 dB / 20 ms frames as the A3 max_silence_s measure) to cap_s.
+    Used after a slow-down, which stretches the engine's own mid-sentence pauses along with the speech."""
+    f = max(1, int(sr * frame_s))
+    n = len(x) // f
+    if n < 3:
+        return x
+    rms = np.sqrt(np.mean(x[: n * f].astype(np.float64).reshape(n, f) ** 2, axis=1))
+    silent = rms < 10 ** (thresh_db / 20)
+    keep_frames = int(cap_s / frame_s)
+    out, i = [], 0
+    while i < n:
+        j = i
+        while j < n and silent[j] == silent[i]:
+            j += 1
+        a, b = i * f, j * f
+        if silent[i] and 0 < i and j < n and (j - i) > keep_frames:   # inner runs only; edges are trimmed elsewhere
+            h = keep_frames * f // 2
+            out += [x[a: a + h], x[b - h: b]]
+        else:
+            out.append(x[a:b])
+        i = j
+    out.append(x[n * f:])
+    return np.concatenate(out).astype(x.dtype)
 
 
 def fit_pace(chunks: list[np.ndarray], pauses: list[float], keep: list[bool], words: int, sr: int,
              pace: dict) -> tuple[list[np.ndarray], list[float], dict]:
-    """Shorten punctuation pauses, then speed up speech (bounded), until words / total time reaches target_wpm."""
+    """Bring words / total time to target_wpm, both ways and bounded. Too slow: shorten punctuation pauses (not below
+    pause_floor), then speed speech up (at most max_speedup). Too fast (WP8: Chatterbox read the fixture at 172-183 wpm on
+    the Actions runner, past the A3 limit of 175): slow speech down (at most max_slowdown), then lengthen punctuation
+    pauses (at most pause_ceiling, never past PAUSE_CAP_S). Explicit markers keep their pauses. Pitch is kept (ffmpeg atempo)."""
     speech = sum(len(c) for c in chunks) / sr
     total = speech + sum(pauses)
     info = {"target_wpm": pace["target_wpm"], "raw_wpm": round(words / total * 60, 1) if total else 0.0, "speedup": 1.0, "pause_scale": 1.0}
     tgt = pace["target_wpm"]
-    if not tgt or not words or total <= 0 or words / total * 60 >= tgt:
+    if not tgt or not words or total <= 0 or abs(words / total * 60 - tgt) < 0.5:
         info["wpm"] = info["raw_wpm"]
         return chunks, pauses, info
     want = words / tgt * 60                       # seconds the narration should take
+    if total < want:                              # too fast: slower speech first, then longer pauses (each capped)
+        f = max(1.0 / pace["max_slowdown"], min(1.0, speech / max(want - sum(pauses), 1e-6)))
+        if f < 0.999:
+            chunks = [cap_inner_silence(atempo(c, sr, f), sr) for c in chunks]
+            info["speedup"] = round(f, 3)
+        speech = sum(len(c) for c in chunks) / sr
+        soft = sum(p for p, k in zip(pauses, keep) if not k)
+        fixed = sum(pauses) - soft
+        if soft > 0 and speech + sum(pauses) < want:
+            scale = min(pace["pause_ceiling"], (want - speech - fixed) / soft)
+            # a lengthened pause never passes PAUSE_CAP_S (A3 max_silence_s is 1.2 s; ASR word edges add to the gap)
+            pauses = [p if k or p <= 0 else max(p, min(p * scale, PAUSE_CAP_S)) for p, k in zip(pauses, keep)]
+            info["pause_scale"] = round(scale, 3)
+        total = sum(len(c) for c in chunks) / sr + sum(pauses)
+        info["wpm"] = round(words / total * 60, 1)
+        return chunks, pauses, info
     soft = sum(p for p, k in zip(pauses, keep) if not k)
     fixed = sum(pauses) - soft
     if soft > 0:
@@ -340,6 +390,9 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
     if p and p["target_wpm"] and p["wpm"] < 0.9 * p["target_wpm"]:
         flags.append(f"pace: {p['wpm']} wpm is more than 10% under the {p['target_wpm']:.0f} wpm target "
                      f"(max speed-up {pc['max_speedup']} reached); shorten pauses in the script or raise max_speedup")
+    if p and p["target_wpm"] and p["wpm"] > 1.1 * p["target_wpm"]:
+        flags.append(f"pace: {p['wpm']} wpm is more than 10% over the {p['target_wpm']:.0f} wpm target "
+                     f"(max slow-down {pc['max_slowdown']} reached)")
     w = normalize_loudness(w) if normalize else w
     w.engine, w.flags, w.meta = used, flags, meta  # normalize_loudness builds a new Wav: keep the engine so synth_segments can pin it
     return w

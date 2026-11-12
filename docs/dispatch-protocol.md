@@ -1,7 +1,10 @@
 # Dispatch protocol (private content repo to this engine)
 
-This repo is public. It holds no secrets, no content, no voice sample and no scripts. Everything arrives and
-leaves through presigned R2 URLs (S3 domain, 2 h expiry) in a `repository_dispatch` payload.
+This repo is public. It holds no content, no voice sample and no scripts. Everything arrives and leaves through presigned
+R2 URLs (S3 domain) in a `repository_dispatch` payload. The URLs live 3 h 15 min (the private repo's 3 h poll window plus
+runner queueing), because the dub jobs fetch and every job uploads only after the master job. The one repository secret is
+`PIXABAY_API_KEY` (stock-footage search), given to the studio render step only. The shape contract is
+`schema/payload.schema.json` (vendored verbatim by the private repo and checked there by a test).
 
 ## Trigger
 
@@ -20,12 +23,16 @@ Contents: write on this repo only (held by the private repo).
     "model": {"url": "https://...  (GET, tar of the Indic Parler-TTS Hugging Face cache; only when a language needs it)",
               "sha256": "<64 hex of the tar>", "revision": "<40 hex model commit>", "size": 3900000000},
     "languages": ["en", "hi", "ta"],
+    "studio": {"music_urls": {"<ledger file name>.mp3": "https://...  (GET, licensed music bed files named in config/music_ledger.yaml)"}},
     "outputs": {
       "master.mp4": "PUT url", "timing_en.json": "PUT url",
       "audio_en.wav": "PUT url", "audio_hi.wav": "PUT url",
       "captions_en.srt": "PUT url", "captions_en.vtt": "PUT url", "captions_hi.srt": "PUT url",
       "hi_vertical.mp4": "PUT url",
-      "qa_en.json": "PUT url", "qa_hi.json": "PUT url", "qa_hi_vertical.json": "PUT url"
+      "qa_en.json": "PUT url", "qa_hi.json": "PUT url", "qa_hi_vertical.json": "PUT url",
+      "studio_reel.mp4": "PUT url", "studio_captions_reel.srt": "PUT url", "studio_thumb.png": "PUT url",
+      "studio_contact_sheet_short.png": "PUT url", "studio_qc.json": "PUT url", "studio_publish.md": "PUT url",
+      "studio_log.txt": "PUT url"
     }
   }
 }
@@ -60,7 +67,12 @@ It is one nested property, so the payload stays at 8 of GitHub's 10 `client_payl
 ```
 manifest.json            schema/manifest.schema.json
 charts/*.json            schema/chart.schema.json
+studio/<files>           WP8: the studio queue item (manifest `studio.files`): scenes.json, meta.json,
+                         charts.resolved.json, optional visual_data.json and sources.md
 ```
+
+`studio` (WP8, required by the master job): `primary` (the output published as `master.mp4`: `long` for long-form, `short`
+else `reel` for a Short), `outputs` (exactly the outputs in scenes.json), `files`, `target_wpm` (narration pace, 150).
 
 `manifest.json`: slug, orientation (`vertical` 1080x1920 or `horizontal` 1920x1080), `format` 1 to 10 (selects
 the template), `languages`, `segments` (id plus text per language; narration unit and caption unit),
@@ -74,11 +86,18 @@ present, must equal the SHA-256 of the canonical JSON without that key (`qa.char
 ## Job flow (`.github/workflows/render.yml`)
 
 1. `plan`: validates the payload, outputs the dub matrix and the extras each language needs.
-2. `master`: TTS (en), faster-whisper aligned captions, Remotion render, QA, upload. Writes `timing_en.json`.
+2. `master` (WP8, the V2 studio path, `docs/studio.md` "On GitHub Actions"): fetch, rebuild the studio item, one narration
+   per output (Chatterbox clone of the reference, pace target), `studio run --asr faster` (per-scene cache, styles, mix,
+   package, studio QC), export and QA, upload. Writes `timing_en.json` (the manifest's English segments aligned to the
+   published output's words) so the dubs line up with `master.mp4`. Timeout 120 min.
 3. `dub` (matrix, one job per language): TTS (clone or stock voice per `config/languages.yaml`), translated
    captions timed from the English segment windows, slot-aligned dub audio, A1 to A5 QA, upload. A language
    with no usable voice (for example Arabic when cloning fails) degrades to captions only.
-   `variants` for the language (the Hindi vertical cut) are rendered from a natural-timeline Hindi track.
+   `variants` for the language (the Hindi vertical cut) are rendered from a natural-timeline Hindi track. Timeout 50 min.
+4. `workflow_dispatch` (by hand, input `fixture`): the master job on the synthetic public-safe fixture
+   (`studio/fixture.py`: generic text, a reference voice made with the Kokoro stock voice, generated footage), no payload,
+   no fetch, no upload; it prints the studio log and the numbers. Use it to prove a change on a branch:
+   `gh workflow run render --ref <branch> -f fixture=studio-short`.
 
 Dub audio is slot-aligned to the master: each dubbed segment starts at the master segment start. A segment
 that runs into the next one is reported as `dub_overruns` and fails QA; the translator must shorten it.
@@ -101,6 +120,8 @@ Dub tracks are WAV (PCM 16-bit, 48 kHz): there is no ffmpeg on the Python side.
 ## Notes for the private repo
 - The private repo must gate on `qa_*.json` (`passed: true`) and `status_<lang>.json` (`voice: false` means that
   language is captions only); `master.mp4` is uploaded even when QA fails.
+- Studio-path logs: the voice and studio steps write to `work/logs/studio.log` (errors there can quote script text). It is
+  uploaded only by presigned PUT as `studio_log.txt`; the public Actions log shows exit codes, stage names and gate numbers.
 - `job_id` appears in the public Actions UI (concurrency group): use an opaque id, not a topic slug.
 - A4 checks the planned visual beats the renderer animates, not measured frame differences.
 - Schema errors in logs show only the path and validator, never values.

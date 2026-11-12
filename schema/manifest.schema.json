@@ -242,6 +242,56 @@
         "chalk-talk",
         "clean-tech"
       ]
+    },
+    "studio": {
+      "description": "WP8: the V2 studio render on GitHub Actions. The bundle carries the studio item under studio/ (files lists each one); `primary` is the output published as master.mp4.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary",
+        "outputs",
+        "files"
+      ],
+      "properties": {
+        "primary": {
+          "enum": [
+            "long",
+            "short",
+            "reel"
+          ]
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "long",
+              "short",
+              "reel"
+            ]
+          }
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "scenes.json",
+              "meta.json",
+              "charts.resolved.json",
+              "visual_data.json",
+              "sources.md"
+            ]
+          }
+        },
+        "target_wpm": {
+          "type": "number",
+          "minimum": 100,
+          "maximum": 200
+        }
+      }
     }
   }
 }

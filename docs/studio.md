@@ -49,3 +49,58 @@ QC reads the render's own props (`work/<mode>/props.<output>.json`) and `work/sc
 
 ## Video ending and on-screen labels (owner decision 2026-11-09)
 Every video (Short, Reel, long-form, all 13 languages) ends with "Follow UllasLab. Education only." spoken and on the end card (`remotion/src/studio/EndCard.tsx`, last 3 s, inside the safe area; strings in `src/ullaslab_engine/endline.py` and `remotion/src/brand.ts`). The full disclaimer is the first line of the YouTube description and the Instagram caption (`publish.md`). Freshness tags are never drawn: charts show only "Source: <name> · <as-of>"; the tags stay in the data ledgers and QC still requires every number to be tagged there.
+
+## On GitHub Actions (WP8)
+The unattended render runs the studio in `.github/workflows/render.yml` (`master` job, ubuntu-24.04, CPU, headless Chrome,
+ffmpeg from apt). Code: `studio/actions.py`, `studio/safe_audit.py`, `studio/fixture.py`.
+
+1. `fetch --studio` (presigned bundle, the owner's reference and clips, licensed music files) and `studio-prepare`
+   (rebuilds the queue item in `work/item` from `bundle/studio/`, checks it against the manifest `studio` block).
+2. `studio-voice`: one narration per output (`narrate()`, Chatterbox clone of `work/voice.wav` / `work/clips/clipN.wav`,
+   pace target from the bundle, 150 wpm); outputs with the same narration share one synthesis. The chunk cache lives in
+   `work/tts_cache` and is never cached by Actions.
+3. `studio run work/item --asr faster` (faster-whisper large-v3 int8; mlx-whisper is macOS only).
+4. `studio-export`: `master.mp4` = the published output (manifest `studio.primary`), `studio_<output>.mp4` for the others,
+   captions (SRT + VTT), `audio_en.wav` (the published output's narration at -14 LUFS), `timing_en.json` for the dubs and
+   the story, `status_en.json`, and `qa_en.json`.
+
+`qa_en.json` gates (limits from `config/quality.yaml`, unchanged):
+- A1 claim ids and chart hashes; A2 chart scenes in the published output; A3 on the published narration (loudness, true peak,
+  silence, wpm 135-175, sentence length, WER <= 3% against the narrated text with the words the timings stage transcribed);
+  duration (30-60 s Short, 6-10 min long-form).
+- A4 on every output's voice-timed scenes: hook scene starts within 3 s, every scene except the end-line scene lasts 2-12 s,
+  and the picture-change limits are checked on the measured picture: studio QC's frozen-frame detection (fails at 2 s, below
+  both A4 change limits) must pass, and a scene marked `hold` may not last longer than `max_static_frame_s`.
+- A5 from a layout audit (one still per timed scene of every output, `audit` on): nothing outside the safe zone (content box
+  for headline, body, label, axis and stamp; safe box for captions, end card and footage tag), body roles (headline, body,
+  caption) at least 44 px and label roles (label, axis, stamp, tag) at least 36 px, contrast at least 4.5:1, at most 12 words of
+  headline, body and label text per still. Studio text set at label size carries the `label` role; a chart's unit and period
+  line is `axis` (exempt from the word budget like axis tick labels in `qa.gate_a5`).
+- Studio QC verdict (any FAIL fails), and `runner_budget` when the voice step refused the item (below).
+
+Runner budget: Chatterbox on the runner's CPU ran at 11.6x to 15.6x real time (37 s of speech took 429 s; 41 s took 641 s on
+run 43178997058); the guard uses 16 (`RUNNER_RTF`). `studio-voice` projects
+the synthesis time of the item's distinct narrations at 150 wpm and that rate and refuses, before any synthesis, an item over
+`ULLASLAB_VOICE_BUDGET_MIN` (60 in render.yml), so the job fails in seconds with a `runner_budget` gate instead of timing out.
+A daily Short (about 130 words, about 14 min of synthesis per distinct narration) fits; a 6-10 min long-form does not and
+renders locally (`studio run`) until a faster voice path exists. Job timeouts: plan 5, master 120, dub 50 minutes (175 min,
+inside the private repo's 3 h poll window and the 3 h 15 min URL lifetime).
+
+Logs: everything the voice and studio steps print goes to `work/logs/studio.log`, uploaded privately as `studio_log.txt`; the
+public log shows exit codes, stage names and gate numbers (`tests/test_workflows.py` enforces this). Proof runs:
+`gh workflow run render --ref <branch> -f fixture=studio-short` renders the synthetic fixture and uploads nothing.
+
+What the first Actions fixture runs showed, and the fixes (no limit changed):
+- A3 wpm 172-183 (limit 175): Chatterbox read faster than the 150 wpm target and the pacer only ever sped speech up. The
+  pacer now works both ways (`voice/narrate.py fit_pace`): a fast read is slowed by tempo (at most `max_slowdown` 1.15),
+  then punctuation pauses grow (at most `pause_ceiling` 1.3, never past 0.55 s), and the engine's own mid-sentence pauses
+  stretched by the slow-down are capped too, so A3 max_silence_s (1.2 s) still holds. Fixture: 153.9 wpm, 1.02 s.
+- A3 WER: Whisper writes numbers as digits while scripts often spell them, splits some ("100 and 12"), and heard the
+  sign-off brand as "Ullis lab". `wer_norm` turns spelled cardinals into digits and joins split numbers on both sides, the
+  ASR prompt carries the sign-off spelling, and the lexicon speaks the brand as "Ullas Lab". Fixture: 7.5% -> 2.0%.
+- A5: the audit found a chart's end value label 13 px past the safe box on a vertical chart; the label now goes left of
+  the line's tip when it would not fit.
+
+Known limits: the footage search needs the repository secret `PIXABAY_API_KEY` (without it a footage scene fails the render
+unless the director used none); the b-roll history that avoids reusing a clip across episodes starts empty on every runner;
+the CLIP ranker (`rank` extra) is not installed on the runner, so the keyword ranker picks footage.

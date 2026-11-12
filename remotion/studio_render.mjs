@@ -16,6 +16,7 @@ const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ?
 const props = JSON.parse(fs.readFileSync(arg("props"), "utf8"));
 const pub = path.resolve(arg("public")), out = arg("out") ? path.resolve(arg("out")) : null;
 const id = arg("id", "StudioVideo"), scale = Number(arg("scale", "1")), frame = arg("frame"), segFile = arg("segments");
+const auditFrames = arg("audit-frames"), auditOut = arg("audit-out");
 const concurrency = Number(process.env.ULLASLAB_RENDER_CONCURRENCY || 0) || undefined;
 
 fs.cpSync(path.join(here, "public", "fonts"), path.join(pub, "fonts"), { recursive: true, dereference: true });
@@ -26,7 +27,23 @@ const comp = await selectComposition({ serveUrl, id, inputProps: props, ...quiet
 const noBFrames = ({ args }) => (args.includes("libx264") ? [...args.slice(0, -1), "-bf", "0", args[args.length - 1]] : args);
 const video = { serveUrl, composition: comp, codec: "h264", inputProps: props, muted: true, crf: 18, pixelFormat: "yuv420p",
   x264Preset: "medium", scale, concurrency, ...quiet };
-if (segFile) {
+if (auditFrames) {
+  const os = await import("node:os");
+  const aprops = { ...props, audit: true };
+  const acomp = await selectComposition({ serveUrl, id, inputProps: aprops, ...quiet });
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ull-studio-audit-"));
+  const frames = [];
+  for (const f of auditFrames.split(",").map(Number)) {
+    if (!(Number.isInteger(f) && f >= 0 && f < acomp.durationInFrames)) throw new Error(`bad audit frame ${f}`);
+    const rec = { frame: f, elements: [] };
+    await renderStill({ serveUrl, composition: acomp, frame: f, output: path.join(tmp, "a.png"), inputProps: aprops, ...quiet,
+      onBrowserLog: (l) => { if (l.text.startsWith("[[AUDIT]]")) rec.elements = JSON.parse(l.text.slice(9)).elements; } });
+    frames.push(rec);
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.writeFileSync(path.resolve(auditOut), JSON.stringify({ width: acomp.width, height: acomp.height, frames }));
+  console.log(`audited ${frames.length} frames`);
+} else if (segFile) {
   const segs = JSON.parse(fs.readFileSync(segFile, "utf8"));
   for (const s of segs) {
     if (!(Number.isInteger(s.from) && Number.isInteger(s.to) && s.from >= 0 && s.to >= s.from && s.to < comp.durationInFrames)) {

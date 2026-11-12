@@ -1,28 +1,39 @@
-# Render engine. Public repo, no secrets, no content. Triggered only by repository_dispatch from the
-# private content repo; every input and output is a presigned R2 URL inside the dispatch payload.
-# Hard rules (enforced by tests/test_workflows.py): permissions {}, no pull_request trigger, URLs masked
-# first, no artifact upload, no payload echo.
+# Render engine. Public repo: no content, no voice, no URLs in this file or its logs. Triggered by repository_dispatch from the
+# private content repo (every input and output is a presigned R2 URL inside the dispatch payload), or by hand
+# (workflow_dispatch) with the synthetic, public-safe fixture item for a proof run that uploads nothing.
+# Hard rules (enforced by tests/test_workflows.py): permissions {}, no pull_request trigger, URLs masked first, no artifact
+# upload, no payload echo, the studio steps write their output to a private log (uploaded by presigned PUT, never printed),
+# and the only secret is the stock-footage search key, given to the studio step alone.
+# WP8: the master job renders the V2 studio item (scenes.json, styles, per-scene cache, cloned voice, studio QC).
 name: render
 
 on:
   repository_dispatch:
     types: [render]
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: "Synthetic public-safe studio item (generic text, stock reference voice, generated footage); nothing is uploaded"
+        type: choice
+        options: [studio-short]
+        default: studio-short
 
 permissions: {}
 
 concurrency:
-  group: render-${{ github.event.client_payload.job_id }}
+  group: render-${{ github.event.client_payload.job_id || github.run_id }}
   cancel-in-progress: false
 
 env:
   UV_PYTHON: "3.12"
   PYTHONUNBUFFERED: "1"
   HF_HUB_DISABLE_TELEMETRY: "1"
+  FIXTURE: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions: {}
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -32,7 +43,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload // {} | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty), ((.studio.music_urls // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -46,18 +57,24 @@ jobs:
         id: plan
         run: |
           uv sync --no-dev --frozen
-          uv run --no-sync python -m ullaslab_engine plan --payload "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+          if [ "$FIXTURE" = true ]; then
+            uv run --no-sync python -m ullaslab_engine plan --fixture >> "$GITHUB_OUTPUT"
+          else
+            uv run --no-sync python -m ullaslab_engine plan --payload "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+          fi
 
   master:
     needs: plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
+    runs-on: ubuntu-24.04
+    # The whole render (plan, master, then the dub matrix) must finish inside the private repo's 3 h poll window and the
+    # presigned URL lifetime (3 h 15 min): plan 5 + master 120 + dub 50 = 175 min.
+    timeout-minutes: 120
     permissions: {}
     steps:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload // {} | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty), ((.studio.music_urls // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -72,46 +89,89 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-      - name: System packages for headless Chrome
+          cache: npm
+          cache-dependency-path: remotion/package-lock.json
+      - name: System packages (ffmpeg, headless Chrome libraries, espeak-ng)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2t64 libxrandr2 libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2 espeak-ng git-lfs
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2t64 libxrandr2 libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2 espeak-ng
+          ffmpeg -hide_banner -version | head -1
+      # Model weights only (Chatterbox, Kokoro, faster-whisper large-v3; MIT / Apache-2.0). Never item files, voices or footage.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/huggingface
-          key: hf-master-v1-${{ hashFiles('uv.lock') }}
+          key: hf-studio-v1-${{ hashFiles('uv.lock') }}
       - name: Install
         env:
           EXTRAS: ${{ needs.plan.outputs.master_extras }}
         run: |
-          args=""; parler=0
-          for e in ${EXTRAS//,/ } asr; do if [ "$e" = parler ]; then parler=1; else args="$args --extra $e"; fi; done
-          uv sync --frozen $args
-          if [ "$parler" = 1 ]; then bash scripts/install_parler.sh; fi
+          set -euo pipefail
+          args=()
+          for e in ${EXTRAS//,/ } asr; do [ "$e" = parler ] || args+=(--extra "$e"); done
+          uv sync --frozen "${args[@]}"
+          # spaCy English model for the Kokoro stock voice (fallback engine and the fixture's reference); pinned, sha256 checked
+          whl=en_core_web_sm-3.8.0-py3-none-any.whl
+          curl -fsSL -o "$RUNNER_TEMP/$whl" "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/$whl"
+          echo "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85  $RUNNER_TEMP/$whl" | sha256sum -c --quiet -
+          uv pip install --no-deps "$RUNNER_TEMP/$whl"
           (cd remotion && npm ci --no-audit --no-fund)
-      - name: Fetch bundle (voice sample stays on the runner)
-        run: uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --music
-      - name: TTS (English master)
-        run: uv run --no-sync python -m ullaslab_engine tts --work work --lang en
-      - name: Captions
-        run: uv run --no-sync python -m ullaslab_engine captions --work work --lang en
-      - name: Render master
-        run: uv run --no-sync python -m ullaslab_engine render --work work
+          mkdir -p work/logs
+      - name: Fetch bundle, voice reference and music (they stay on the runner)
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          uv run --no-sync python -m ullaslab_engine fetch --payload "$GITHUB_EVENT_PATH" --work work --voice --music --studio
+          uv run --no-sync python -m ullaslab_engine studio-prepare --work work
+      - name: Synthetic fixture item (proof run, public-safe)
+        if: github.event_name == 'workflow_dispatch'
+        run: uv run --no-sync python -m ullaslab_engine studio-fixture --work work
+      - name: Voice (narration per output; output goes to the private log only)
+        env:
+          ULLASLAB_VOICE_BUDGET_MIN: "60"   # refuse early (failing runner_budget gate) what cannot finish inside the job
+        run: |
+          set +e
+          uv run --no-sync python -m ullaslab_engine studio-voice --work work >> work/logs/studio.log 2>&1
+          rc=$?
+          echo "voice exit $rc"
+          if [ "$FIXTURE" = true ]; then tail -n 40 work/logs/studio.log; fi
+          exit $rc
+      - name: Studio render (studio run; output goes to the private log only)
+        env:
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          ULLASLAB_MUSIC_FETCH: "off"   # licensed music arrives by presigned URL (fetch --studio); never wrangler on a runner
+        run: |
+          set +e
+          uv run --no-sync python -m ullaslab_engine studio run work/item --asr faster >> work/logs/studio.log 2>&1
+          rc=$?
+          echo "$rc" > work/studio_rc
+          echo "studio run exit $rc (1 = QC FAIL or a stage error; the gates below say which)"
+          grep -E '^\[(timings|broll|assemble|render|mix|package|qc)\] (running|skipped)' work/logs/studio.log || true
+          if [ "$FIXTURE" = true ]; then tail -n 60 work/logs/studio.log; fi
       - name: QA gates (fails the job on breach)
         id: qa
-        run: uv run --no-sync python -m ullaslab_engine qa --work work --lang en
+        if: always()
+        run: uv run --no-sync python -m ullaslab_engine studio-export --work work
       - name: Story (WP14, best effort; the optional music bed stays on the runner)
+        if: github.event_name == 'repository_dispatch'
         continue-on-error: true
         run: uv run --no-sync python -m ullaslab_engine story --work work --lang en
       - name: Upload outputs
-        if: always()
+        if: always() && github.event_name == 'repository_dispatch'
         run: uv run --no-sync python -m ullaslab_engine upload --payload "$GITHUB_EVENT_PATH" --work work --lang en
+      - name: Fixture summary (numbers only; nothing is uploaded)
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          cat work/voice_stats.json || true
+          if [ "$FIXTURE" = true ]; then grep -A40 '^\[export\]' work/logs/studio.log | tail -n 40 || true; fi
+          for f in work/en/master/video.mp4 work/en/studio/studio_reel.mp4; do
+            [ -f "$f" ] && ffprobe -v error -show_entries format=duration,size -of default=nw=1 "$f"
+          done
+          ls -la work/en work/en/studio || true
 
   dub:
     needs: [plan, master]
     if: needs.plan.outputs.has_dubs == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
     permissions: {}
     env:
       LANG_CODE: ${{ matrix.lang }}
@@ -122,7 +182,7 @@ jobs:
       - name: Mask payload URLs
         run: |
           set +x
-          jq -r '.client_payload | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty)] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
+          jq -r '.client_payload // {} | [.bundle_url, .voice_url, .timing_url, .music_url, ((.voice_clip_urls // {}) | .[]), ((.outputs // {}) | .[]), (.model.url // empty), ((.studio.music_urls // {}) | .[])] | .[] | select(. != null)' "$GITHUB_EVENT_PATH" |
           while IFS= read -r u; do
             echo "::add-mask::$u"
             q="${u#*\?}"; [ "$q" != "$u" ] && echo "::add-mask::$q"
@@ -149,9 +209,9 @@ jobs:
         env:
           EXTRAS: ${{ matrix.extras }}
         run: |
-          args=""; parler=0
-          for e in ${EXTRAS//,/ } asr; do if [ "$e" = parler ]; then parler=1; else args="$args --extra $e"; fi; done
-          uv sync --frozen $args
+          args=(); parler=0
+          for e in ${EXTRAS//,/ } asr; do if [ "$e" = parler ]; then parler=1; else args+=(--extra "$e"); fi; done
+          uv sync --frozen "${args[@]}"
           if [ "$parler" = 1 ]; then bash scripts/install_parler.sh; fi
           (cd remotion && npm ci --no-audit --no-fund)
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

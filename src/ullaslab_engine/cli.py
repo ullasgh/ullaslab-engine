@@ -30,7 +30,14 @@ def _extras(code: str) -> str:
 
 
 def cmd_plan(a):
-    """Emit GitHub outputs: dub matrix (non-source languages), engine extras, has_dubs. No URLs."""
+    """Emit GitHub outputs: dub matrix (non-source languages), engine extras, has_dubs. No URLs.
+    --fixture (workflow_dispatch proof run): no payload, English master only."""
+    if a.fixture:
+        from .studio.fixture import payload_free_plan
+        for line in payload_free_plan():
+            print(line)
+        print("master_extras=" + _extras("en"))
+        return 0
     p = _payload(a)
     rows = []
     for code in p["languages"]:
@@ -65,6 +72,9 @@ def cmd_fetch(a):
         eio.download(p["music_url"], work / "music.bin", eio.MAX_MUSIC_BYTES)
     if p.get("timing_url") and a.timing:
         eio.download(p["timing_url"], work / "timing_en.json", 5 * 1024 * 1024)
+    if getattr(a, "studio", False):  # WP8: licensed music bed files (ledger names only; sha256 checked by the studio)
+        for name, url in eio.studio_music(p).items():
+            eio.download(url, work / "music_lib" / name, eio.MAX_MUSIC_BYTES)
     load_bundle(work / "bundle")
     print("fetched")
 
@@ -161,10 +171,16 @@ def cmd_upload(a):
         items += [(f"qa_story_{lang}.json", sdir / "qa.json", "application/json")]
         if ok:
             items += [(f"story_{lang}.mp4", sdir / "video.mp4", "video/mp4")]
+    if lang == m["source_lang"] and m.get("studio"):  # WP8: the other studio outputs, QC report, publishing pack, private log
+        from .studio.actions import studio_uploads
+        items += studio_uploads(work, lang)
     for v in m.get("variants", []):
         if v["lang"] == lang:
             items += [(f"{v['name']}.mp4", work / lang / v["name"] / "video.mp4", "video/mp4"),
                       (f"qa_{v['name']}.json", work / lang / v["name"] / "qa.json", "application/json")]
+    # QA files last: the private repo's poll treats qa_<lang>.json as "render finished", so every video, caption and audio
+    # file must already be in R2 when it appears (a failed PUT before it leaves the item rendering, never in review).
+    items.sort(key=lambda it: it[0].startswith("qa_"))
     n = 0
     for key, path, ctype in items:
         if key in outs and path.exists():
@@ -172,6 +188,39 @@ def cmd_upload(a):
             n += 1
     print(f"uploaded {n} files")
     return 0
+
+
+def cmd_studio_fixture(a):
+    """WP8 proof run: build the synthetic, public-safe studio item (bundle, Kokoro reference voice, footage) in --work."""
+    from .studio.fixture import build
+    item = build(Path(a.work), ref_voice=not a.no_ref)
+    print(f"fixture item ready ({len(list(item.iterdir()))} files)")
+    return 0
+
+
+def cmd_studio_prepare(a):
+    """WP8: rebuild the studio item from the fetched bundle (work/item) and install any fetched licensed music."""
+    from .studio.actions import install_music, prepare_item
+    prepare_item(Path(a.work))
+    print(f"studio item ready; licensed music files: {install_music(Path(a.work))}")
+    return 0
+
+
+def cmd_studio_voice(a):
+    """WP8: voice.<output>.wav for every scenes.json output (cloned voice when the reference was fetched)."""
+    from .studio.actions import make_voices
+    make_voices(Path(a.work))
+    return 0
+
+
+def cmd_studio_export(a):
+    """WP8: studio outputs into the upload layout plus qa_en.json. Prints gate numbers only; exit 1 when a gate fails."""
+    from .studio.actions import export
+    qa = export(Path(a.work))
+    print("qa", "PASS" if qa["passed"] else "FAIL", [g for g, v in qa["gates"].items() if not v["passed"]])
+    for line in qa_lines(qa):
+        print(line)
+    return 0 if qa["passed"] else 1
 
 
 def cmd_voice_analyze(a):
@@ -256,10 +305,15 @@ def main(argv=None) -> int:
         return sp
 
     add("mask", cmd_mask, payload=dict(required=True))
-    add("plan", cmd_plan, payload=dict(required=True))
+    add("plan", cmd_plan, payload=dict(default=None), fixture=dict(action="store_true"))
     add("variants", cmd_variants, work=dict(required=True), lang=dict(required=True))
     add("fetch", cmd_fetch, payload=dict(required=True), work=dict(required=True),
-        voice=dict(action="store_true"), timing=dict(action="store_true"), music=dict(action="store_true"))
+        voice=dict(action="store_true"), timing=dict(action="store_true"), music=dict(action="store_true"),
+        studio=dict(action="store_true"))
+    add("studio-fixture", cmd_studio_fixture, work=dict(required=True), no_ref=dict(action="store_true"))
+    add("studio-prepare", cmd_studio_prepare, work=dict(required=True))
+    add("studio-voice", cmd_studio_voice, work=dict(required=True))
+    add("studio-export", cmd_studio_export, work=dict(required=True))
     add("tts", cmd_tts, work=dict(required=True), lang=dict(required=True))
     add("captions", cmd_captions, work=dict(required=True), lang=dict(required=True), no_asr=dict(action="store_true"))
     add("render", cmd_render, work=dict(required=True), variant=dict(default=None))

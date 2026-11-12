@@ -37,9 +37,9 @@ const TimelinePlot: React.FC<{ data: TimelineData; w: number; h: number }> = ({ 
             <div key={i} style={{ position: "absolute", left: 0, top: cy - rowH / 2, width: w, height: rowH, opacity: k, transform: `translateX(${(1 - k) * 30}px)` }}>
               <div style={{ position: "absolute", left: x - 14, top: rowH / 2 - 14, width: 28, height: 28, borderRadius: 14, background: pal.bg, border: `5px solid ${i === n - 1 ? pal.accent2 : pal.accent}` }} />
               <div style={{ position: "absolute", left: 76, top: 0, bottom: 0, right: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                <div data-audit="body" style={{ fontSize: fs, color: i === n - 1 ? pal.accent2 : pal.accent, fontWeight: 700, lineHeight: 1.15 }}>{e.when}</div>
+                <div data-audit="label" style={{ fontSize: fs, color: i === n - 1 ? pal.accent2 : pal.accent, fontWeight: 700, lineHeight: 1.15 }}>{e.when}</div>
                 <div data-audit="body" style={{ fontSize: L.type.body, color: pal.ink, fontWeight: 700, lineHeight: 1.12 }}>{e.title}</div>
-                {e.detail && <div data-audit="body" style={{ fontSize: fs, color: pal.muted, lineHeight: 1.2 }}>{e.detail}</div>}
+                {e.detail && <div data-audit="label" style={{ fontSize: fs, color: pal.muted, lineHeight: 1.2 }}>{e.detail}</div>}
               </div>
             </div>
           );
@@ -60,9 +60,9 @@ const TimelinePlot: React.FC<{ data: TimelineData; w: number; h: number }> = ({ 
             <div style={{ position: "absolute", left: colW / 2 - 15, top: y - 15, width: 30, height: 30, borderRadius: 15, background: pal.bg, border: `5px solid ${i === n - 1 ? pal.accent2 : pal.accent}` }} />
             <div style={{ position: "absolute", left: colW / 2 - 2, top: up ? y - 90 : y + 20, width: 4, height: 70, background: pal.grid }} />
             <div style={{ position: "absolute", left: 10, right: 10, [up ? "bottom" : "top"]: up ? h - y + 90 : y + 90, textAlign: "center" }}>
-              <div data-audit="body" style={{ fontSize: fs, color: i === n - 1 ? pal.accent2 : pal.accent, fontWeight: 700 }}>{e.when}</div>
+              <div data-audit="label" style={{ fontSize: fs, color: i === n - 1 ? pal.accent2 : pal.accent, fontWeight: 700 }}>{e.when}</div>
               <div data-audit="body" style={{ fontSize: L.type.body - 4, color: pal.ink, fontWeight: 700, lineHeight: 1.12 }}>{e.title}</div>
-              {e.detail && <div data-audit="body" style={{ fontSize: fs, color: pal.muted, lineHeight: 1.2, marginTop: 4 }}>{e.detail}</div>}
+              {e.detail && <div data-audit="label" style={{ fontSize: fs, color: pal.muted, lineHeight: 1.2, marginTop: 4 }}>{e.detail}</div>}
             </div>
           </div>
         );
@@ -140,7 +140,7 @@ const FlowPlot: React.FC<{ data: FlowData; w: number; h: number }> = ({ data, w,
       {data.nodes.map((n) => {
         const p = pos[n.id];
         return (
-          <div key={n.id} data-audit="body" style={{
+          <div key={n.id} data-audit="label" style={{
             position: "absolute", left: p.x, top: p.y, width: boxW, height: boxH, opacity: p.k, transform: `translateY(${(1 - p.k) * 20}px)`,
             background: pal.panel, border: `3px solid ${toneOf(n.tone)}`, borderRadius: 22, boxSizing: "border-box", padding: "8px 18px",
             display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: fs, fontWeight: 700, lineHeight: 1.15, color: pal.ink,

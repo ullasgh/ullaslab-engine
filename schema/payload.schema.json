@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ullaslab.co.in/schema/payload.schema.json",
+  "title": "UllasLab render dispatch client_payload (docs/dispatch-protocol.md)",
+  "description": "Shape contract between the private content repo (produce/dispatch.py) and this engine (io.validate_payload). GitHub allows at most 10 top-level client_payload properties. Every URL is a presigned R2 URL on the S3 domain; host checks live in io.validate_payload.",
+  "type": "object",
+  "required": ["job_id", "bundle_url", "languages", "outputs"],
+  "additionalProperties": false,
+  "maxProperties": 10,
+  "$defs": {
+    "url": {"type": "string", "pattern": "^https://[A-Za-z0-9.-]+\\.r2\\.cloudflarestorage\\.com/"},
+    "name": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,80}$"}
+  },
+  "properties": {
+    "job_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "bundle_url": {"$ref": "#/$defs/url"},
+    "timing_url": {"$ref": "#/$defs/url"},
+    "voice_url": {"$ref": "#/$defs/url"},
+    "music_url": {"$ref": "#/$defs/url"},
+    "languages": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z]{2}$"}},
+    "outputs": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/url"}
+    },
+    "voice_clip_urls": {
+      "type": "object",
+      "propertyNames": {"enum": ["1", "2", "3"]},
+      "additionalProperties": {"$ref": "#/$defs/url"}
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "revision", "size"],
+      "properties": {
+        "url": {"$ref": "#/$defs/url"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "size": {"type": "integer", "minimum": 1, "maximum": 6442450944}
+      }
+    },
+    "studio": {
+      "description": "WP8: presigned GETs of the licensed music bed files named in config/music_ledger.yaml (assets/music/<file> in the private bucket). Optional; without them the studio mixes its generated CC0 pad and QC warns.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "music_urls": {
+          "type": "object",
+          "maxProperties": 20,
+          "propertyNames": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\\.(mp3|wav|m4a|ogg|flac)$"},
+          "additionalProperties": {"$ref": "#/$defs/url"}
+        }
+      }
+    }
+  }
+}

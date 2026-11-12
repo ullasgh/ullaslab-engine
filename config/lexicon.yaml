@@ -12,6 +12,7 @@
 version: 1
 
 common:            # every language: company names, tickers, symbols
+  - {match: "UllasLab", say: "Ullas Lab"}   # the brand in the fixed sign-off: two plain words (WP8: Whisper heard "Ullislab")
   - {match: "M&A", say: "M and A"}
   - {match: "P&L", say: "P and L"}
   - {match: "Q&A", say: "Q and A"}
