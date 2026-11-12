@@ -170,7 +170,8 @@ def merge_compounds(ref: list[str], hyp: list[str]) -> tuple[list[str], list[str
     return merge(ref, set(hyp)), merge(hyp, set(ref))
 
 
-NAME_MATCH_MIN = 0.72   # similarity of a spelled-out hypothesis run to a proper name (difflib ratio over the joined letters)
+NAME_MATCH_MIN = 0.78   # similarity of a spelled-out hypothesis run to a proper name (difflib ratio over the joined letters)
+NAME_LEN_SLACK = 1      # the joined run is within this many letters of the name's length (rejects "us lab", "Ullas laugh")
 NAME_MAX_TOKENS = 4     # an unfamiliar name is heard as at most this many words ("Ula s lab")
 
 
@@ -209,7 +210,10 @@ def merge_names(ref: list[str], hyp: list[str], names: list[str]) -> tuple[list[
                     run = hyp[i:i + n]
                     if len(run) < n or any(w in ref_words for w in run):
                         break
-                    r = SequenceMatcher(None, name, "".join(run)).ratio()
+                    joined = "".join(run)
+                    if abs(len(joined) - len(name)) > NAME_LEN_SLACK:
+                        continue
+                    r = SequenceMatcher(None, name, joined).ratio()
                     if r > best[0] + 1e-9:
                         best = (r, i, n)
             if best[0] < NAME_MATCH_MIN:

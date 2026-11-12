@@ -539,6 +539,14 @@ def test_the_lexicon_name_is_accepted_in_every_spelling_the_asr_gives_it(heard):
     assert error_rate(SIGN_OFF, heard, "en") == 0.0
 
 
+@pytest.mark.parametrize("heard", ["Follow us lab. Education only.", "Follow Alice lab. Education only.", "Follow Wallace lab. Education only.",
+                                   "Follow Ellis club. Education only.", "Follow Ullas laugh. Education only.", "Follow all. Education only.",
+                                   "Follow Ulysses lab. Education only."])
+def test_near_miss_words_are_not_absorbed_into_the_name(heard):
+    from ullaslab_engine.asr import error_rate
+    assert error_rate(SIGN_OFF, heard, "en") > 0
+
+
 @pytest.mark.parametrize("heard", ["Follow Google lab. Education only.", "Follow Ulysses. Education only.", "Follow us. Education only.",
                                    "Follow Ullas lab. Education on.", "Follow Ullas lab education only now", "Follow the lab. Education only."])
 def test_other_words_around_the_name_still_count_as_errors(heard):
