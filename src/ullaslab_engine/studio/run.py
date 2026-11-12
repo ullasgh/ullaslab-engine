@@ -20,7 +20,7 @@ import soundfile as sf
 
 from ..config import ROOT
 from . import FPS, audio as A, pack as K
-from .assemble import ASPECT_SIZE, AssembleError, build_props, load_assets
+from .assemble import ASPECT_SIZE, AssembleError, build_props, check_visuals, load_assets
 from .captions import cues_to_srt
 from .qc import QCError
 from . import scenecache as SC
@@ -501,7 +501,14 @@ class Studio:
 
     def run(self, until: str = "package") -> list[Path]:
         made: list[Path] = []
-        self.forced(self.scenes_doc())        # an unknown --scene id fails before any stage runs
+        doc = self.scenes_doc()
+        self.forced(doc)        # an unknown --scene id fails before any stage runs
+        bad = check_visuals(self.item, doc)   # fail fast, before timings and the long render: no diagram scene without data
+        if bad:
+            for b in bad:
+                self.log(f"[visual-check] FAIL {b}")
+            self.log("[failed] visual-check AssembleError")
+            raise AssembleError(f"{len(bad)} scene(s) need visual data or a valid chart view")
         steps = [("timings", self.s_timings), ("broll", self.s_broll), ("assemble", self.s_assemble), ("render", self.s_render),
                  ("mix", self.s_mix), ("package", None)]
         for name, fn in steps:

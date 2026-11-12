@@ -23,10 +23,17 @@ NARRATION = [
     "So next time a number looks large, ask what it buys. Follow UllasLab. Education only.",
 ]
 ROLES = ["hook", "setup", "evidence", "mechanism", "consequence", "disclaimer"]
-# One `flow` scene that carries a data_point ref but has no visual_data.json entry: the shape the live item had, which the
-# engine downgrades to kinetic text (the proof run then covers that path too).
+# One `flow` scene whose data_point ref has a visual_data.json entry (VISUAL), and one chart scene that shows a zoomed
+# window of the chart (chart_view). A flow scene WITHOUT data fails the render fast (no silent downgrade to a text card).
 TYPES = {"short": ["kinetic", "footage", "chart", "flow", "kinetic", "kinetic"],
          "reel": ["kinetic", "chart", "footage", "kinetic", "kinetic", "kinetic"]}
+VISUAL = {"FIXTURE-POINT": {
+    "meta": {"source": {"name": "UllasLab test fixture (synthetic, not real figures)", "as_of": "2026-11-01"}, "freshness": "INFERRED"},
+    "nodes": [{"id": "a", "label": "Prices rise", "level": 0}, {"id": "b", "label": "Same note buys less", "level": 1, "tone": "accent2"},
+              {"id": "c", "label": "Real return matters", "level": 2, "tone": "accent3"}],
+    "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "so check"}]}}
+CHART_VIEW = {"window": {"from": "2023-09", "to": "2025-12"}, "highlight": {"from": "2024-03", "to": "2024-09", "label": "Rising"},
+              "point": {"x": "2024-09", "label": "Index"}}
 ON_SCREEN = ["Why does saved money shrink?", "Prices up, basket smaller", "Price index (made-up numbers)",
              "Real return = gap", "Check what it buys", "Follow UllasLab"]
 REF_TEXT = ("This is a synthetic reference voice for the engine's public test render. It reads a short neutral passage "
@@ -43,7 +50,7 @@ def chart() -> dict:
     return c
 
 
-def scene(i: int, typ: str) -> dict:
+def scene(i: int, typ: str, o_reel: bool = False) -> dict:
     s = {"id": f"s{i + 1:02d}", "role": ROLES[i], "narration": {"text": NARRATION[i], "start_s": None, "end_s": None, "words": None},
          "visual_objective": "Show the idea of this line clearly", "type": typ, "on_screen_text": ON_SCREEN[i], "data_ref": None,
          "palette": "policy", "camera_move": "slow_push" if typ == "footage" else "static",
@@ -53,6 +60,8 @@ def scene(i: int, typ: str) -> dict:
                  illustrative=True)
     if typ == "chart":
         s["data_ref"] = {"kind": "chart", "ref": "c1"}
+        if o_reel:
+            s["chart_view"] = dict(CHART_VIEW)
     if typ == "flow":
         s["data_ref"] = {"kind": "data_point", "ref": "FIXTURE-POINT"}
     return s
@@ -60,7 +69,7 @@ def scene(i: int, typ: str) -> dict:
 
 def scenes_doc() -> dict:
     return {"schema_version": 1, "item": "2026-11-12-" + SLUG, "outputs": [
-        {"output": o, "aspect": "9:16", "hook_type": "question", "scenes": [scene(i, t) for i, t in enumerate(TYPES[o])]}
+        {"output": o, "aspect": "9:16", "hook_type": "question", "scenes": [scene(i, t, o == "reel") for i, t in enumerate(TYPES[o])]}
         for o in ("short", "reel")]}
 
 
@@ -74,7 +83,7 @@ def manifest() -> dict:
             "source_lang": "en", "languages": ["en"], "voice_ref": None, "synthetic_voice": True, "disclaimer": {"en": DISCLAIMER},
             "segments": segs, "scenes": scenes,
             "studio": {"primary": "short", "outputs": ["short", "reel"], "target_wpm": 150,
-                       "files": ["scenes.json", "meta.json", "charts.resolved.json", "sources.md"]}}
+                       "files": ["scenes.json", "meta.json", "charts.resolved.json", "sources.md", "visual_data.json"]}}
 
 
 def make_clip(dst: Path, seconds: int = 4) -> None:
@@ -94,6 +103,7 @@ def build(work: Path, *, ref_voice: bool = True, tts_fn=None) -> Path:
     st = b / "studio"
     jdump(scenes_doc(), st / "scenes.json")
     jdump({"c1": c}, st / "charts.resolved.json")
+    jdump(VISUAL, st / "visual_data.json")
     jdump({"title": "Why saved money buys less each year", "description": DISCLAIMER + "\n\nA test render with made-up numbers.",
            "hashtags": ["#personalfinance"], "synthetic_voice": True, "ai_label": True}, st / "meta.json")
     (st / "sources.md").write_text("| claim | chart_hash | tag | source |\n|---|---|---|---|\n"

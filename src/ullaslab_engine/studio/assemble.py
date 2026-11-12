@@ -15,7 +15,7 @@ from .captions import build_cues
 
 ASPECT_SIZE = {"16:9": (1920, 1080, "horizontal"), "9:16": (1080, 1920, "vertical")}
 CHART_FILES = ("chart_specs.json", "charts.resolved.json", "chart.json")
-VISUAL_FILE = "visual_data.json"   # optional: data for map/globe/timeline/flow scenes, keyed by data_ref.ref or scene id
+VISUAL_FILE = "visual_data.json"   # data for map/globe/timeline/flow scenes, keyed by '<output>/<scene id>', data_ref.ref or scene id; flow and timeline REQUIRE an entry
 NUMBER_LOCALE = {"western": "en-US", "indian": "en-IN", "arabic_western": "en-US"}
 
 
@@ -53,6 +53,18 @@ def stamp_name(name: str) -> str:
     return _STAMP_TAG.sub("", name or "")
 
 
+def infer_decimals(values: list) -> int:
+    """Decimals a chart prints: the most places any value carries (1 to 3), so 4.88 is never shown as 4.9. An explicit `decimals` wins."""
+    best = 1
+    for v in values:
+        txt = repr(float(v))
+        if "e" in txt or "E" in txt:
+            continue
+        places = len(txt.split(".")[1].rstrip("0")) if "." in txt else 0
+        best = max(best, min(3, places))
+    return best
+
+
 def to_kit_chart(ref: str, c: dict) -> dict:
     """Engine chart (type/series/source) or kit chart (kind/meta) -> kit ChartSceneData."""
     if "kind" in c and "meta" in c:
@@ -68,10 +80,11 @@ def to_kit_chart(ref: str, c: dict) -> dict:
             "source": {"name": stamp_name(src.get("name", "")), "as_of": src.get("as_of", "")}, "freshness": c.get("freshness", "RECENT")}
     if src.get("url"):
         meta["source"]["url"] = src["url"]
-    dec = c.get("decimals", 1)
+    dec = c["decimals"] if "decimals" in c else infer_decimals([p["y"] for s_ in series for p in s_["points"]])
     t = c["type"]
     if t in ("line", "compare"):
-        out = {"kind": "line", "meta": meta, "decimals": dec,
+        out = {"kind": "line", "meta": meta, "decimals": dec, "settle": True,   # the tip value shows once the line has arrived
+
                "series": [{"name": _s(s.get("name")), "points": s["points"]} for s in series]}
         if c.get("annotations"):
             out["annotations"] = [{"x": a["x"], "label": _s(a["label"])} for a in c["annotations"]]
@@ -86,6 +99,139 @@ def to_kit_chart(ref: str, c: dict) -> dict:
             out["delta"] = {"text": f"{d:+.{dec}f} vs prior", "tone": "up" if d > 0 else "down" if d < 0 else "flat"}
         return {k: v for k, v in out.items() if v is not None}
     raise AssembleError(f"chart '{ref}': unsupported type '{t}'")
+
+
+# ------------------------------------------------------------------ chart views (watchability)
+VIEW_KEYS = {"window", "highlight", "point", "marks"}
+MAX_MARKS = 3
+
+
+def _xkey(x) -> str:
+    """Sortable key for a series x: ISO dates (YYYY, YYYY-MM, YYYY-MM-DD) and plain numbers compare as strings."""
+    return f"{x:012.4f}" if isinstance(x, (int, float)) else str(x)
+
+
+def _fmt(v: float, dec: int) -> str:
+    return f"{v:.{dec}f}"
+
+
+def apply_chart_view(sid: str, kit: dict, view: dict) -> dict:
+    """A scene's own view of a line chart: a zoomed window, a highlighted x-range, an annotated point the line stops at, and
+    extra annotated marks. The values shown are read from the series, never typed: the tip value is the value at the end of the
+    view, each mark carries its own value. Raises AssembleError (public-safe, no data in the message beyond ids and dates)."""
+    at = f"{sid}: chart_view"
+    if kit.get("kind") != "line":
+        raise AssembleError(f"{at} needs a line chart, this chart is '{kit.get('kind')}'")
+    extra = set(view) - VIEW_KEYS
+    if extra:
+        raise AssembleError(f"{at} has unknown key(s) {sorted(extra)}; allowed {sorted(VIEW_KEYS)}")
+    series = kit["series"]
+    if len(series) != 1:
+        raise AssembleError(f"{at} supports a single-series line chart, this one has {len(series)}")
+    pts = list(series[0]["points"])
+    dec = kit.get("decimals", 1)
+    win = view.get("window") or {}
+    lo = _xkey(win["from"]) if win.get("from") is not None else None
+    hi = _xkey(win["to"]) if win.get("to") is not None else None
+    if lo is not None and hi is not None and lo > hi:
+        raise AssembleError(f"{at} window starts after it ends")
+    pts = [p for p in pts if (lo is None or _xkey(p["x"]) >= lo) and (hi is None or _xkey(p["x"]) <= hi)]
+    if len(pts) < 2:
+        raise AssembleError(f"{at} window holds {len(pts)} observation(s); a view needs at least 2 (widen the window)")
+    have = {_xkey(p["x"]): p for p in pts}
+
+    def at_obs(x, what: str) -> dict:
+        k = _xkey(x)
+        if k not in have:
+            raise AssembleError(f"{at} {what} is not an observation date inside the window (use a date the series has a value for)")
+        return have[k]
+
+    marks = list(view.get("marks") or [])
+    if len(marks) > MAX_MARKS:
+        raise AssembleError(f"{at} has {len(marks)} marks; at most {MAX_MARKS}")
+    point = view.get("point")
+    if point is not None:
+        end = at_obs(point["x"], "point")
+        pts = [p for p in pts if _xkey(p["x"]) <= _xkey(end["x"])]
+        if len(pts) < 2:
+            raise AssembleError(f"{at} point leaves {len(pts)} observation(s); a view needs at least 2")
+        marks = marks + [point]
+    out = {**kit, "series": [{**series[0], "points": pts}], "includeZero": False, "settle": True}
+    ann = []
+    for m in marks:
+        o = at_obs(m["x"], "mark")
+        if _xkey(o["x"]) > _xkey(pts[-1]["x"]):
+            raise AssembleError(f"{at} mark lies after the end of the view")
+        ann.append({"x": o["x"], "label": " ".join(x for x in (str(m.get("label") or "").strip(), _fmt(o["y"], dec)) if x)})
+    if ann:
+        out["annotations"] = ann
+    hl = view.get("highlight")
+    if hl:
+        a, b = _xkey(hl["from"]), _xkey(hl["to"])
+        if a > b or a < _xkey(pts[0]["x"]) or b > _xkey(pts[-1]["x"]):
+            raise AssembleError(f"{at} highlight must lie inside the view")
+        out["highlight"] = {"from": hl["from"], "to": hl["to"], **({"label": hl["label"]} if hl.get("label") else {})}
+    out["meta"] = {**kit["meta"], "period": f"{pts[0]['x']} to {pts[-1]['x']}"}
+    out["marker"] = {"x": pts[-1]["x"], "y": pts[-1]["y"]}
+    return out
+
+
+# ------------------------------------------------------------------ visual data (flow / timeline) validation
+def validate_visual(sid: str, kind: str, data) -> None:
+    """Shape the renderer needs. A bad entry fails here, with the scene id, instead of crashing the renderer mid-video."""
+    at = f"{sid}: {kind} data in {VISUAL_FILE}"
+    if not isinstance(data, dict):
+        raise AssembleError(f"{at} must be an object")
+    if kind == "flow":
+        nodes, edges = data.get("nodes"), data.get("edges")
+        if not isinstance(nodes, list) or len(nodes) < 2 or not isinstance(edges, list) or not edges:
+            raise AssembleError(f"{at} needs at least 2 nodes and 1 edge")
+        ids = [n.get("id") for n in nodes if isinstance(n, dict)]
+        if len(ids) != len(nodes) or len(set(ids)) != len(ids) or not all(isinstance(n.get("label"), str) and n["label"].strip() for n in nodes) \
+                or not all(isinstance(n.get("level"), int) and n["level"] >= 0 for n in nodes):
+            raise AssembleError(f"{at}: every node needs a unique id, a label and an integer level >= 0")
+        levels = sorted({n["level"] for n in nodes})
+        if levels != list(range(len(levels))):
+            raise AssembleError(f"{at}: node levels must run 0..N without gaps")
+        for e in edges:
+            if not isinstance(e, dict) or e.get("from") not in ids or e.get("to") not in ids:
+                raise AssembleError(f"{at}: every edge must join two node ids")
+    elif kind == "timeline":
+        ev = data.get("events")
+        if not isinstance(ev, list) or len(ev) < 2 or not all(isinstance(e, dict) and e.get("when") and e.get("title") for e in ev):
+            raise AssembleError(f"{at} needs at least 2 events, each with 'when' and 'title'")
+
+
+def check_visuals(item: Path, doc: dict) -> list[str]:
+    """Fail-fast problems for one timed or untimed scenes document, before anything long runs: every flow or timeline scene has valid
+    data in visual_data.json (never silently turned into a text card) and every chart_view applies to its chart."""
+    problems: list[str] = []
+    vp = item / VISUAL_FILE
+    try:
+        visuals = json.loads(vp.read_text(encoding="utf-8")) if vp.is_file() else {}
+    except ValueError:
+        return [f"{VISUAL_FILE} is not valid JSON"]
+    charts = load_chart_specs(item)
+    for o in doc.get("outputs", []):
+        for sc in o["scenes"]:
+            sid, t = f"{o['output']}/{sc['id']}", sc["type"]
+            ref = (sc.get("data_ref") or {}).get("ref") or f"auto:{sc['id']}"
+            try:
+                if t in ("flow", "timeline"):
+                    data = visuals.get(sid) or visuals.get(ref) or visuals.get(sc["id"])
+                    if data is None:
+                        raise AssembleError(f"{sid}: {t} scene has no entry in {VISUAL_FILE} (its data_ref ref or its scene id); "
+                                            f"add its data or change the scene type. The render stops here: a {t} scene is never turned into a text card")
+                    validate_visual(sid, t, data)
+                if sc.get("chart_view") is not None:
+                    if t != "chart":
+                        raise AssembleError(f"{sid}: chart_view is only for chart scenes")
+                    cref = (sc.get("data_ref") or {}).get("ref")
+                    if cref in charts:
+                        apply_chart_view(sid, to_kit_chart(cref, charts[cref]), sc["chart_view"])
+            except AssembleError as e:
+                problems.append(str(e))
+    return problems
 
 
 # ------------------------------------------------------------------ footage
@@ -170,7 +316,14 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
             ref = dr["ref"]
             if ref not in charts:
                 raise AssembleError(f"{name}/{sid}: data_ref '{ref}' not found in {'/'.join(CHART_FILES)}")
-            refs[ref] = to_kit_chart(ref, charts[ref])
+            kit = to_kit_chart(ref, charts[ref])
+            if sc.get("chart_view") is not None:
+                # this scene's own view of the chart: its own refs entry, so two scenes can show different windows of one chart
+                kit = apply_chart_view(f"{name}/{sid}", kit, sc["chart_view"])
+                kit["revealFrames"] = max(24, min(80, round(dur * FPS * 0.6) - 10))
+                ref = f"{ref}@{sid}"
+                sc["data_ref"] = {"kind": "chart", "ref": ref}
+            refs[ref] = kit
         elif t == "footage":
             a = assets.get((name, sid))
             ref = f"footage:{sid}"
@@ -186,18 +339,22 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
             sc["data_ref"] = {"kind": "ledger", "ref": ref}
         else:
             ref = (dr or {}).get("ref") or f"auto:{sid}"
-            data = visuals.get(ref) or visuals.get(sid) or default_visual(t, text or "")
+            data = visuals.get(f"{name}/{sid}") or visuals.get(ref) or visuals.get(sid) or default_visual(t, text or "")
             if data is None and t in ("timeline", "flow"):
-                warns.append(f"{name}/{sid}: no {t} data in {VISUAL_FILE}; rendered as kinetic text")
-                sc["type"] = t = "kinetic"
+                # No silent downgrade (watchability slice 1): a diagram without data used to become a text card and the video
+                # looked like slides. Stop here, before the long render, and say which scene needs what.
+                raise AssembleError(f"{name}/{sid}: {t} scene has no entry in {VISUAL_FILE} (its data_ref ref or its scene id); "
+                                    f"add its data or change the scene type. The render stops here: a {t} scene is never turned into a text card")
             elif data is None:
                 data = {}
+            if t in ("timeline", "flow"):
+                validate_visual(f"{name}/{sid}", t, data)
             if t != "kinetic":
                 refs[ref] = data
                 sc["data_ref"] = {"kind": "data_point", "ref": ref}
             else:
-                # A kinetic scene (as written, or downgraded above for lack of visual data) renders its text only. Drop the
-                # director's data_ref: the renderer rejects a data_ref that has no entry in refs ("data_ref ... not found").
+                # A kinetic scene renders its text only. Drop the director's data_ref: the renderer rejects a data_ref that
+                # has no entry in refs ("data_ref ... not found").
                 sc["data_ref"] = None
         if sc["type"] == "kinetic" and not text:
             sc["on_screen_text"] = " ".join(nar["text"].split()[:7]).rstrip(",;:")

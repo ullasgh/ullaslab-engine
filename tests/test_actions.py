@@ -78,6 +78,7 @@ def _bundle(work: Path, **studio) -> Path:
     AC.jdump(F.scenes_doc(), b / "studio" / "scenes.json")
     AC.jdump({"c1": F.chart()}, b / "studio" / "charts.resolved.json")
     AC.jdump({"title": "t", "synthetic_voice": True}, b / "studio" / "meta.json")
+    AC.jdump(F.VISUAL, b / "studio" / "visual_data.json")
     (b / "studio" / "sources.md").write_text("| claim | tag |\n|---|---|\n| c1 | INFERRED |\n")
     load_bundle(b)
     return work
