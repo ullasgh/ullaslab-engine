@@ -50,3 +50,58 @@ def test_pipeline_tts_verbalises_script_before_the_engine(monkeypatch):
     monkeypatch.setattr(P, "_raw_tts", lambda text, lang, ref, **kw: seen.append(text))
     P.default_tts("The RBI rate is 5.25 percent.", "en", None)
     assert seen == ["The R B I rate is five point two five percent."]
+
+
+# --- non-Latin scripts: marks are part of the word (the old \w pattern split every Indic word at its vowel signs) ---
+SCRIPTS = {
+    "hi": ("दर 4.25 प्रतिशत है, निवेश सलाह नहीं।", ["दर", "425", "प्रतिशत", "है", "निवेश", "सलाह", "नहीं"]),
+    "ta": ("வட்டி விகிதம் உயர்ந்தது, கல்வி மட்டும்.", ["வட்டி", "விகிதம்", "உயர்ந்தது", "கல்வி", "மட்டும்"]),
+    "bn": ("সুদের হার বেড়েছে, শুধু শিক্ষা।", ["সুদের", "হার", "বেড়েছে", "শুধু", "শিক্ষা"]),
+    "te": ("వడ్డీ రేటు పెరిగింది, విద్య మాత్రమే.", ["వడ్డీ", "రేటు", "పెరిగింది", "విద్య", "మాత్రమే"]),
+    "kn": ("ಬಡ್ಡಿ ದರ ಏರಿತು, ಶಿಕ್ಷಣ ಮಾತ್ರ.", ["ಬಡ್ಡಿ", "ದರ", "ಏರಿತು", "ಶಿಕ್ಷಣ", "ಮಾತ್ರ"]),
+    "ml": ("പലിശ നിരക്ക് ഉയർന്നു, വിദ്യാഭ്യാസം മാത്രം.", ["പലിശ", "നിരക്ക്", "ഉയർന്നു", "വിദ്യാഭ്യാസം", "മാത്രം"]),
+    "gu": ("વ્યાજ દર વધ્યો, ફક્ત શિક્ષણ.", ["વ્યાજ", "દર", "વધ્યો", "ફક્ત", "શિક્ષણ"]),
+}
+
+
+@pytest.mark.parametrize("lang", sorted(SCRIPTS))
+def test_indic_words_stay_whole(lang):
+    text, want = SCRIPTS[lang]
+    assert c(text, lang).split() == want
+
+
+def test_indic_identical_text_is_zero_error_and_one_wrong_word_is_one_error():
+    text = SCRIPTS["hi"][0]
+    assert error_rate(text, text, "hi") == 0.0
+    other = text.replace("सलाह", "सलाम")
+    assert error_rate(text, other, "hi") == pytest.approx(100 / 7)
+
+
+def test_zero_width_joiners_are_removed_not_split():
+    assert c("ക്‍", "ml") == c("ക്", "ml")              # chillu with ZWJ == without
+    assert c("क्‍ष", "hi") == c("क्ष", "hi") and len(c("क्‍ष", "hi").split()) == 1
+    assert c("می‌خواهم", "fa").split() == [c("میخواهم", "fa")]
+
+
+def test_arabic_short_vowels_are_removed_not_split():
+    assert c("كَتَبَ الوَلَدُ", "ar") == c("كتب الولد", "ar") == "كتب الولد"
+    assert c("مُحَمَّد", "ar") == "محمد"
+
+
+def test_marks_survive_and_punctuation_symbols_go():
+    assert c("दर: 5%, ₹10 + १२", "hi") == "दर 5 percent 10 १२"
+
+
+@pytest.mark.parametrize("lang,text,want", [
+    ("en", "The rate's up 0.5 percentage points; it's a_b.", "the rate s up 05 percentage points it s a_b"),
+    ("es", "La tasa subió; ¿está bien? Sí.", "la tasa subió está bien sí"),
+    ("pt", "Ação rápida, não é 1,234 vezes.", "ação rápida não é 1234 vezes"),
+    ("ja", "金利は上がった。ＡＢＣ１２３、です。", "金利は上がった abc123 です"),
+])
+def test_latin_and_japanese_results_unchanged(lang, text, want):
+    assert c(text, lang) == want
+
+
+def test_japanese_still_uses_the_character_error_rate():
+    assert error_rate("金利は上がった", "金利は上がった", "ja") == 0.0
+    assert 0 < error_rate("金利は上がった", "金利が上がった", "ja") < 30
