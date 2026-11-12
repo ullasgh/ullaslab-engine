@@ -29,12 +29,20 @@ def _extras(code: str) -> str:
     return ",".join(sorted(extras))
 
 
+def cmd_studio_dub_fixture(a):
+    """Dub proof run (workflow_dispatch): bundle, reference voice and synthetic master timing for one dub language."""
+    from .studio.fixture import dub_fixture
+    dub_fixture(Path(a.work), a.lang)
+    print("dub fixture ready")
+    return 0
+
+
 def cmd_plan(a):
     """Emit GitHub outputs: dub matrix (non-source languages), engine extras, has_dubs. No URLs.
     --fixture (workflow_dispatch proof run): no payload, English master only."""
     if a.fixture:
         from .studio.fixture import payload_free_plan
-        for line in payload_free_plan():
+        for line in payload_free_plan("es" if a.dub else None):
             print(line)
         print("master_extras=" + _extras("en"))
         return 0
@@ -320,7 +328,8 @@ def main(argv=None) -> int:
         return sp
 
     add("mask", cmd_mask, payload=dict(required=True))
-    add("plan", cmd_plan, payload=dict(default=None), fixture=dict(action="store_true"))
+    add("plan", cmd_plan, payload=dict(default=None), fixture=dict(action="store_true"), dub=dict(action="store_true"))
+    add("studio-dub-fixture", cmd_studio_dub_fixture, work=dict(required=True), lang=dict(default="es"))
     add("variants", cmd_variants, work=dict(required=True), lang=dict(required=True))
     add("fetch", cmd_fetch, payload=dict(required=True), work=dict(required=True),
         voice=dict(action="store_true"), timing=dict(action="store_true"), music=dict(action="store_true"),

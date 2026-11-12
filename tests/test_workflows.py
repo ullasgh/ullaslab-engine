@@ -167,3 +167,36 @@ def test_voice_gate_lines_are_public_safe_and_the_render_waits_for_the_voice_ste
     assert names.index(voice["name"]) < names.index(render["name"])
     qa = next(s for s in steps if s.get("name", "").startswith("QA gates"))
     assert qa["if"] == "always()"
+
+
+def test_dub_job_skips_only_after_a_failed_master_and_has_step_timeouts_and_shared_cache():
+    j = load(ROOT / ".github/workflows/render.yml")["jobs"]
+    cond = j["dub"]["if"]
+    assert "needs.master.result == 'success'" in cond and "needs.master.result == 'skipped'" in cond and "failure" not in cond
+    assert "always()" in cond  # evaluated even though the master job is skipped on the dub proof run
+    assert j["master"]["if"] == "github.event.inputs.fixture != 'studio-short-dub'"
+    steps = {s.get("name", ""): s for s in j["dub"]["steps"]}
+    assert steps["TTS (voice clone or stock voice per languages.yaml)"]["timeout-minutes"] < j["dub"]["timeout-minutes"]
+    cache = next(s for s in j["dub"]["steps"] if str(s.get("uses", "")).startswith("actions/cache") and "huggingface" in str(s["with"]["path"]))
+    assert "matrix.lang" not in cache["with"]["key"] and "matrix.extras" in cache["with"]["key"]
+
+
+def test_every_dub_always_reports_a_result_and_the_fixture_dub_uploads_nothing():
+    steps = _steps("dub")
+    up = next(s for s in steps if s.get("id") == "upload")
+    assert up["if"].startswith("always()") and "repository_dispatch" in up["if"]
+    rep = next(s for s in steps if s.get("name", "").startswith("Report a failed dub"))
+    assert rep["if"].startswith("always()") and ".qa_uploaded" in rep["run"] and "qa_${LANG_CODE}.json" in rep["run"]
+    assert "set +x" in rep["run"] and "-v" not in rep["run"].replace("--max-time", "")
+    for s in steps:
+        r = s.get("run", "")
+        if "fetch --payload" in r or "upload --payload" in r:
+            assert "repository_dispatch" in s["if"], s.get("name")
+
+
+def test_dub_fixture_inputs_and_plan():
+    on = load(ROOT / ".github/workflows/render.yml")["on"]
+    assert on["workflow_dispatch"]["inputs"]["fixture"]["options"] == ["studio-short", "studio-short-dub"]
+    from ullaslab_engine.studio.fixture import payload_free_plan
+    assert payload_free_plan() == ['matrix={"include": []}', "has_dubs=false"]
+    assert '"lang": "es"' in payload_free_plan("es")[0] and payload_free_plan("es")[1] == "has_dubs=true"
