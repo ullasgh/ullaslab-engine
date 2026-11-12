@@ -136,9 +136,9 @@ def _join_digit_runs(tokens: list[str]) -> list[str]:
 
 
 # The brand in the fixed sign-off ("Follow UllasLab. Education only.", in every video). The voice says "Ullas Lab" (lexicon)
-# and Whisper writes it as "Ullas lab", "Ullis lab" or "Ulos' lab": one name, spelled several ways, not a mispronounced
+# and Whisper writes it as "Ullas lab", "Ullis lab", "Ulos' lab", "Ula's lab" or "Ula s lab": one name, spelled several ways, not a mispronounced
 # word. Both sides are mapped to one token (WER2: two word errors in every video against the 3% gate, live run 2026-11-12).
-_BRAND = re.compile(r"\bull?[aeio]s'?[\s-]?lab\b", re.I)
+_BRAND = re.compile(r"\bull?[aeio][\s']?s?'?[\s-]?lab\b", re.I)   # also "Ula s lab" (three words)
 
 
 def canonical_for_wer(text: str, lang: str = "en") -> str:

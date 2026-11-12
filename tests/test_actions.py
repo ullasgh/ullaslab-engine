@@ -529,7 +529,7 @@ def pace_words_override_reaches_once():
 
 def test_brand_spellings_are_one_token_in_the_wer_and_real_errors_still_count():
     c = canonical_for_wer
-    for hyp in ("Follow Ulos' lab, education only.", "Follow Ullas lab. Education only.", "Follow Ullis Lab education only"):
+    for hyp in ("Follow Ulos' lab, education only.", "Follow Ullas lab. Education only.", "Follow Ullis Lab education only", "follow Ula s lab, education only", "Follow Ula's lab. Education only."):
         assert c(hyp) == c("Follow UllasLab. Education only.") == "follow ullaslab education only"
     assert c("the lab") == "the lab" and c("Hullas lab") != "ullaslab"
     from ullaslab_engine.asr import error_rate
