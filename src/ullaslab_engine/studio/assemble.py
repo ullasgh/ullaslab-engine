@@ -1,6 +1,7 @@
 """Assembly: resolve every scene's visual (footage via the asset ledger, charts via data_ref -> chart specs, other
 types via the SceneRenderer defaults) and write one Remotion props file per output."""
 from __future__ import annotations
+import re
 import copy
 import json
 import subprocess
@@ -43,6 +44,15 @@ def load_chart_specs(item: Path) -> dict[str, dict]:
     return {}
 
 
+_STAMP_TAG = re.compile(r"\s*\[(?:LIVE|RECENT|LAGGED|EXPECTATION|INFERRED)\]\s*$")
+
+
+def stamp_name(name: str) -> str:
+    """The source stamp as a viewer sees it. The content repo's stamp ends with the freshness tag ("... As of 2026-11-09.
+    [RECENT]"); the tag belongs to the data ledger (meta.freshness), never on screen (studio QC: no freshness labels)."""
+    return _STAMP_TAG.sub("", name or "")
+
+
 def to_kit_chart(ref: str, c: dict) -> dict:
     """Engine chart (type/series/source) or kit chart (kind/meta) -> kit ChartSceneData."""
     if "kind" in c and "meta" in c:
@@ -55,7 +65,7 @@ def to_kit_chart(ref: str, c: dict) -> dict:
     pts = series[0]["points"] if series else []
     xs = [p["x"] for p in pts]
     meta = {"metric": _s(c.get("title")), "unit": c.get("unit", ""), "period": f"{xs[0]} to {xs[-1]}" if xs else "",
-            "source": {"name": src.get("name", ""), "as_of": src.get("as_of", "")}, "freshness": c.get("freshness", "RECENT")}
+            "source": {"name": stamp_name(src.get("name", "")), "as_of": src.get("as_of", "")}, "freshness": c.get("freshness", "RECENT")}
     if src.get("url"):
         meta["source"]["url"] = src["url"]
     dec = c.get("decimals", 1)

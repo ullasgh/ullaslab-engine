@@ -155,3 +155,15 @@ def test_master_uploads_even_when_qa_fails_and_dubs_wait_for_master():
     assert up_i > qa_i and steps[up_i]["if"].startswith("always()")  # failed render stays reviewable (qa.json + master.mp4)
     assert steps[qa_i]["if"] == "always()" and "studio-export" in steps[qa_i]["run"]  # a failed voice/studio step still writes qa
     assert "dub" not in steps[up_i]["run"] and "master" in j["dub"]["needs"]  # default if: success() keeps dubs off
+
+
+def test_voice_gate_lines_are_public_safe_and_the_render_waits_for_the_voice_step():
+    steps = _steps("master")
+    names = [s.get("name", "") for s in steps]
+    voice = next(s for s in steps if s.get("name", "").startswith("Voice"))
+    assert "\\[voice-gate\\]" in voice["run"] and "exit $rc" in voice["run"]
+    render = next(s for s in steps if s.get("name", "").startswith("Studio render"))
+    assert "if" not in render, "the render must be skipped when the voice step (phase 2) fails"
+    assert names.index(voice["name"]) < names.index(render["name"])
+    qa = next(s for s in steps if s.get("name", "").startswith("QA gates"))
+    assert qa["if"] == "always()"
