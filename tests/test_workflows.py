@@ -216,3 +216,11 @@ def test_cache_key_part_has_no_comma_for_any_language(capsys):
             assert k and "," not in k and " " not in k, code
     from ullaslab_engine.studio.fixture import payload_free_plan
     assert "," not in _j.loads(payload_free_plan("es")[0].removeprefix("matrix="))["include"][0]["cache"]
+
+
+def test_install_parler_pins_cpu_torch_pair():
+    import re
+    from pathlib import Path
+    t = (Path(__file__).resolve().parents[1] / "scripts/install_parler.sh").read_text()
+    line = next(l for l in t.splitlines() if "download.pytorch.org/whl/cpu" in l and "uv pip install" in l)
+    assert re.search(r'"torch==\d+\.\d+\.\d+"', line) and re.search(r'"torchaudio==\d+\.\d+\.\d+"', line)
