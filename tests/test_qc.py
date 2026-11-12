@@ -263,7 +263,7 @@ def test_untagged_number_on_screen_fails_until_ledger_row_tags_it(tmp_path):
 
 def test_footage_ledger_completeness(tmp_path):
     from studio_fixture import make_item
-    item = make_item(tmp_path)
+    item = make_item(tmp_path, voice=False)   # no voice needed; macOS `say` is absent on CI runners
     doc = json.loads((item / "scenes.json").read_text())
     names = [c for c in Q.check_data(item, doc, False) if c.name == "footage ledger complete"]
     assert names[0].status == Q.PASS
