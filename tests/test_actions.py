@@ -655,3 +655,64 @@ def test_voice_gate_writes_the_wer_diff_to_the_private_log_only(tmp_path):
     public = re.compile(r"^\[voice-gate\] [A-Za-z0-9_]+\.[a-z_]+=[-0-9.a-z_]+ limit=[-0-9.a-zA-Z_ +]+ (PASS|FAIL)$|^voice (gates|budget)")
     assert not any(public.match(l) for l in diff)        # the workflow prints only lines matching this
     assert not any("secretword" in l.lower() for l in lines if public.match(l))
+
+def _dub_upload(tmp_path, monkeypatch, w, names):
+    from ullaslab_engine import cli
+    pf = tmp_path / "event.json"
+    pf.write_text(json.dumps({"client_payload": payload(outputs={n: H + n + "?s=x" for n in names})}))
+    sent = []
+    monkeypatch.setattr(eio, "upload", lambda url, path, ctype: sent.append((url.split("/")[-1].split("?")[0], Path(path))))
+    assert cli.main(["upload", "--payload", str(pf), "--work", str(w), "--lang", "hi"]) == 0
+    return sent
+
+
+def test_dub_that_never_reached_qa_still_reports_a_failing_result_last(tmp_path, monkeypatch):
+    """The private poll waits for every qa_<lang>.json: a crashed dub (no qa.json) and its failed variant must upload a failing
+    result instead of leaving the English master waiting, and the QA files go last."""
+    w, _ = _ready(tmp_path)
+    mf = json.loads((w / "bundle" / "manifest.json").read_text())
+    mf["variants"] = [{"name": "hi_vertical", "lang": "hi", "orientation": "vertical"}]
+    (w / "bundle" / "manifest.json").write_text(json.dumps(mf))
+    (w / "hi").mkdir(exist_ok=True)
+    (w / "hi" / "captions.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nx\n")
+    sent = _dub_upload(tmp_path, monkeypatch, w,
+                       ["audio_hi.wav", "captions_hi.srt", "status_hi.json", "qa_hi.json", "hi_vertical.mp4", "qa_hi_vertical.json"])
+    names = [n for n, _ in sent]
+    assert set(names) == {"captions_hi.srt", "status_hi.json", "qa_hi.json", "qa_hi_vertical.json"}
+    assert names[-2:] == ["qa_hi.json", "qa_hi_vertical.json"] or set(names[-2:]) == {"qa_hi.json", "qa_hi_vertical.json"}
+    qa = json.loads((w / "hi" / "qa.json").read_text())
+    assert qa["passed"] is False and qa["gates"]["dub_result"]["passed"] is False
+    assert json.loads((w / "hi" / "hi_vertical" / "qa.json").read_text())["passed"] is False
+    assert (w / "hi" / ".qa_uploaded").exists()
+
+
+def test_dub_with_a_real_qa_result_is_not_overwritten(tmp_path, monkeypatch):
+    w, _ = _ready(tmp_path)
+    (w / "hi").mkdir(exist_ok=True)
+    real = {"lang": "hi", "passed": True, "gates": {}}
+    (w / "hi" / "qa.json").write_text(json.dumps(real))
+    (w / "hi" / "status.json").write_text(json.dumps({"lang": "hi", "voice": True}))
+    _dub_upload(tmp_path, monkeypatch, w, ["status_hi.json", "qa_hi.json"])
+    assert json.loads((w / "hi" / "qa.json").read_text()) == real
+
+
+def test_dub_upload_reports_even_when_the_bundle_was_never_fetched(tmp_path, monkeypatch):
+    from ullaslab_engine import cli
+    w = tmp_path / "work"
+    w.mkdir()
+    pf = tmp_path / "event.json"
+    pf.write_text(json.dumps({"client_payload": payload(outputs={"qa_hi.json": H + "qa_hi.json?s=x"})}))
+    sent = []
+    monkeypatch.setattr(eio, "upload", lambda url, path, ctype: sent.append(Path(path).name))
+    assert cli.main(["upload", "--payload", str(pf), "--work", str(w), "--lang", "hi"]) == 0
+    assert sent == ["qa.json"] and json.loads((w / "hi" / "qa.json").read_text())["passed"] is False
+
+
+def test_captions_only_dub_reports_why(tmp_path):
+    from ullaslab_engine import pipeline as P
+    w = tmp_path / "w"
+    (w / "ar").mkdir(parents=True)
+    (w / "ar" / "status.json").write_text(json.dumps({"lang": "ar", "voice": False}))
+    assert P.ensure_dub_result(w, "ar", []) == ["ar/qa.json"]
+    c = json.loads((w / "ar" / "qa.json").read_text())["gates"]["dub_result"]["checks"][0]
+    assert "captions only" in c["value"] and c["passed"] is False

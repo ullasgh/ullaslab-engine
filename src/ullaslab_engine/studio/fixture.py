@@ -120,9 +120,48 @@ def build(work: Path, *, ref_voice: bool = True, tts_fn=None) -> Path:
     return item
 
 
-def payload_free_plan() -> list[str]:
-    """`plan --fixture`: no dubs, English master only."""
-    return ["matrix=" + json.dumps({"include": []}), "has_dubs=false"]
+NARRATION_ES = [
+    "Por que el dinero ahorrado hoy compra un poco menos cada ano?",
+    "Cuando los precios suben en toda la economia, cada unidad de moneda alcanza para menos bienes, y el mismo billete compra una cesta mas pequena.",
+    "Este grafico inventado muestra un indice de precios que sube de cien a ciento doce en tres anos.",
+    "Los ahorros que rinden menos que esa subida pierden poder de compra, mientras que los que la igualan se mantienen.",
+    "Los economistas llaman rendimiento real a la diferencia entre ambos, y conviene revisarlo antes de comparar dos opciones.",
+    "Asi que cuando una cifra parezca grande, pregunta que compra. Sigue a UllasLab. Solo educacion.",
+]
+DUB_LANGS = {"es": NARRATION_ES}
 
 
-__all__ = ["build", "manifest", "scenes_doc", "chart", "ITEM", "payload_free_plan"]
+def dub_fixture(work: Path, lang: str = "es", total_s: float = 48.0) -> None:
+    """Public-safe dub proof (render.yml `dub` job, workflow_dispatch fixture): the fixture bundle with generic translated text,
+    the Kokoro reference voice and a synthetic English master timing (even segment windows), so the dub commands (tts,
+    captions, qa) run on the real runner without the private repo, R2 or any payload."""
+    from ..synth import _scene_windows
+    from .. import tts as T
+    work = Path(work)
+    b = work / "bundle"
+    m = manifest()
+    m["languages"] = ["en", lang]
+    for sg, t in zip(m["segments"], DUB_LANGS[lang]):
+        sg["text"][lang] = t
+    m.pop("studio", None)
+    jdump(m, b / "manifest.json")
+    jdump(chart(), b / "charts" / "c1.json")
+    T.tts("This is a synthetic reference voice for the engine's public test render. It reads a short neutral passage about weather, "
+          "trains and libraries, so the clone step has a few seconds of clear speech to work with.", "en", None, engine="kokoro").save(work / "voice.wav")
+    n = len(m["segments"])
+    step = (total_s - 4.0) / n
+    times = {sg["id"]: (0.5 + i * step, 0.5 + (i + 1) * step - 0.3) for i, sg in enumerate(m["segments"])}
+    scenes, _ = _scene_windows({**m, "scenes": m["scenes"]}, times)
+    scenes[-1]["end"] = total_s
+    jdump({"lang": "en", "mode": "natural", "source": "fixture", "total_s": total_s, "sr": 48000,
+           "segments": [{"id": k, "start": round(a, 3), "end": round(e, 3)} for k, (a, e) in times.items()],
+           "scenes": scenes, "overruns": []}, work / "timing_en.json")
+
+
+def payload_free_plan(dub: str | None = None) -> list[str]:
+    """`plan --fixture`: English master only, or (fixture=studio-short-dub) also one dub language for the dub job."""
+    rows = [{"lang": dub, "extras": "chatterbox,kokoro", "cache": "chatterbox-kokoro"}] if dub else []
+    return ["matrix=" + json.dumps({"include": rows}), "has_dubs=" + ("true" if rows else "false")]
+
+
+__all__ = ["dub_fixture", "build", "manifest", "scenes_doc", "chart", "ITEM", "payload_free_plan"]

@@ -632,3 +632,20 @@ def test_error_excerpt_keeps_the_head_and_the_tail():
     e = _err_excerpt(t)
     assert e.startswith("HEAD-CAUSE") and e.endswith("TAIL-STACK") and len(e) < 1200
     assert _err_excerpt("short") == "short"
+
+
+def test_dub_fixture_builds_bundle_and_master_timing_for_the_dub_job(tmp_path, monkeypatch):
+    """The workflow_dispatch dub proof run: public-safe bundle (en + es), synthetic master timing the slot timeline can use."""
+    from ullaslab_engine import tts as T
+    from ullaslab_engine.audio import Wav
+    from ullaslab_engine.bundle import load_bundle
+    from ullaslab_engine.studio import fixture as F
+    import numpy as np
+    monkeypatch.setattr(T, "tts", lambda *a, **k: Wav(np.zeros(2400, dtype=np.float32), 24000))
+    F.dub_fixture(tmp_path, "es")
+    m = load_bundle(tmp_path / "bundle")
+    assert m["languages"] == ["en", "es"] and all("es" in s["text"] for s in m["segments"])
+    tl = json.loads((tmp_path / "timing_en.json").read_text())
+    assert [s["id"] for s in tl["segments"]] == [s["id"] for s in m["segments"]] and 30 <= tl["total_s"] <= 60
+    assert all(a["end"] <= b["start"] for a, b in zip(tl["segments"], tl["segments"][1:]))
+    assert (tmp_path / "voice.wav").exists()
