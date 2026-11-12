@@ -165,7 +165,7 @@ def _synth(text: str, lang: str, ref: Path | None, engine: str | None, settings:
             continue
         _cache_put(cache, key, w)
         return w
-    raise base.NoVoiceAvailable(f"chunk {text[:80]!r} failed {CHUNK_RETRIES} times: {last}")
+    raise base.NoVoiceAvailable(f"chunk {text[:80]!r} failed {CHUNK_RETRIES} times: {last}", getattr(last, "failures", None))
 
 
 def _trim(x: np.ndarray, sr: int) -> np.ndarray:

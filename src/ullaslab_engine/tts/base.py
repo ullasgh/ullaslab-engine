@@ -18,11 +18,21 @@ log = logging.getLogger("ullaslab.tts")
 
 
 class EngineUnavailable(RuntimeError):
-    """Engine package or weights missing, or engine failed to produce audio."""
+    """Engine package or weights missing, or engine failed to produce audio. `error_class` names the underlying
+    exception class (never its text: that can quote paths or script)."""
+
+    def __init__(self, msg: str = "", error_class: str | None = None):
+        super().__init__(msg)
+        self.error_class = error_class
 
 
 class NoVoiceAvailable(RuntimeError):
-    """No engine (primary or fallback) can voice this language: degrade to captions only."""
+    """No engine (primary or fallback) can voice this language. `failures` is [(engine, exception class)]: the dub
+    stage records it and fails the TTS step instead of silently shipping captions only."""
+
+    def __init__(self, msg: str = "", failures: list[tuple[str, str]] | None = None):
+        super().__init__(msg)
+        self.failures = list(failures or [])
 
 
 class Engine(Protocol):
@@ -53,13 +63,20 @@ def get_engine(name: str) -> Engine:
     if name in _CACHE:
         return _CACHE[name]
     if name in _FACTORIES:
-        eng = _FACTORIES[name]()
+        try:
+            eng = _FACTORIES[name]()
+        except EngineUnavailable:
+            raise
+        except Exception as e:
+            raise EngineUnavailable(f"{name}: failed to load ({type(e).__name__})", type(e).__name__) from None
     elif name in _BUILTIN:
         mod, cls = _BUILTIN[name].split(":")
         try:
             eng = getattr(importlib.import_module(mod), cls)()
         except ImportError as e:
-            raise EngineUnavailable(f"{name}: extra not installed ({e.name})") from None
+            raise EngineUnavailable(f"{name}: extra not installed ({e.name})", "ImportError") from None
+        except Exception as e:  # weights missing offline, bad install, out of memory: a load failure of THIS engine
+            raise EngineUnavailable(f"{name}: failed to load ({type(e).__name__})", type(e).__name__) from None
     else:
         raise EngineUnavailable(f"unknown engine {name}")
     _CACHE[name] = eng
@@ -85,7 +102,7 @@ def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: b
     (the pipeline normalises the assembled track instead, to keep relative levels).
     """
     ref = Path(ref_wav) if ref_wav else None
-    errors = []
+    errors, failures = [], []
     for name in ([engine] if engine else plan_engines(lang)):
         try:
             eng = get_engine(name)
@@ -101,7 +118,8 @@ def tts(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: b
         except EngineUnavailable as e:
             log.warning("tts engine %s unusable for %s: %s", name, lang, e)
             errors.append(f"{name}: {e}")
-    raise NoVoiceAvailable(f"{lang}: " + "; ".join(errors) if errors else lang)
+            failures.append((name, getattr(e, "error_class", None) or type(e).__name__))
+    raise NoVoiceAvailable(f"{lang}: " + "; ".join(errors) if errors else lang, failures)
 
 
 def engine_used(lang: str) -> str | None:

@@ -107,6 +107,9 @@ def cmd_tts(a):
     r = P.stage_tts(work, a.lang, want_natural=want_nat)
     if r["voice"]:
         print(f"rtf={r['rtf']}")  # synthesis seconds per audio second; numbers only
+    if r.get("failed"):  # the TTS step fails loudly; the upload step still writes the failing QA marker
+        print(f"tts failed: engine={r['engine']} error={r['error']}", file=sys.stderr)
+        return 1
     print("voice" if r["voice"] else "captions-only")
     return 0
 

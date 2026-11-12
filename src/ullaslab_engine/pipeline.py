@@ -13,6 +13,7 @@ from .config import ROOT, language
 from .qa import _check, _gate, run_qa, write_qa
 from .synth import natural_timeline, slot_timeline, synth_segments, SR
 from .tts import NoVoiceAvailable, tts as _raw_tts
+from .tts.base import plan_engines
 from .voice.textnorm import normalize_text
 
 SRC = "en"
@@ -56,9 +57,17 @@ def stage_tts(work: Path, lang: str, tts_fn=default_tts, want_natural: bool = Fa
     t0 = time.monotonic()
     try:
         wavs = synth_segments(m, lang, voice_path(work, m), tts_fn)
-    except NoVoiceAvailable:
-        jdump({"lang": lang, "voice": False}, out / "status.json")
-        return {"voice": False}
+    except NoVoiceAvailable as e:
+        if not plan_engines(lang):  # no engine configured for this language: captions only by design
+            jdump({"lang": lang, "voice": False}, out / "status.json")
+            return {"voice": False}
+        # a configured engine that cannot load or synthesize is a failed dub, not a quiet captions-only one.
+        # Engine names and exception CLASS names only: the message can quote script text.
+        fails = list(e.failures) or [("unknown", "NoVoiceAvailable")]
+        engine = ",".join(dict.fromkeys(f[0] for f in fails))
+        error = ",".join(dict.fromkeys(f[1] for f in fails))
+        jdump({"lang": lang, "voice": False, "failed": True, "engine": engine, "error": error}, out / "status.json")
+        return {"voice": False, "failed": True, "engine": engine, "error": error}
     src = m["source_lang"]
     if lang == src:
         audio, tl = natural_timeline(m, lang, wavs)
@@ -167,14 +176,19 @@ def ensure_dub_result(work: Path, lang: str, variants: list[str]) -> list[str]:
     d = work / lang
     d.mkdir(parents=True, exist_ok=True)
     st = d / "status.json"
-    voiced = st.exists() and jload(st).get("voice") is not False
-    why = "dub stage did not finish" if not st.exists() else ("no voice for this language (captions only)" if not voiced else "dub stage failed after the voice")
+    info = jload(st) if st.exists() else {}
+    voiced = st.exists() and info.get("voice") is not False
+    if info.get("engine"):
+        why = f"dub voice failed: engine {info['engine']} raised {info.get('error') or 'an error'}"
+    else:
+        why = "dub stage did not finish" if not st.exists() else ("no voice for this language (captions only)" if not voiced else "dub stage failed after the voice")
     if not st.exists():
         jdump({"lang": lang, "voice": False, "failed": True}, st)
     wrote = []
     for path in [d / "qa.json"] + [d / v / "qa.json" for v in variants]:
         if not path.exists():
             qa = {"lang": lang, "slug": None, "passed": False, "variant": path.parent.name if path.parent != d else None,
+                  **({"engine": info["engine"], "error": info.get("error")} if info.get("engine") else {}),
                   "gates": {"dub_result": _gate([_check("qa_result", why, "a QA report", False)])}}
             jdump(qa, path)
             wrote.append(str(path.relative_to(work)))

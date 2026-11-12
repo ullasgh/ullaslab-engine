@@ -253,6 +253,7 @@ jobs:
           case "$out" in voice|captions-only) ;; *) echo "unexpected tts result"; exit 1;; esac
           echo "mode=$out" >> "$GITHUB_OUTPUT"
       - name: Captions (translated, timed from segment mapping)
+        if: ${{ !cancelled() }}   # also after a failed TTS step: the translated text does not wait on the voice
         run: uv run --no-sync python -m ullaslab_engine captions --work work --lang "$LANG_CODE" --no-asr
       - name: QA dubbed audio track (fails the job on breach)
         if: steps.tts.outputs.mode == 'voice'

@@ -54,5 +54,5 @@ class IndicParlerEngine:
                     input_ids=d.input_ids, attention_mask=d.attention_mask,
                     prompt_input_ids=p.input_ids, prompt_attention_mask=p.attention_mask)
         except Exception as e:
-            raise EngineUnavailable(f"indic_parler failed: {type(e).__name__}") from None
+            raise EngineUnavailable(f"indic_parler failed: {type(e).__name__}", type(e).__name__) from None
         return Wav(out.cpu().numpy().astype(np.float32).reshape(-1), int(self._model.config.sampling_rate))
