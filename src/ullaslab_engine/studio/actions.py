@@ -10,11 +10,11 @@ work/                      (runner only; nothing here is uploaded except through
   timing_en.json           the English segment windows on the master timeline, for the dub jobs and the story
 
 Stages: prepare (bundle -> item), voice (one narration per output with the cloned voice, pace target), `studio run --asr
-faster`, export (outputs + qa_en.json). qa_en.json keeps the engine gates that apply to a studio render, with unchanged
-limits: A1 (claim ids, chart hashes), A2 (data visuals), A3 (loudness, true peak, silence, wpm, sentence length, WER <= 3%
-against the narrated text), A5 (safe zone and text size from a layout audit of every scene), duration, plus the studio QC
-verdict (any FAIL fails). A4 (beat spacing of the pre-V2 templates) has no counterpart: studio scenes are timed to the voice
-and checked by QC (black, frozen and repeated shots)."""
+faster`, export (outputs + qa_en.json). qa_en.json keeps every engine gate, limits from config/quality.yaml unchanged: A1
+(claim ids, chart hashes), A2 (data visuals), A3 (loudness, true peak, silence, wpm, sentence length, WER <= 3% against the
+narrated text), A4 (voice-timed scene lengths and hook start; picture change from studio QC freezedetect), A5 (safe zone,
+text sizes, contrast, word budget from a layout audit of every timed scene), duration, the studio QC verdict (any FAIL
+fails) and, when the voice step refused the item, runner_budget."""
 from __future__ import annotations
 import json
 import shutil
