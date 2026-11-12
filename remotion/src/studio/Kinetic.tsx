@@ -74,7 +74,7 @@ export const LowerThird: React.FC<{ title: string; subtitle?: string; delay?: nu
       <div style={{ width: 8, background: pal.accent, borderRadius: 4, transform: `scaleY(${bar})`, transformOrigin: "bottom" }} />
       <div style={{ opacity: k, transform: `translateX(${(1 - k) * -40}px)`, textShadow: "0 2px 16px rgba(0,0,0,0.6)" }}>
         <div data-audit="headline" style={{ fontSize: L.type.body, fontWeight: 700, color: pal.ink, lineHeight: 1.1 }}>{title}</div>
-        {subtitle && <div data-audit="body" style={{ fontSize: L.type.label, color: pal.muted, lineHeight: 1.2 }}>{subtitle}</div>}
+        {subtitle && <div data-audit="label" style={{ fontSize: L.type.label, color: pal.muted, lineHeight: 1.2 }}>{subtitle}</div>}
       </div>
     </div>
   );

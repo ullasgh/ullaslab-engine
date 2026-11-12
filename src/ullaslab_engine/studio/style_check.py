@@ -12,8 +12,8 @@ from PIL import Image
 
 from .layout_check import SIZES, caption_boxes
 
-TEXT_ROLES = ("headline", "body", "stamp")
-MIN_PX = {"headline": 36, "body": 36, "stamp": 36, "caption": 40}   # quality.yaml A5 floors (label/stamp 36)
+TEXT_ROLES = ("headline", "body", "label", "stamp")
+MIN_PX = {"headline": 36, "body": 36, "label": 36, "stamp": 36, "caption": 40}   # quality.yaml A5 floors (label/stamp 36)
 TOL = 4.0   # px: sub-pixel and rounding slop (the existing vertical timeline sits 2 px past the box edge)
 
 
@@ -48,7 +48,7 @@ def check_still(rec: dict, png: Path) -> list[str]:
     sx0, sy0, sx1, sy1 = b["safe"]
     cx0, cy0, cx1, cy1 = b["content"]
     texts = [e for e in rec["elements"] if e["role"] in TEXT_ROLES + ("caption",)]
-    if not any(e["role"] in ("headline", "body") for e in texts):
+    if not any(e["role"] in ("headline", "body", "label") for e in texts):
         bad.append(f"{tag}: no headline or body text found")
     for e in texts:
         x0, y0, x1, y1 = e["x"], e["y"], e["x"] + e["w"], e["y"] + e["h"]

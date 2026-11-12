@@ -141,7 +141,7 @@ export const CardStack: React.FC<{ text: string }> = ({ text }) => {
             <div key={i} style={{ position: "relative", opacity: k, transform: `translateY(${(1 - k) * 30}px)`, background: pal.panel, borderRadius: preset.layout.radius, border: `${preset.layout.border}px solid ${pal.grid}`, boxSizing: "border-box", padding: "0 28px 0 40px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, overflow: "hidden" }}>
               <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 10, background: i % 2 ? pal.accent2 : pal.accent }} />
               <div data-audit="headline" style={{ fontSize: titleSize, fontWeight: 700, lineHeight: 1.12, color: pal.ink, fontVariantNumeric: "tabular-nums" }}>{c.title}</div>
-              {c.detail && <div data-audit="body" style={{ fontSize: L.type.label, lineHeight: 1.2, color: pal.muted }}>{c.detail}</div>}
+              {c.detail && <div data-audit="label" style={{ fontSize: L.type.label, lineHeight: 1.2, color: pal.muted }}>{c.detail}</div>}
             </div>
           );
         })}

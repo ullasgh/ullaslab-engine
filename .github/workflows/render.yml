@@ -33,7 +33,7 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions: {}
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -66,9 +66,9 @@ jobs:
   master:
     needs: plan
     runs-on: ubuntu-24.04
-    # The whole render (master, then the dub matrix) must finish inside the private repo's 3 h poll window and the presigned
-    # URL lifetime (3 h 15 min): master 125 min + dub 50 min.
-    timeout-minutes: 125
+    # The whole render (plan, master, then the dub matrix) must finish inside the private repo's 3 h poll window and the
+    # presigned URL lifetime (3 h 15 min): plan 5 + master 120 + dub 50 = 175 min.
+    timeout-minutes: 120
     permissions: {}
     steps:
       - name: Mask payload URLs
@@ -125,6 +125,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: uv run --no-sync python -m ullaslab_engine studio-fixture --work work
       - name: Voice (narration per output; output goes to the private log only)
+        env:
+          ULLASLAB_VOICE_BUDGET_MIN: "60"   # refuse early (failing runner_budget gate) what cannot finish inside the job
         run: |
           set +e
           uv run --no-sync python -m ullaslab_engine studio-voice --work work >> work/logs/studio.log 2>&1

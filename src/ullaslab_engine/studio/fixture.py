@@ -32,8 +32,8 @@ REF_TEXT = ("This is a synthetic reference voice for the engine's public test re
 
 
 def chart() -> dict:
-    pts = [{"x": f"Year {y} Q{q}", "y": round(100 + (4 * (y - 1)) + q, 1)} for y in (1, 2, 3) for q in (1, 2, 3, 4)]
-    c = {"type": "line", "title": "Price index (synthetic)", "unit": "index, start = 100", "decimals": 1,
+    pts = [{"x": f"{2023 + y}-{3 * q:02d}", "y": round(100 + (4 * y) + q, 1)} for y in (0, 1, 2) for q in (1, 2, 3, 4)]
+    c = {"type": "line", "title": "Price index (synthetic)", "unit": "index", "decimals": 1,
          "series": [{"name": "Index", "color": "primary", "points": pts}],
          "source": {"name": "UllasLab test fixture (synthetic, not real figures)", "as_of": "2026-11-01"}, "freshness": "INFERRED",
          "claim_id": "c1"}

@@ -1,13 +1,14 @@
-"""WP8 safe-zone gate for studio renders (the studio counterpart of QA A5 `elements_outside_safe_zone`).
+"""WP8: QA A5 (mobile readability) for studio renders, with the A5 limits of config/quality.yaml unchanged.
 
-One still per scene (at 70% of its span) of each rendered output, with the layout audit on (remotion/studio_render.mjs
---audit-frames): element geometry and font sizes only, never text. Rules are the ones the style stills are held to
-(style_check.check_still): headlines, body copy and source stamps stay inside the content box (the safe box minus the
-caption band), captions, the end card and the footage tag stay inside the safe box. Text floors are the A5 ones from
-config/quality.yaml: headlines and captions at least min_body_text_px (44), the studio's body lines (chart metric and unit
-lines, end-card line, set at label size by design), stamps and the footage tag at least min_label_text_px (36).
-The safe box is the renderer's own (remotion/src/studio/layout.ts via layout_check: the stricter of YouTube Shorts and
-Instagram Reels for 9:16). Limits are 0, as for A5."""
+One still per timed scene (at 70% of its span) of each rendered output, with the layout audit on (remotion/studio_render.mjs
+--audit-frames): element geometry, font size, colours and word counts only, never text. Same roles and limits as
+qa.gate_a5: body roles (headline, body, caption, legal) at least min_body_text_px, label roles (label, axis, stamp, tag) at
+least min_label_text_px, contrast at least min_contrast_ratio wherever foreground and background colours are known, at most
+max_non_caption_words_per_scene words of headline, body and label text per still, and nothing outside the safe zone. The
+safe zone is the renderer's own box (remotion/src/studio/layout.ts via layout_check, the stricter of YouTube Shorts and
+Instagram Reels for 9:16): headlines, body, labels and stamps inside the content box (the safe box minus the caption band,
+the rule the style stills follow), captions, the end card and the footage tag inside the safe box. Studio text set at label
+size carries the `label` role (chart metric and unit lines, diagram and card details, kinetic subtitles)."""
 from __future__ import annotations
 import json
 import subprocess
@@ -16,16 +17,16 @@ from pathlib import Path
 from . import FPS
 from .layout_check import SIZES, caption_boxes
 from ..config import quality
+from ..qa import BODY_ROLES, COUNTED_ROLES, LABEL_ROLES, contrast_ratio
 from .style_check import TOL
 
-CONTENT_ROLES = ("headline", "body", "stamp")
+CONTENT_ROLES = ("headline", "body", "label", "axis", "stamp", "legal")
 SAFE_ROLES = ("caption", "endcard", "tag")
 
 
 def min_px() -> dict[str, float]:
     q = quality()["A5_mobile_readability"]
-    big, small = q["min_body_text_px"], q["min_label_text_px"]
-    return {"headline": big, "caption": big, "body": small, "stamp": small, "tag": small}
+    return {**{r: q["min_body_text_px"] for r in BODY_ROLES}, **{r: q["min_label_text_px"] for r in LABEL_ROLES}}
 
 
 def audit_frames(scenes: list[dict], frames_total: int) -> list[int]:
@@ -43,13 +44,16 @@ def audit_frames(scenes: list[dict], frames_total: int) -> list[int]:
 
 
 def check_audit(audit: dict, orientation: str) -> dict:
-    """Counts only (numbers, no text): {frames, elements, outside, small_text}."""
+    """Counts only (numbers, no text): frames, elements, outside, small_text, low_contrast, min_contrast, max_words, size_ok."""
+    q = quality()["A5_mobile_readability"]
     b = caption_boxes(orientation, lines=1)
     sx0, sy0, sx1, sy1 = b["safe"]
     cx0, cy0, cx1, cy1 = b["content"]
     floors = min_px()
-    outside = small = elements = 0
+    outside = small = elements = low = 0
+    min_cr, max_words = 99.0, 0
     for fr in audit.get("frames", []):
+        words = 0
         for e in fr.get("elements", []):
             role = e.get("role")
             if role not in CONTENT_ROLES + SAFE_ROLES:
@@ -59,12 +63,19 @@ def check_audit(audit: dict, orientation: str) -> dict:
             bx0, by0, bx1, by1 = (cx0, cy0, cx1, cy1) if role in CONTENT_ROLES else (sx0, sy0, sx1, sy1)
             if x0 < bx0 - TOL or x1 > bx1 + TOL or y0 < by0 - TOL or y1 > by1 + TOL:
                 outside += 1
-            if role in floors and e.get("fontPx", 0) < floors[role] - 0.5:
+            if role in floors and e.get("fontPx", 0) < floors[role] - 0.01:
                 small += 1
+            if e.get("fg") and e.get("bg"):
+                cr = contrast_ratio(e["fg"], e["bg"])
+                min_cr = min(min_cr, cr)
+                low += cr < q["min_contrast_ratio"]
+            if role in COUNTED_ROLES:
+                words += int(e.get("words", 0))
+        max_words = max(max_words, words)
     w, h = SIZES[orientation]
-    size_ok = (audit.get("width"), audit.get("height")) == (w, h)
     return {"frames": len(audit.get("frames", [])), "elements": elements, "outside": outside, "small_text": small,
-            "size_ok": size_ok}
+            "low_contrast": low, "min_contrast": round(min_cr, 3), "max_words": max_words,
+            "size_ok": (audit.get("width"), audit.get("height")) == (w, h)}
 
 
 def node_audit(props: Path, public: Path, frames: list[int], out: Path) -> dict:

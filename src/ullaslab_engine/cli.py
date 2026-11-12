@@ -178,6 +178,9 @@ def cmd_upload(a):
         if v["lang"] == lang:
             items += [(f"{v['name']}.mp4", work / lang / v["name"] / "video.mp4", "video/mp4"),
                       (f"qa_{v['name']}.json", work / lang / v["name"] / "qa.json", "application/json")]
+    # QA files last: the private repo's poll treats qa_<lang>.json as "render finished", so every video, caption and audio
+    # file must already be in R2 when it appears (a failed PUT before it leaves the item rendering, never in review).
+    items.sort(key=lambda it: it[0].startswith("qa_"))
     n = 0
     for key, path, ctype in items:
         if key in outs and path.exists():

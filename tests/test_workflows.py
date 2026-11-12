@@ -81,7 +81,7 @@ def test_render_fits_the_poll_window_and_url_lifetime():
     """Master then dubs must end inside the private repo's 3 h poll window (RENDER_TIMEOUT) and the presigned URL lifetime
     (3 h 15 min, content produce/r2.py DISPATCH_PRESIGN_SECONDS)."""
     j = load(ROOT / ".github/workflows/render.yml")["jobs"]
-    assert j["master"]["timeout-minutes"] + j["dub"]["timeout-minutes"] <= 180
+    assert j["plan"]["timeout-minutes"] + j["master"]["timeout-minutes"] + j["dub"]["timeout-minutes"] <= 180
     assert all(job["runs-on"] == "ubuntu-24.04" for job in j.values())
 
 

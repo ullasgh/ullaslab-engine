@@ -24,6 +24,8 @@ export type ChartMeta = {
 };
 
 // Metric + unit + period header, plot slot, optional caveat, source stamp. Every data chart renders inside this.
+// Audit roles (QA A5): the metric line is a data label (counted in the on-screen word budget); the unit and period line
+// describes the axes (axis role: label-size floor, exempt from the word budget like axis tick labels in qa.gate_a5).
 export const ChartShell: React.FC<{ meta: ChartMeta; headline?: string; children: React.ReactNode }> = ({ meta, headline, children }) => {
   const { L, pal } = useStudio();
   const font = useFont();
@@ -32,8 +34,8 @@ export const ChartShell: React.FC<{ meta: ChartMeta; headline?: string; children
     <div style={{ position: "absolute", left: L.x0, top: L.y0, width: L.cw, height: L.ch, display: "flex", flexDirection: "column", gap: 14, fontFamily: font, color: pal.ink }}>
       <div style={{ opacity: k, transform: `translateY(${(1 - k) * 18}px)` }}>
         {headline && <div data-audit="headline" style={{ fontSize: L.type.headline, fontWeight: 700, lineHeight: 1.12, marginBottom: 10 }}>{headline}</div>}
-        <div data-audit="body" style={{ fontSize: L.type.label, color: pal.accent, fontWeight: 700, lineHeight: 1.2 }}>{meta.metric}</div>
-        <div data-audit="body" style={{ fontSize: L.type.label, color: pal.muted, lineHeight: 1.2 }}>{meta.unit} {"·"} {meta.period}</div>
+        <div data-audit="label" style={{ fontSize: L.type.label, color: pal.accent, fontWeight: 700, lineHeight: 1.2 }}>{meta.metric}</div>
+        <div data-audit="axis" style={{ fontSize: L.type.label, color: pal.muted, lineHeight: 1.2 }}>{meta.unit} {"·"} {meta.period}</div>
       </div>
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>{children}</div>
       {meta.caveat && <div data-audit="stamp" style={{ fontSize: L.type.stamp, color: pal.muted, lineHeight: 1.2, fontStyle: "italic" }}>{meta.caveat}</div>}

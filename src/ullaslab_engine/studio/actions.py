@@ -111,6 +111,24 @@ def output_text(o: dict) -> str:
     return " ".join(t for t in ((sc.get("narration") or {}).get("text", "").strip() for sc in o["scenes"]) if t)
 
 
+# Measured on the first Actions fixture run (ubuntu-24.04, 4 vCPU, Chatterbox on CPU): 429 s of synthesis for 37 s of
+# speech. Used only to refuse, before any synthesis, an item whose narration cannot finish inside the job.
+RUNNER_RTF = 12.0
+
+
+def voice_budget(doc: dict, wpm: float) -> dict | None:
+    """Projected synthesis minutes for the distinct narrations of the item vs ULLASLAB_VOICE_BUDGET_MIN (unset = no limit,
+    e.g. on the owner's Mac). Numbers only."""
+    import os
+    raw = os.environ.get("ULLASLAB_VOICE_BUDGET_MIN")
+    if not raw:
+        return None
+    words = sum(len(t.split()) for t in {output_text(o) for o in doc["outputs"]})
+    speech_min = words / max(wpm, 1.0)
+    return {"words": words, "speech_min": round(speech_min, 1), "rtf": RUNNER_RTF,
+            "projected_min": round(speech_min * RUNNER_RTF, 1), "budget_min": float(raw)}
+
+
 def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "en", log: Callable = print) -> dict:
     """voice.<output>.wav for every output (identical narration is synthesised once). Clone reference: work/voice.wav (its
     sibling clips/clipN.wav win, per languages.yaml ref_clip). Returns numbers and engine names only."""
@@ -123,6 +141,13 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
     doc = jload(item / "scenes.json")
     ref = work / "voice.wav" if (work / "voice.wav").is_file() else None
     overrides = {"pace": {"target_wpm": st["target_wpm"]}} if st.get("target_wpm") else None
+    budget = voice_budget(doc, st.get("target_wpm") or 150)
+    if budget:
+        jdump({"outputs": {}, "budget": budget}, work / "voice_stats.json")
+        log(f"voice budget: projected {budget['projected_min']} min of synthesis, budget {budget['budget_min']} min")
+        if budget["projected_min"] > budget["budget_min"]:
+            raise ActionsError(f"voice budget: projected {budget['projected_min']} min > {budget['budget_min']} min "
+                               f"(render this item locally or raise the budget)")
     made: dict[str, str] = {}
     stats: dict[str, dict] = {}
     for o in doc["outputs"]:
@@ -139,11 +164,12 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
         w = narrate_fn(text, lang, ref, cache_dir=work / "tts_cache", overrides=overrides)
         w.save(dst)
         pace = (getattr(w, "meta", None) or {}).get("pace") or {}
-        stats[n] = {"seconds": round(w.duration, 2), "synth_s": round(time.time() - t0, 1), "engine": w.engine,
+        stats[n] = {"seconds": round(w.duration, 2), "synth_s": round(time.time() - t0, 1),
+                    "rtf": round((time.time() - t0) / max(w.duration, 1e-6), 2), "engine": w.engine,
                     "wpm": pace.get("wpm"), "flags": len(w.flags), "clone_ref": ref is not None}
         made[text] = n
         log(f"voice {n}: {stats[n]['seconds']} s audio in {stats[n]['synth_s']} s, engine {w.engine}, wpm {stats[n]['wpm']}")
-    jdump({"outputs": stats}, work / "voice_stats.json")
+    jdump({"outputs": stats, **({"budget": budget} if budget else {})}, work / "voice_stats.json")
     return stats
 
 
@@ -212,32 +238,77 @@ def studio_qc_gate(qc: dict | None) -> dict:
     return _gate(checks, "full report (with details) is studio_qc.json in the private bucket")
 
 
+def pacing_gate(doc: dict, qc: dict | None) -> dict:
+    """A4 (visual pacing) for studio renders, limits from quality.yaml A4_visual_pacing, on every output's timed scenes:
+    the hook scene starts within hook_visual_within_s; every scene except the end-line (disclaimer) scene lasts
+    scene_len_min_s..scene_len_max_s. Picture change: the pre-V2 templates counted planned animation beats; studio scenes
+    move continuously, so the change limits are checked on the measured picture: studio QC's frozen-frame detection
+    (ffmpeg freezedetect, fails at freeze_min_s = 2 s, below both max_seconds_between_changes and max_static_frame_s) must
+    pass, and a scene the director marked `hold` (a deliberate still) may not last longer than max_static_frame_s."""
+    q = quality()["A4_visual_pacing"]
+    first, lens, holds = [], [], []
+    for o in doc["outputs"]:
+        sc = o["scenes"]
+        if not sc:
+            continue
+        first.append(sc[0]["narration"].get("start_s") or 0.0)
+        for i, x in enumerate(sc):
+            n = x["narration"]
+            if n.get("start_s") is None or n.get("end_s") is None:
+                continue
+            ln = n["end_s"] - n["start_s"]
+            if x.get("role") != "disclaimer":
+                lens.append(ln)
+            if x.get("hold"):
+                holds.append(ln)
+    frozen = [c["status"] for d in ((qc or {}).get("outputs") or {}).values() for c in d.get("checks", [])
+              if c.get("name") == "frozen frames"]
+    freeze_ok = bool(frozen) and len(frozen) == len(doc["outputs"]) and all(st != FAIL for st in frozen)
+    hold_max = max(holds, default=0.0)
+    return _gate([
+        _check("hook_visual_start_s", max(first, default=99.0), q["hook_visual_within_s"],
+               bool(first) and max(first) <= q["hook_visual_within_s"]),
+        _check("scene_len_min_s", min(lens, default=0.0), q["scene_len_min_s"], bool(lens) and min(lens) >= q["scene_len_min_s"]),
+        _check("scene_len_max_s", max(lens, default=0.0), q["scene_len_max_s"], bool(lens) and max(lens) <= q["scene_len_max_s"]),
+        _check("max_seconds_between_changes", "no frozen picture >= 2 s" if freeze_ok else "frozen picture found",
+               q["max_seconds_between_changes"], freeze_ok),
+        _check("max_static_frame_s", hold_max, q["max_static_frame_s"], freeze_ok and hold_max <= q["max_static_frame_s"]),
+    ], "scene lengths from the voice-timed scenes of every output; picture change from studio QC freezedetect")
+
+
 def safe_zone_gate(item: Path, doc: dict, audit_fn: Callable | None) -> dict:
+    """A5 for studio renders: every timed scene of every output audited (safe_audit.py), A5 limits from quality.yaml."""
     from .safe_audit import audit_frames, check_audit, node_audit
     audit_fn = audit_fn or node_audit
     q = quality()["A5_mobile_readability"]
-    checks = []
-    tot = {"frames": 0, "outside": 0, "small_text": 0, "size_bad": 0, "scenes": 0}
+    tot = {"frames": 0, "scenes": 0, "outside": 0, "small_text": 0, "low_contrast": 0, "size_bad": 0}
+    min_cr, max_words = 99.0, 0
     for o in doc["outputs"]:
         n = o["output"]
+        timed = [sc for sc in o["scenes"] if (sc.get("narration") or {}).get("start_s") is not None]
+        tot["scenes"] += len(timed)
         pp = item / "work" / "final" / f"props.{n}.json"
         if not pp.is_file():
             tot["size_bad"] += 1
             continue
         props = jload(pp)
         frames = audit_frames(o["scenes"], int(props["durationInFrames"]))
-        tot["scenes"] += len(o["scenes"])
         r = check_audit(audit_fn(pp, item / "work" / "final" / "public", frames, item / "work" / f"audit.{n}.json"),
                         orientation_of(o["aspect"]))
-        tot["frames"] += r["frames"]
-        tot["outside"] += r["outside"]
-        tot["small_text"] += r["small_text"]
+        for k in ("frames", "outside", "small_text", "low_contrast"):
+            tot[k] += r[k]
         tot["size_bad"] += 0 if r["size_ok"] else 1
-    checks += [_check("elements_outside_safe_zone", tot["outside"], 0, tot["outside"] == 0),
-               _check("text_below_min_px", tot["small_text"], 0, tot["small_text"] == 0),
-               _check("frames_audited", tot["frames"], f">= 1 per output ({tot['scenes']} scenes)", tot["frames"] >= len(doc["outputs"])),
-               _check("frame_size", "ok" if not tot["size_bad"] else f"{tot['size_bad']} bad", "ok", not tot["size_bad"])]
-    return _gate(checks, f"studio layout audit (one still per scene); text floors {q['min_body_text_px']}/{q['min_label_text_px']} px")
+        min_cr, max_words = min(min_cr, r["min_contrast"]), max(max_words, r["max_words"])
+    checks = [_check("elements_outside_safe_zone", tot["outside"], 0, tot["outside"] == 0),
+              _check("text_below_min_px", tot["small_text"], 0, tot["small_text"] == 0),
+              _check("contrast_failures", tot["low_contrast"], 0, tot["low_contrast"] == 0),
+              _check("min_contrast_ratio", min_cr, q["min_contrast_ratio"], min_cr >= q["min_contrast_ratio"]),
+              _check("max_non_caption_words_per_scene", max_words, q["max_non_caption_words_per_scene"],
+                     max_words <= q["max_non_caption_words_per_scene"]),
+              _check("frames_audited", tot["frames"], tot["scenes"], tot["scenes"] > 0 and tot["frames"] >= tot["scenes"]),
+              _check("frame_size", "ok" if not tot["size_bad"] else f"{tot['size_bad']} bad", "ok", not tot["size_bad"])]
+    return _gate(checks, f"studio layout audit, one still per timed scene; text floors {q['min_body_text_px']}/"
+                         f"{q['min_label_text_px']} px")
 
 
 def export(work: Path, *, asr_wer: Callable | None = None, audit_fn: Callable | None = None) -> dict:
@@ -281,6 +352,12 @@ def _export(work: Path, m: dict, asr_wer: Callable | None, audit_fn: Callable | 
     for name, dst in (("qc.json", "studio_qc.json"), ("publish.md", "studio_publish.md")):
         if (item / name).is_file():
             shutil.copy(item / name, sdir / dst)
+    vs0 = jload(work / "voice_stats.json") if (work / "voice_stats.json").is_file() else {}
+    if vs0.get("budget"):
+        b = vs0["budget"]
+        gates["runner_budget"] = _gate([_check("projected_voice_min", b["projected_min"], b["budget_min"],
+                                               b["projected_min"] <= b["budget_min"])],
+                                       f"Chatterbox on the runner at about {b['rtf']}x real time")
     gates["studio_run"] = _gate([_check("exit_code", rc, "0 or 1 (1 = QC FAIL)", rc in (0, 1)),
                                  _check("primary_final", "present" if final else "missing", "present", final is not None),
                                  _check("timings", "present" if timed_p.is_file() else "missing", "present", timed_p.is_file())])
@@ -333,6 +410,7 @@ def _export(work: Path, m: dict, asr_wer: Callable | None, audit_fn: Callable | 
                                 >= quality()["A2_visual_storytelling"]["original_data_visual_min"])],
                         "chart scenes in the published (primary) output")
     gates["A3"] = gate_a3(pm, src, wav, ptl, asr_wer(ref, hyp, src))
+    gates["A4"] = pacing_gate(doc, qc)
     gates["A5"] = safe_zone_gate(item, doc, audit_fn)
     gates["duration"] = gate_duration(ptl, m["orientation"], None)
     gates["studio_qc"] = studio_qc_gate(qc)

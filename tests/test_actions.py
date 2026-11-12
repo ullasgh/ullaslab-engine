@@ -141,7 +141,7 @@ def test_make_voices_one_synthesis_per_distinct_narration_with_clone_ref_and_pac
 
 
 # ------------------------------------------------------------------ export
-def _rendered(w: Path, *, qc_verdict="WARN", words=None):
+def _rendered(w: Path, *, qc_verdict="WARN", words=None, freeze="PASS"):
     """Lay down what `studio run` leaves behind for the fixture (finals, props, timed scenes, ASR words, qc.json)."""
     item = w / "item"
     doc = F.scenes_doc()
@@ -169,8 +169,10 @@ def _rendered(w: Path, *, qc_verdict="WARN", words=None):
     AC.jdump(doc, item / "work" / "scenes.timed.json")
     AC.jdump(words if words is not None else words_out, item / "work" / "words.short.json")
     (item / "thumb.png").write_bytes(b"png")
-    qc = {"verdict": qc_verdict, "outputs": {"short": {"checks": [{"group": "spec", "name": "video format", "status": "PASS",
-                                                                  "detail": "SCRIPT-TEXT-MUST-NOT-LEAK"}]}},
+    qc = {"verdict": qc_verdict, "outputs": {o: {"checks": [{"group": "spec", "name": "video format", "status": "PASS",
+                                                             "detail": "SCRIPT-TEXT-MUST-NOT-LEAK"},
+                                                            {"group": "visual", "name": "frozen frames", "status": freeze,
+                                                             "detail": "x"}]} for o in ("short", "reel")},
           "item_checks": [{"group": "data", "name": "chart hash vs ledger", "status": qc_verdict, "detail": "x"}]}
     AC.jdump(qc, item / "qc.json")
     (item / "publish.md").write_text("pack")
@@ -198,7 +200,7 @@ def test_export_writes_the_upload_layout_and_a_passing_qa(tmp_path):
     qa = AC.export(w, asr_wer=lambda r, h, l: 1.0, audit_fn=_audit_ok)
     en = w / "en"
     assert qa["passed"], {g: v for g, v in qa["gates"].items() if not v["passed"]}
-    assert set(qa["gates"]) == {"A1", "A2", "A3", "A5", "duration", "studio_run", "studio_qc"}
+    assert set(qa["gates"]) == {"A1", "A2", "A3", "A4", "A5", "duration", "studio_run", "studio_qc"}
     assert (en / "master" / "video.mp4").read_bytes() == b"mp4-short"          # primary = master.mp4
     assert (en / "studio" / "studio_reel.mp4").read_bytes() == b"mp4-reel"
     assert not (en / "studio" / "studio_short.mp4").exists()                    # no duplicate of the master
@@ -240,6 +242,7 @@ def test_export_fails_on_text_outside_the_safe_zone(tmp_path):
     qa = AC.export(w, asr_wer=lambda r, h, l: 0.0, audit_fn=outside)
     a5 = {c["name"]: c for c in qa["gates"]["A5"]["checks"]}
     assert not qa["passed"] and a5["elements_outside_safe_zone"]["value"] == 2   # one per output
+    assert a5["frames_audited"]["passed"] and a5["frames_audited"]["limit"] == 12   # every timed scene of both outputs
 
 
 def test_export_without_a_render_still_writes_a_failing_qa(tmp_path):
@@ -282,7 +285,7 @@ def test_check_audit_counts_text_outside_its_box_and_small_text():
     r = SA.check_audit(ok, "vertical")
     assert (r["outside"], r["small_text"], r["elements"], r["size_ok"]) == (0, 0, 1, True)
     bad = json.loads(json.dumps(ok))
-    bad["frames"][0]["elements"] += [{"role": "body", "x": 100, "y": 10, "w": 300, "h": 40, "fontPx": 36},   # above the box
+    bad["frames"][0]["elements"] += [{"role": "body", "x": 100, "y": 10, "w": 300, "h": 40, "fontPx": 48},   # above the box
                                      {"role": "caption", "x": 100, "y": 1300, "w": 700, "h": 60, "fontPx": 30}]  # small
     r = SA.check_audit(bad, "vertical")
     assert r["outside"] == 1 and r["small_text"] == 1
@@ -292,7 +295,20 @@ def test_audit_floors_are_the_a5_limits():
     from ullaslab_engine.config import quality
     q = quality()["A5_mobile_readability"]
     f = SA.min_px()
-    assert f["headline"] == f["caption"] == q["min_body_text_px"] and f["stamp"] == f["tag"] == q["min_label_text_px"]
+    assert f["headline"] == f["caption"] == f["body"] == q["min_body_text_px"]
+    assert f["stamp"] == f["tag"] == f["label"] == q["min_label_text_px"]
+
+
+def test_check_audit_applies_a5_body_floor_contrast_and_word_budget():
+    from ullaslab_engine.config import quality
+    q = quality()["A5_mobile_readability"]
+    el = lambda role, **k: {"role": role, "x": 100, "y": 400, "w": 600, "h": 60, "fontPx": 48, **k}
+    r = SA.check_audit({"width": 1080, "height": 1920, "frames": [{"frame": 1, "elements": [
+        el("body", fontPx=q["min_body_text_px"] - 4),                       # body under the A5 body floor
+        el("label", fontPx=q["min_label_text_px"], words=4),                # label at its floor is fine
+        el("headline", fg="#555555", bg="#4a4a4a", words=q["max_non_caption_words_per_scene"])]}]}, "vertical")
+    assert r["small_text"] == 1 and r["low_contrast"] == 1 and r["min_contrast"] < q["min_contrast_ratio"]
+    assert r["max_words"] == q["max_non_caption_words_per_scene"] + 4
 
 
 def test_audit_frames_one_per_scene_inside_the_video():
@@ -341,6 +357,22 @@ def test_upload_sends_studio_files_only_when_the_payload_names_them(tmp_path, mo
     assert cli.main(["upload", "--payload", str(pf), "--work", str(w), "--lang", "en"]) == 0
     assert sorted(n for _, n, _ in sent) == ["studio_reel.mp4", "video.mp4"]
     assert dict((n, c) for _, n, c in sent)["studio_reel.mp4"] == "video/mp4"
+
+
+def test_upload_puts_qa_files_last(tmp_path, monkeypatch):
+    """The private poll treats qa_<lang>.json as the end of the render: every video must already be in R2."""
+    from ullaslab_engine import cli
+    w, _ = _ready(tmp_path)
+    AC.export(w, asr_wer=lambda r, h, l: 0.0, audit_fn=_audit_ok)
+    names = ["master.mp4", "qa_en.json", "studio_reel.mp4", "captions_en.srt", "audio_en.wav", "timing_en.json",
+             "status_en.json", "studio_qc.json"]
+    p = payload(outputs={n: H + n + "?s=x" for n in names})
+    pf = tmp_path / "event.json"
+    pf.write_text(json.dumps({"client_payload": p}))
+    order = []
+    monkeypatch.setattr(eio, "upload", lambda url, path, ctype: order.append(url.split("/")[-1].split("?")[0]))
+    assert cli.main(["upload", "--payload", str(pf), "--work", str(w), "--lang", "en"]) == 0
+    assert order[-1] == "qa_en.json" and "master.mp4" in order and len(order) == len(names)
 
 
 def test_plan_fixture_has_no_dubs(capsys):
@@ -407,3 +439,53 @@ def test_layout_audit_hands_node_absolute_paths(tmp_path, monkeypatch):
     SA.node_audit(Path("w/props.json"), Path("w/public"), [1], Path("w/a.json"))
     for flag in ("--props", "--public", "--audit-out"):
         assert Path(seen["cmd"][seen["cmd"].index(flag) + 1]).is_absolute(), flag
+
+
+def _doc(lengths, hold=None):
+    t, sc = 0.0, []
+    for i, ln in enumerate(lengths):
+        sc.append({"id": f"s{i + 1:02d}", "role": "disclaimer" if i == len(lengths) - 1 else "hook" if i == 0 else "setup",
+                   "narration": {"start_s": t, "end_s": t + ln}, **({"hold": True} if hold == i else {})})
+        t += ln
+    return {"outputs": [{"output": "short", "aspect": "9:16", "scenes": sc}]}
+
+
+QC_OK = {"outputs": {"short": {"checks": [{"name": "frozen frames", "status": "PASS"}]}}}
+
+
+def test_a4_pacing_passes_voice_timed_scenes_inside_the_limits():
+    g = AC.pacing_gate(_doc([3, 6, 11.5, 1.0]), QC_OK)       # the end-line scene may be short
+    assert g["passed"], g
+
+
+@pytest.mark.parametrize("doc,qc,failing", [
+    (_doc([3, 12.5, 4]), QC_OK, "scene_len_max_s"),
+    (_doc([1.5, 6, 4]), QC_OK, "scene_len_min_s"),
+    (_doc([3, 6, 4]), {"outputs": {"short": {"checks": [{"name": "frozen frames", "status": "FAIL"}]}}}, "max_seconds_between_changes"),
+    (_doc([3, 6, 4]), None, "max_seconds_between_changes"),               # no QC evidence is a fail, not a pass
+    (_doc([3, 6, 4], hold=1), QC_OK, "max_static_frame_s"),              # a deliberate still over 5 s
+])
+def test_a4_pacing_fails_each_limit(doc, qc, failing):
+    g = AC.pacing_gate(doc, qc)
+    assert not g["passed"] and failing in [c["name"] for c in g["checks"] if not c["passed"]]
+
+
+def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp_path, monkeypatch):
+    w = _bundle(tmp_path, target_wpm=150)
+    AC.prepare_item(w)
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 106 words at 150 wpm x 12 = 8.5 min > 1
+    called = []
+    with pytest.raises(AC.ActionsError, match="voice budget"):
+        AC.make_voices(w, narrate_fn=lambda *a, **k: called.append(1), log=lambda *_: None)
+    assert called == []
+    qa = AC.export(w)
+    g = qa["gates"]["runner_budget"]
+    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 8.5
+
+
+def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("ULLASLAB_VOICE_BUDGET_MIN", raising=False)
+    assert AC.voice_budget(F.scenes_doc(), 150) is None
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
+    b = AC.voice_budget(F.scenes_doc(), 150)
+    assert b["words"] == 106 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration

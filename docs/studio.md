@@ -64,13 +64,26 @@ ffmpeg from apt). Code: `studio/actions.py`, `studio/safe_audit.py`, `studio/fix
    captions (SRT + VTT), `audio_en.wav` (the published output's narration at -14 LUFS), `timing_en.json` for the dubs and
    the story, `status_en.json`, and `qa_en.json`.
 
-`qa_en.json` gates (limits from `config/quality.yaml`, unchanged): A1 (claim ids and chart hashes), A2 (chart scenes in the
-published output), A3 on the published narration (loudness, true peak, silence, wpm 135-175, sentence length, WER <= 3%
-against the narrated text with the words the timings stage transcribed), A5 from a layout audit of every rendered output
-(one still per scene with `audit` on: headlines, body lines and stamps inside the content box, captions, end card and footage
-tag inside the safe box, text at least the A5 px floors), duration (30-60 s Short, 6-10 min long-form), and the studio QC
-verdict (any FAIL fails). A4 of the pre-V2 templates (planned beat spacing) does not apply to voice-timed studio scenes; QC's
-black, frozen and duplicate-shot checks cover the picture.
+`qa_en.json` gates (limits from `config/quality.yaml`, unchanged):
+- A1 claim ids and chart hashes; A2 chart scenes in the published output; A3 on the published narration (loudness, true peak,
+  silence, wpm 135-175, sentence length, WER <= 3% against the narrated text with the words the timings stage transcribed);
+  duration (30-60 s Short, 6-10 min long-form).
+- A4 on every output's voice-timed scenes: hook scene starts within 3 s, every scene except the end-line scene lasts 2-12 s,
+  and the picture-change limits are checked on the measured picture: studio QC's frozen-frame detection (fails at 2 s, below
+  both A4 change limits) must pass, and a scene marked `hold` may not last longer than `max_static_frame_s`.
+- A5 from a layout audit (one still per timed scene of every output, `audit` on): nothing outside the safe zone (content box
+  for headline, body, label, axis and stamp; safe box for captions, end card and footage tag), body roles (headline, body,
+  caption) at least 44 px and label roles (label, axis, stamp, tag) at least 36 px, contrast at least 4.5:1, at most 12 words of
+  headline, body and label text per still. Studio text set at label size carries the `label` role; a chart's unit and period
+  line is `axis` (exempt from the word budget like axis tick labels in `qa.gate_a5`).
+- Studio QC verdict (any FAIL fails), and `runner_budget` when the voice step refused the item (below).
+
+Runner budget: Chatterbox on the runner's CPU ran at about 12x real time (37 s of speech took 429 s). `studio-voice` projects
+the synthesis time of the item's distinct narrations at 150 wpm and that rate and refuses, before any synthesis, an item over
+`ULLASLAB_VOICE_BUDGET_MIN` (60 in render.yml), so the job fails in seconds with a `runner_budget` gate instead of timing out.
+A daily Short (about 130 words, about 11 min of synthesis per distinct narration) fits; a 6-10 min long-form does not and
+renders locally (`studio run`) until a faster voice path exists. Job timeouts: plan 5, master 120, dub 50 minutes (175 min,
+inside the private repo's 3 h poll window and the 3 h 15 min URL lifetime).
 
 Logs: everything the voice and studio steps print goes to `work/logs/studio.log`, uploaded privately as `studio_log.txt`; the
 public log shows exit codes, stage names and gate numbers (`tests/test_workflows.py` enforces this). Proof runs:
