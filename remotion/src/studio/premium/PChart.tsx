@@ -143,6 +143,8 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
   const lastLand = Math.max(...marksAt.flat(), ...kfs.map((k) => k[k.length - 1].f));
   const pops = [...marksAt.flat(), ...kfs.map((k) => k[k.length - 1].f)];
   const popScale = 1 + 0.07 * Math.max(0, ...pops.map((t) => { const a = (f - t) / 16; return a >= 0 && a < 1 ? Math.sin(Math.PI * a) * (1 - a) : 0; }));
+  // axes arrive after the scene has settled in, so a transition never shows the incoming scale behind the outgoing scene
+  const axisIn = EASE.out(range(f, 14, 12));
   const figure = fmtNum(tipVal, dec, numberLocale);
   const intro = carryIn ? (f >= 20 ? 1 : 0) : EASE.out(range(f, 2, 14));   // with a morph the carried figure is drawn by the ghost until it lands
   const dim = morphOut ? 0 : 1;
@@ -177,12 +179,12 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
           <clipPath id="plotclip"><rect x={m.l - 2} y={0} width={plotW - m.l - m.r + 4} height={plotH - m.b + 2} /></clipPath>
         </defs>
         {yT.map((t, i) => (
-          <g key={`${(t as { k?: string }).k ?? "o"}${t.v}${i}`} opacity={t.op}>
+          <g key={`${(t as { k?: string }).k ?? "o"}${t.v}${i}`} opacity={t.op * axisIn}>
             <line x1={m.l} x2={plotW - m.r} y1={Y(t.v)} y2={Y(t.v)} stroke={PT.grid} strokeWidth={1.5} />
             <text x={m.l - 12} y={Y(t.v) + fs * 0.35} textAnchor="end" fontSize={fs} fill={PT.muted} data-audit="axis">{fmtNum(t.v, dec, numberLocale)}</text>
           </g>
         ))}
-        {xTicks.map((t) => <text key={`${t.key}-${t.op}`} x={t.x} y={plotH - m.b + fs * 1.55} textAnchor="middle" fontSize={fs} fill={PT.muted} opacity={t.op} data-audit="axis">{t.label}</text>)}
+        {xTicks.map((t) => <text key={`${t.key}-${t.op}`} x={t.x} y={plotH - m.b + fs * 1.55} textAnchor="middle" fontSize={fs} fill={PT.muted} opacity={t.op * axisIn} data-audit="axis">{t.label}</text>)}
         <g clipPath="url(#plotclip)">
           {hl && (() => {
             const hx0 = Math.max(m.l, X(parseX(hl.from))), hx1 = Math.min(plotW - m.r, X(parseX(hl.to)));
