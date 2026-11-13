@@ -25,7 +25,7 @@ def props(tmp_path, doc, i=0):
 def test_styles_match_remotion_and_content_schema_names():
     ts = (ROOT / "remotion" / "src" / "studio" / "styles.ts").read_text()
     ids = re.search(r"STYLE_IDS = \[([^\]]*)\]", ts).group(1)
-    assert tuple(re.findall(r'"([a-z-]+)"', ids)) == STYLES == ("data-story", "creator-motion", "chalk-talk", "clean-tech")
+    assert tuple(re.findall(r'"([a-z-]+)"', ids)) == STYLES == ("data-story", "creator-motion", "chalk-talk", "clean-tech", "premium")
 
 
 def test_no_style_means_no_style_prop(tmp_path):

@@ -659,8 +659,9 @@ def test_chart_stamp_drops_the_freshness_tag_before_it_is_drawn():
     c = F.chart()
     c["source"] = {"name": "Source: FRED, St. Louis Fed, DGS10. As of 2026-11-09. [RECENT]", "as_of": "2026-11-09"}
     k = A.to_kit_chart("c1", c)
-    assert k["meta"]["source"]["name"] == "Source: FRED, St. Louis Fed, DGS10. As of 2026-11-09."
+    assert k["meta"]["source"]["name"] == "Source: FRED, St. Louis Fed, DGS10"   # the freshness tag and the duplicate as-of date are dropped (date drawn once from as_of)
     assert k["meta"]["freshness"] == c.get("freshness", "RECENT")           # the tag stays in the data
+    assert A.stamp_name("Source: FRED, DGS10. As of 2026-11-09. [RECENT]") == "Source: FRED, DGS10"   # the date is drawn once, from as_of
     assert A.stamp_name("Source: x [LAGGED]") == "Source: x" and A.stamp_name("Source: [x] plan") == "Source: [x] plan"
 
 
