@@ -246,3 +246,40 @@ def test_a_check_at_another_speed_is_a_new_record_and_the_same_speed_is_cached(c
     m3 = Meter()
     _run(chat, m3, 2, cache_dir=tmp_path, overrides={"take_seed": 0, "pace": {"target_wpm": 90, "words": 20}})   # other speed: re-checked
     assert len(m3.checks) > 0
+
+
+def test_retry_swaps_in_a_new_take_for_the_line_that_holds_a_misheard_word(chat, tmp_path):
+    lines = [c.text for c in N.plan_chunks(N.spoken_text(TEXT, "en", "western"))]
+    word = lines[2].split()[0].strip(".,").lower()
+    ov0 = {"take_seed": 0, "attempt": 0}
+    w0 = _run(chat, Meter(pitch_for=lambda t, k: 5.0 if k == 0 else 3.0), 2, cache_dir=tmp_path, overrides=ov0)
+    n0 = len(chat.calls)
+    m = Meter(pitch_for=lambda t, k: 5.0 if k == 0 else 3.0)
+    w1 = _run(chat, m, 2, cache_dir=tmp_path, overrides={"take_seed": 0, "attempt": 1, "culprit_words": [word]})
+    new = chat.calls[n0:]
+    assert new and all(any(word == x.strip(".,").lower() for x in t.split()) for t, _ in new) and len(new) <= 4
+    assert all(s["seed"] == 20 for _, s in new)                     # take index 2 = seed 20, the first take beyond N
+    assert w1.meta["takes"]["asr_calls"] == w0.meta["takes"]["asr_calls"] + len(new)
+    assert w1.meta["takes"]["first_take_chosen"] < w0.meta["takes"]["first_take_chosen"]     # a first (liveliest) take was swapped out
+
+
+def test_voice_phase_hands_the_misheard_words_to_the_next_attempt_privately(tmp_path):
+    import json
+    from test_actions import _Phase
+    from ullaslab_engine.studio import actions as AC
+    seen = []
+    p = _Phase(tmp_path, [3.5, 1.0])
+    base_narrate = p.narrate
+
+    def narrate(text, lang, ref, cache_dir=None, overrides=None):
+        seen.append(dict(overrides or {}))
+        return base_narrate(text, lang, ref, cache_dir=cache_dir, overrides=overrides)
+    p.narrate = narrate
+    # the hypothesis drops/replaces words, so the real wer_diff has substitutions to report
+    p.words = [(w + "x" if i % 9 == 4 else w, a, b) for i, (w, a, b) in enumerate(p.words)]
+    res, lines = p.run()
+    assert (p.w / AC.CULPRITS).is_file()
+    assert "culprit_words" not in seen[0] and seen[0]["attempt"] == 0 and seen[1]["attempt"] == 1
+    assert seen[1]["take_seed"] == seen[0]["take_seed"]
+    assert isinstance(seen[1].get("culprit_words"), list)
+    assert not any("culprit" in json.dumps(res) for _ in [0]) and AC.CULPRITS not in json.dumps(res)   # not in the gate result

@@ -405,12 +405,21 @@ def _take_metrics(cache: Path | None, w: Wav, text: str, lang: str, check, measu
     return out
 
 
-def _extra_lines(cands: list[list[Take]], plan: list[Chunk], attempt: int, lang: str) -> list[int]:
+def _culprit_lines(plan: list[Chunk], words: list[str], lang: str) -> list[int]:
+    """Lines whose text contains a reference word the last file-level WER check mis-heard (canonical tokens)."""
+    from ..wer_norm import canonical_for_wer
+    ws = set(words or [])
+    return [i for i, c in enumerate(plan) if ws & set(canonical_for_wer(c.text, lang).split())] if ws else []
+
+
+def _extra_lines(cands: list[list[Take]], plan: list[Chunk], attempt: int, lang: str, culprits: list[int] | None = None) -> list[int]:
     """Lines that get one more take on a WER retry (attempt >= 1): the ones whose best take still has word errors, worst first;
     when no line has a recorded error (the miss came from the joins, not a line) the fastest-spoken lines, whose words are the
     likeliest to blur once the read is sped up. At most MAX_EXTRA_LINES; none on the first attempt."""
     if attempt <= 0:
         return []
+    if culprits:
+        return culprits[:MAX_EXTRA_LINES]
     def best(ts):
         return min(t.wer for t in ts)
     bad = sorted((i for i, ts in enumerate(cands) if best(ts) > 0), key=lambda i: -best(cands[i]))
@@ -424,7 +433,7 @@ def _extra_lines(cands: list[list[Take]], plan: list[Chunk], attempt: int, lang:
 
 def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: dict, cache: Path | None = None,
           pace: dict | None = None, profile: dict | None = None, takes: int = 1, take_check=None,
-          take_measure=None, attempt: int = 0) -> Wav:
+          take_measure=None, attempt: int = 0, culprit_words: list[str] | None = None) -> Wav:
     plan = plan_chunks(text, lang)
     if not plan:
         raise ValueError("nothing to narrate")
@@ -481,12 +490,19 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
             tstats["asr_calls"] += 1
             return Take(st["seed"], wer, dur, pitch, art, w)
         cands = [[t for t in (take(k, j) for j in range(takes)) if t] for k in range(len(plan))]
-        for k in _extra_lines(cands, plan, attempt, lang):       # WER retry: one new take for each worst line, then re-select
+        cl = _culprit_lines(plan, culprit_words, lang)
+        fresh: dict[int, list[Take]] = {}
+        for k in _extra_lines(cands, plan, attempt, lang, cl):   # WER retry: one new take for each culprit/worst line, then re-select
             for j in range(takes, takes + attempt):
                 t = take(k, j)
                 if t:
                     cands[k].append(t)
+                    if j == takes + attempt - 1:
+                        fresh[k] = [t]
         pick = select_all(cands)
+        for k in cl:                         # a line holding a word the file check mis-heard: the takes already heard failed it in
+            if k in fresh and fresh[k][0].wer <= min(t.wer for t in cands[k]):      # context, so use this attempt's new take
+                pick[k] = cands[k].index(fresh[k][0])
         waves = [ts[k].wave for ts, k in zip(cands, pick)]
         kept = [ts[k] for ts, k in zip(cands, pick)]
         every = [t for ts in cands for t in ts]
@@ -540,7 +556,7 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
             engine: str | None = None, gate: bool = True, overrides: dict | None = None,
             cache_dir: Path | str | None = None, pace: bool = True, take_check=None, take_measure=None) -> Wav:
     cfg = language(lang)
-    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile", "takes", "take_seed", "attempt")})
+    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile", "takes", "take_seed", "attempt", "culprit_words")})
     spoken = spoken_text(text, lang, cfg.get("number_format"))
     ref = resolve_ref(Path(ref_wav) if ref_wav else None, st["ref_clip"])
     prof_name = (overrides or {}).get("delivery_profile") or default_profile(lang)
@@ -564,7 +580,7 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
         if (overrides or {}).get("take_seed") is not None:      # takes keep their seeds across WER retries: the cache reuses them
             s["take_seed"] = int(overrides["take_seed"]) + attempt
         w = _once(spoken, lang, ref, engine, s, cache, pc, profile, takes, take_check, take_measure,
-                  int((overrides or {}).get("attempt") or 0))
+                  int((overrides or {}).get("attempt") or 0), (overrides or {}).get("culprit_words"))
         meta = dict(w.meta)
         w = postprocess(w)
         w.meta = meta

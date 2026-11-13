@@ -204,6 +204,8 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
         # best-of-N profiles: the takes of attempt 1 keep their seeds (and their cached ASR checks) on a retry; only the lines that
         # missed get one new take per retry (voice/narrate._extra_lines), then the takes are selected again
         overrides = {**(overrides or {}), "take_seed": retry_seed(lang, 0), "attempt": attempt}
+        if attempt and (work / CULPRITS).is_file():
+            overrides["culprit_words"] = jload(work / CULPRITS).get("words") or []
         w = narrate_fn(text, lang, ref, cache_dir=work / "tts_cache", overrides=overrides)
         w.save(dst)
         pace = (getattr(w, "meta", None) or {}).get("pace") or {}
@@ -217,6 +219,7 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
 
 
 VOICE_GATES = "voice_gates.json"
+CULPRITS = "wer_culprits.json"      # private: reference words the last voice gate mis-heard
 MAX_VOICE_ATTEMPTS = 3      # owner decision 2026-11-12: re-record up to 2 more times when ONLY the WER check fails
 SEED_STEP = 1000            # attempt i uses seed base + i * SEED_STEP (chunk retries use +100, naturalness retry +1: no collision)
 WER_ONLY = {("A3", "wer_pct")}
@@ -305,7 +308,11 @@ def voice_gates(work: Path, *, transcribe_fn: Callable | None = None, wer_fn: Ca
              "duration": gate_duration(tl, orientation_of(o["aspect"]), None)}
     res = {"passed": all(g["passed"] for g in gates.values()), "gates": gates}
     jdump(res, work / VOICE_GATES)
-    for d in wer_diff(ref_text, hyp_text, src):    # PRIVATE log only: these lines quote the script (the public step greps [voice-gate])
+    diffs = wer_diff(ref_text, hyp_text, src)
+    # the reference words the transcript got wrong (private file beside the work dir, never in the gate result): a WER retry swaps
+    # the takes of the lines that contain them
+    jdump({"words": sorted({t for d in diffs if d[0] in "SD" for t in d[2:].split("->")[0].split()})}, work / CULPRITS)
+    for d in diffs:    # PRIVATE log only: these lines quote the script (the public step greps [voice-gate])
         log(f"[wer-diff] {d}")
     for g, v in gates.items():
         for c in v["checks"]:
