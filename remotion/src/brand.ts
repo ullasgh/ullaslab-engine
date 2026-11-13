@@ -69,22 +69,22 @@ export const cleanSourceName = (name: string): string => {
 export const stampText = (lang: string, name: string, asOf: string): string =>
   `${SOURCE_WORD[lang] ?? SOURCE_WORD.en}: ${cleanSourceName(name)}${asOf ? ` · ${asOf}` : ""}`;
 
-// In-video end line (owner decision 2026-11-09): spoken and shown last in every video. The full disclaimer lives in the
+// In-video end line (owner decision 2026-11-13: "Follow UllasLab." only, no "Education only"): spoken and shown last in every video. The full disclaimer lives in the
 // description / caption. Keep in sync with src/ullaslab_engine/endline.py (a test compares them).
 export const END_LINES: Record<string, string> = {
-  en: "Follow UllasLab. Education only.",
-  hi: "UllasLab को फ़ॉलो करें। केवल शिक्षा के लिए।",
-  ta: "UllasLab-ஐ பின்தொடருங்கள். கல்வி நோக்கத்திற்கு மட்டும்.",
-  te: "UllasLab ను ఫాలో అవ్వండి. విద్యా ప్రయోజనం కోసం మాత్రమే.",
-  kn: "UllasLab ಅನ್ನು ಫಾಲೋ ಮಾಡಿ. ಶಿಕ್ಷಣಕ್ಕಾಗಿ ಮಾತ್ರ.",
-  ml: "UllasLab ഫോളോ ചെയ്യൂ. വിദ്യാഭ്യാസ ആവശ്യത്തിന് മാത്രം.",
-  mr: "UllasLab ला फॉलो करा. केवळ शिक्षणासाठी.",
-  bn: "UllasLab ফলো করুন। শুধুমাত্র শিক্ষামূলক।",
-  gu: "UllasLab ને ફોલો કરો. ફક્ત શિક્ષણ માટે.",
-  es: "Sigue a UllasLab. Solo con fines educativos.",
-  pt: "Siga a UllasLab. Apenas para fins educacionais.",
-  ar: "تابع UllasLab. للأغراض التعليمية فقط.",
-  ja: "UllasLabをフォローしてください。教育目的のみ。",
+  en: "Follow UllasLab.",
+  hi: "UllasLab को फ़ॉलो करें।",
+  ta: "UllasLab-ஐ பின்தொடருங்கள்.",
+  te: "UllasLab ను ఫాలో అవ్వండి.",
+  kn: "UllasLab ಅನ್ನು ಫಾಲೋ ಮಾಡಿ.",
+  ml: "UllasLab ഫോളോ ചെയ്യൂ.",
+  mr: "UllasLab ला फॉलो करा.",
+  bn: "UllasLab ফলো করুন।",
+  gu: "UllasLab ને ફોલો કરો.",
+  es: "Sigue a UllasLab.",
+  pt: "Siga a UllasLab.",
+  ar: "تابع UllasLab.",
+  ja: "UllasLabをフォローしてください。",
 };
 export const endParts = (lang: string): string[] =>
   (END_LINES[lang] ?? END_LINES.en).split(/(?<=[.।。])\s*/).filter(Boolean);

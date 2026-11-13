@@ -423,20 +423,21 @@ def test_publish_pack_drops_banned_brand_word(tmp_path):
 def test_end_line_13_languages_and_brand_sync():
     import re
     from ullaslab_engine import endline as E
-    assert len(E.END_LINES) == 13 and E.END_LINES["en"] == "Follow UllasLab. Education only."
+    assert len(E.END_LINES) == 13 and E.END_LINES["en"] == "Follow UllasLab."
     assert all("UllasLab" in v and "macro" not in v.lower() for v in E.END_LINES.values())
     ts = (ROOT / "remotion/src/brand.ts").read_text(encoding="utf-8")
     for lang, line in E.END_LINES.items():
         assert re.search(rf'\b{lang}: "{re.escape(line)}"', ts), lang
-    assert E.end_parts("en") == ["Follow UllasLab.", "Education only."] and len(E.end_parts("hi")) == 2
-    assert E.ends_with_end_line("so that is it. Follow UllasLab. Education only.", "en")
+    assert E.end_parts("en") == ["Follow UllasLab."] and all(len(E.end_parts(l)) == 1 for l in E.END_LINES)
+    assert E.ends_with_end_line("so that is it. Follow UllasLab.", "en")
+    assert not E.ends_with_end_line("Follow UllasLab. Education only.", "en") and E.is_retired_end_line("Follow UllasLab. Education only.")
     assert not E.ends_with_end_line("Education only. Not investment advice.", "en")
 
 
 def test_props_carry_end_card_over_last_seconds(tmp_path):
     doc = timed_doc()
     o = doc["outputs"][0]
-    assert o["scenes"][-1]["narration"]["text"].endswith("Follow UllasLab. Education only.")
+    assert o["scenes"][-1]["narration"]["text"].endswith("Follow UllasLab.")
     item = make_item(tmp_path, voice=False)
     props, _ = build_props(item, doc, o, tmp_path / "p", allow_placeholder=True)
     ec, total = props["endCard"], props["durationInFrames"]
@@ -662,3 +663,18 @@ def test_dub_fixture_builds_bundle_and_master_timing_for_the_dub_job(tmp_path, m
     assert [s["id"] for s in tl["segments"]] == [s["id"] for s in m["segments"]] and 30 <= tl["total_s"] <= 60
     assert all(a["end"] <= b["start"] for a, b in zip(tl["segments"], tl["segments"][1:]))
     assert (tmp_path / "voice.wav").exists()
+
+
+def test_end_lines_equal_the_content_repo_glossaries_when_a_checkout_is_present():
+    """Cross-repo sync: config/glossary/<lang>.yaml `end_line` in the content repo is the source of the 13 sign-offs (content PR 71)."""
+    import os
+    import yaml
+    from ullaslab_engine import endline as E
+    root = os.environ.get("ULLASLAB_CONTENT_DIR")
+    if not root or not (Path(root) / "config" / "glossary").is_dir():
+        pytest.skip("set ULLASLAB_CONTENT_DIR to a content checkout (the branch with PR 71) to compare the sign-offs")
+    for lang, line in E.END_LINES.items():
+        if lang == "en":
+            continue      # English is the schema constant END_LINE in the content repo, not a glossary entry
+        g = yaml.safe_load((Path(root) / "config" / "glossary" / f"{lang}.yaml").read_text(encoding="utf-8"))
+        assert g["end_line"] == line, lang

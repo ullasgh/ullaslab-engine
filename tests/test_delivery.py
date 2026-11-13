@@ -17,10 +17,10 @@ from ullaslab_engine.voice import narrate as N
 from ullaslab_engine.voice.prosody import strip_markers
 
 TEXT = ("Copper stocks eased but a firmer case remains. That is what warehouses hold for buyers. "
-        "It was 6.20 on the first and 6.05 on the eighth. Firmer weakens if it holds below the 6.05 level. Follow UllasLab. Education only.")
+        "It was 6.20 on the first and 6.05 on the eighth. Firmer weakens if it holds below the 6.05 level. Follow UllasLab.")
 TAGGED = ("[[d:hook]] Copper stocks eased but a firmer case remains. [[d:explain]] That is what warehouses hold for buyers. "
           "[[d:reveal]] It was 6.20 on the first and 6.05 on the eighth. [[d:caution]] Firmer weakens if it holds below the 6.05 level. "
-          "[[d:signoff]] Follow UllasLab. Education only.")
+          "[[d:signoff]] Follow UllasLab.")
 
 
 # ---------------------------------------------------------------- vocabulary, markers, profiles
@@ -84,10 +84,10 @@ def test_plan_chunks_carries_tags_and_without_markers_is_identical():
 
 
 def test_a_decimal_before_a_scene_boundary_does_not_swallow_the_next_tag():
-    plan = N.plan_chunks("[[d:caution]] Firmer weakens if it holds below 6.05. [[d:signoff]] Follow UllasLab. Education only.")
+    plan = N.plan_chunks("[[d:caution]] Firmer weakens if it holds below 6.05. [[d:signoff]] Follow UllasLab.")
     assert [c.delivery for c in plan] == ["caution", "signoff"]
     # without a marker the old behaviour stands: "6.05. Follow" is read as one piece
-    assert len(N.plan_chunks("Firmer weakens if it holds below 6.05. Follow UllasLab. Education only.")) == 1
+    assert len(N.plan_chunks("Firmer weakens if it holds below 6.05. Follow UllasLab.")) == 1
 
 
 def test_short_chunk_merge_keeps_the_first_tag():

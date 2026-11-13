@@ -18,8 +18,8 @@ test("palette pairs meet 4.5:1 contrast", () => {
 
 test("end line in all 13 languages, two parts, no freshness tag words, no macro", () => {
   const langs = "en hi ta te kn ml mr bn gu es pt ar ja".split(" ");
-  assert.equal(END_LINES.en, "Follow UllasLab. Education only.");
-  for (const l of langs) { assert.ok(END_LINES[l].includes("UllasLab"), l); assert.equal(endParts(l).length, 2, l); assert.doesNotMatch(END_LINES[l], /macro|LIVE|RECENT|LAGGED|EXPECTATION|INFERRED/i); }
+  assert.equal(END_LINES.en, "Follow UllasLab.");
+  for (const l of langs) { assert.ok(END_LINES[l].includes("UllasLab"), l); assert.equal(endParts(l).length, 1, l); assert.doesNotMatch(END_LINES[l], /Education only/i, l); assert.doesNotMatch(END_LINES[l], /macro|LIVE|RECENT|LAGGED|EXPECTATION|INFERRED/i); }
 });
 
 test("fonts cover all 13 languages", () => {
