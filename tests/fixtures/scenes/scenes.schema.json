@@ -16,6 +16,30 @@
     }
   },
   "$defs": {
+    "chart_view": {
+      "description": "Watchability: this chart scene's own view of its chart (a zoomed window, a highlighted range, the point the line stops at, up to 3 extra marks). Dates must be observation dates of the series; values are read from the data, never typed.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "window": {
+          "type": "object", "additionalProperties": false, "minProperties": 1,
+          "properties": {"from": {"$ref": "#/$defs/xval"}, "to": {"$ref": "#/$defs/xval"}}
+        },
+        "highlight": {
+          "type": "object", "additionalProperties": false, "required": ["from", "to"],
+          "properties": {"from": {"$ref": "#/$defs/xval"}, "to": {"$ref": "#/$defs/xval"},
+                         "label": {"type": "string", "maxLength": 24, "pattern": "^[^0-9]*$"}}
+        },
+        "point": {"$ref": "#/$defs/chart_mark"},
+        "marks": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/chart_mark"}}
+      }
+    },
+    "chart_mark": {
+      "type": "object", "additionalProperties": false, "required": ["x"],
+      "properties": {"x": {"$ref": "#/$defs/xval"}, "label": {"type": "string", "maxLength": 24, "pattern": "^[^0-9]*$"}}
+    },
+    "xval": {"type": ["string", "number"], "minLength": 4, "maxLength": 10},
     "output": {
       "type": "object",
       "additionalProperties": false,
@@ -77,6 +101,7 @@
             "ref": {"type": "string", "minLength": 1}
           }
         },
+        "chart_view": {"$ref": "#/$defs/chart_view"},
         "palette": {"enum": ["policy", "commodities", "trade", "tech", "volatility"]},
         "camera_move": {"enum": ["static", "slow_push", "pull_back", "pan_left", "pan_right",
                                  "tilt_up", "orbit", "zoom_to_region"]},

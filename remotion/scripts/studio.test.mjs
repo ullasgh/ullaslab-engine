@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { PALETTES, TOPICS, BASE } from "../src/studio/palettes.ts";
 import { SAFE_BOX, PLATFORM_BOX, SIZES, studioLayout, safeBoxFor } from "../src/studio/layout.ts";
 import { validateScenes, transitionProgress, cameraTransform, overlapAfter } from "../src/studio/scenes.ts";
-import { counterValue, revealPoints, parseX } from "../src/studio/chartMath.ts";
+import { counterValue, revealPoints, parseX, pickTicks } from "../src/studio/chartMath.ts";
 import { sampleRoute, splitJumps, along } from "../src/studio/geoMath.ts";
 import { cleanSourceName, stampText } from "../src/brand.ts";
 
@@ -130,4 +130,12 @@ test("frame plan parity with the Python scene cache (tests/fixtures/scene_frames
     const got = n.map((s, i) => ({ id: s.id, start: s.start, end: s.end, until: s.end + overlapAfter(n, i) }));
     assert.deepEqual(got, c.expected, c.name);
   }
+});
+
+test("pickTicks drops x labels that would overlap and keeps the first clear one", () => {
+  // two clamped labels on top of each other, then evenly spaced ones that touch
+  assert.deepEqual(pickTicks([60, 70, 200, 300], [100, 100, 100, 100], 10), [0, 2]);
+  assert.deepEqual(pickTicks([60, 200, 340], [100, 100, 100], 10), [0, 1, 2]);   // enough room: all kept
+  assert.deepEqual(pickTicks([60, 150], [100, 100], 10), [0]);                    // touching (gap 0) is dropped
+  assert.deepEqual(pickTicks([], [], 10), []);
 });

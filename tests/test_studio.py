@@ -567,28 +567,38 @@ def _renderer_ref_problems(props: dict) -> list[str]:
     return bad
 
 
-def test_flow_scene_without_visual_data_downgrades_to_kinetic_and_drops_its_data_ref(tmp_path):
-    """Live item 2026-11-12: `flow` scenes with a data_point ref and no visual_data.json were downgraded to kinetic text but kept the
-    ref, and the renderer rejected it ("data_ref ... not found") at frame 0."""
+def test_flow_scene_without_visual_data_fails_the_render_it_is_never_a_text_card(tmp_path):
+    """Live item 2026-11-12: `flow` scenes with no visual_data.json were silently drawn as kinetic text (the video read as slides).
+    Watchability slice 1: the assemble stage refuses, naming the scene, and a kinetic scene with a stray ref still drops it."""
     item = make_item(tmp_path, voice=False)
     doc = timed_doc()
     out = doc["outputs"][0]
     s = next(x for x in out["scenes"] if x["type"] == "flow") if any(x["type"] == "flow" for x in out["scenes"]) else out["scenes"][3]
     s["type"], s["data_ref"], s["on_screen_text"] = "flow", {"kind": "data_point", "ref": "DGS10-DGS2"}, "Curve flips"
+    with pytest.raises(AssembleError, match=r"flow scene has no entry in visual_data.json.*never turned into a text card"):
+        build_props(item, doc, out, tmp_path / "pub", clip_prep=lambda *a: None)
+    s["type"] = "timeline"
+    with pytest.raises(AssembleError, match="timeline scene has no entry"):
+        build_props(item, doc, out, tmp_path / "pub", clip_prep=lambda *a: None)
+    # with data it renders as a flow, and a kinetic scene carrying a data_ref still drops it
+    s["type"] = "flow"
+    (item / "visual_data.json").write_text(json.dumps({"DGS10-DGS2": {
+        "meta": {"source": {"name": "FRED", "as_of": "2026-11"}, "freshness": "RECENT"},
+        "nodes": [{"id": "a", "label": "A", "level": 0}, {"id": "b", "label": "B", "level": 1}], "edges": [{"from": "a", "to": "b"}]}}))
     k = out["scenes"][0]
-    k["type"], k["data_ref"] = "kinetic", {"kind": "data_point", "ref": "DGS3MO"}   # a kinetic scene with a ref is dropped too
+    k["type"], k["data_ref"] = "kinetic", {"kind": "data_point", "ref": "DGS3MO"}
     props, warns = build_props(item, doc, out, tmp_path / "pub", clip_prep=lambda *a: None)
     got = {x["id"]: x for x in props["scenes"]}
-    assert got[s["id"]]["type"] == "kinetic" and got[s["id"]]["data_ref"] is None
+    assert got[s["id"]]["type"] == "flow" and got[s["id"]]["data_ref"]["ref"] == "DGS10-DGS2"
     assert got[k["id"]]["data_ref"] is None
-    assert any("rendered as kinetic text" in w for w in warns)
+    assert not any("kinetic text" in w for w in warns)
     assert _renderer_ref_problems(props) == []
 
 
 @needs_ffmpeg
 def test_fixture_through_the_runner_layout_builds_props_the_renderer_accepts(tmp_path):
     """The fixture bundle is zipped and unpacked as the runner does (fetch: safe_unzip; then studio-prepare) and carries the live
-    item's flow-without-data shape; every output's props must pass the renderer's ref check, so fixture-green means live-green."""
+    item's shape (a flow scene with data and a windowed chart view); every output's props must pass the renderer's ref check, so fixture-green means live-green."""
     import zipfile
     from ullaslab_engine import io as eio
     from ullaslab_engine.studio import fixture as F
@@ -605,12 +615,15 @@ def test_fixture_through_the_runner_layout_builds_props_the_renderer_accepts(tmp
     item = prepare_item(work)
     doc = jload(item / "scenes.json")
     assert any(sc["type"] == "flow" and sc["data_ref"]["kind"] == "data_point" for sc in doc["outputs"][0]["scenes"])
+    assert "FIXTURE-POINT" in jload(item / "visual_data.json")
     words = fake_asr_words(" ".join(F.NARRATION))
     for o in doc["outputs"]:
         time_output(o["scenes"], words, 22.0, o["output"])
         props, warns = build_props(item, doc, o, tmp_path / "pub", allow_placeholder=True, clip_prep=lambda *a: None)   # footage comes from the broll stage
         assert _renderer_ref_problems(props) == [], o["output"]
-        assert any("rendered as kinetic text" in w for w in warns) == (o["output"] == "short")
+        assert not any("kinetic text" in w for w in warns)
+        if o["output"] == "reel":
+            assert any(k.startswith("c1@") for k in props["refs"])   # the windowed chart view has its own refs entry
 
 
 def test_failed_stage_is_logged_as_stage_and_error_class_only(studio_item):

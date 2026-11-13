@@ -54,3 +54,16 @@ export type Band = { lo: number; hi: number; label: string; from?: string | numb
 /** Every number a line chart draws, including a scenario band's edges, so the axis is sized from the data passed in. */
 export const plotValues = (series: { points: { y: number }[] }[], band?: Band): number[] =>
   [...series.flatMap((s) => s.points.map((p) => p.y)), ...(band ? [band.lo, band.hi] : [])];
+
+/** Indices of x tick labels to draw so no two overlap: `centers` and `widths` are in px, in left-to-right order, and `gap` is the
+ *  minimum clear space between neighbours. Greedy from the left; a label that collides with the last kept one is skipped, so the
+ *  first (clamped, left-anchored) label never prints on top of the second. */
+export const pickTicks = (centers: number[], widths: number[], gap: number): number[] => {
+  const keep: number[] = [];
+  let right = -Infinity;
+  centers.forEach((c, i) => {
+    const left = c - widths[i] / 2;
+    if (left >= right + gap) { keep.push(i); right = c + widths[i] / 2; }
+  });
+  return keep;
+};

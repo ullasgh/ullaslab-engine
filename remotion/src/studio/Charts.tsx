@@ -4,7 +4,7 @@ import { scalePoint } from "d3-scale";
 import { ticks as d3ticks } from "d3-array";
 import { useRamp, useStudio } from "./context";
 import { ChartShell, type ChartMeta } from "./Stamp";
-import { counterValue, fmtNum, linePath, makeLinear, makeTimeScale, niceExtent, parseX, plotValues, revealPoints, type Band, type XY } from "./chartMath";
+import { counterValue, fmtNum, linePath, makeLinear, makeTimeScale, niceExtent, parseX, pickTicks, plotValues, revealPoints, type Band, type XY } from "./chartMath";
 import type { Palette } from "./palettes";
 
 type ColorKey = "accent" | "accent2" | "accent3" | "negative" | "muted";
@@ -32,11 +32,17 @@ export type LineData = {
   annotations?: { x: string | number; label: string }[];
   /** Scenario range: a shaded y-range (both edges are numbers from the data passed in) from `from` to the right edge. */
   band?: Band;
+  /** Watchability: a shaded x-range (both ends are dates of the data passed in) with a short label. */
+  highlight?: { from: string | number; to: string | number; label?: string };
+  /** Watchability: show the tip value only once the line has reached its end, so the number on screen is the number narrated. */
+  settle?: boolean;
   decimals?: number; includeZero?: boolean; revealFrames?: number;
 };
 
 const xTickLabel = (d: Date, spanDays: number) =>
-  spanDays > 900 ? String(d.getUTCFullYear()) : d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
+  spanDays > 900 ? String(d.getUTCFullYear())
+    : spanDays <= 62 ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })   // a zoomed window: "Nov 3"
+      : d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
 
 export const LineChart: React.FC<{ data: LineData }> = ({ data }) => (
   <ChartShell meta={data.meta} headline={data.headline}>
@@ -57,9 +63,15 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
   const Yd = niceExtent(ys, 0.1, data.includeZero ?? preset.chart.zeroBaseline, preset.chart.zeroBaseline);
   const Y = makeLinear(Yd, [h - m.b, m.t]);
   const span = (Math.max(...xs) - Math.min(...xs)) / 86400000;
-  const xt = X.ticks(L.vertical ? 4 : 6);
+  const xtAll = X.ticks(L.vertical ? 4 : 6);
+  // labels are drawn at fs size (bold-free digits ~0.6 em wide); the first one is clamped to the left edge. Drop any that would touch.
+  const lw = (d: Date) => xTickLabel(d, span).length * fs * 0.62;
+  const xt = pickTicks(xtAll.map((d) => Math.max(X(d), m.l + lw(d) / 2)), xtAll.map(lw), fs * 0.8).map((i) => xtAll[i]);
   const yt = d3ticks(Yd[0], Yd[1], Y_TICKS);
   const reveal = useRamp(10, 10 + (data.revealFrames ?? 80));
+  const frame = useCurrentFrame();
+  const settled = !data.settle || reveal >= 0.999;
+  const pop = data.settle ? Math.min(1, Math.max(0, (reveal - 0.97) / 0.03)) : 1;   // 0..1 as the line arrives at its end
   return (
     <svg width={w} height={h} style={svgBox}>
       {yt.map((v) => (
@@ -69,6 +81,18 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
         </g>
       ))}
       {xt.map((d) => { const near = X(d) - m.l < fs * 1.4; return <text key={+d} x={near ? m.l : X(d)} y={h - m.b + fs * 1.3} textAnchor={near ? "start" : "middle"} fontSize={fs} fill={pal.muted}>{xTickLabel(d, span)}</text>; })}
+      {data.highlight && (() => {
+        const hx0 = Math.max(m.l, X(parseX(data.highlight.from))), hx1 = Math.min(w - m.r, X(parseX(data.highlight.to)));
+        const k = Math.min(1, Math.max(0, (reveal - (hx0 - m.l) / (w - m.r - m.l)) * 8));
+        return (
+          <g opacity={k}>
+            <rect x={hx0} y={m.t} width={Math.max(4, hx1 - hx0)} height={h - m.b - m.t} fill={pal.accent2} opacity={0.16} />
+            <line x1={hx0} x2={hx0} y1={m.t} y2={h - m.b} stroke={pal.accent2} strokeWidth={2.5} strokeDasharray="8 8" />
+            <line x1={hx1} x2={hx1} y1={m.t} y2={h - m.b} stroke={pal.accent2} strokeWidth={2.5} strokeDasharray="8 8" />
+            {data.highlight.label && <text x={(hx0 + hx1) / 2} y={h - m.b - 12} textAnchor="middle" fontSize={fs} fontWeight={700} fill={pal.accent2} stroke={pal.bg} strokeWidth={8} paintOrder="stroke" data-audit="stamp">{data.highlight.label}</text>}
+          </g>
+        );
+      })()}
       {band && (() => {
         const bx = Math.max(m.l, Math.min(w - m.r, band.from === undefined ? X(Math.max(...xs)) - (w - m.r - m.l) * 0.35 : X(parseX(band.from))));
         const k = Math.min(1, Math.max(0, (reveal - (bx - m.l) / (w - m.r - m.l)) * 6));
@@ -108,8 +132,9 @@ const LinePlot: React.FC<{ data: LineData; w: number; h: number }> = ({ data, w,
           <g key={s.name}>
             {!multi && <path d={`${linePath(vis)} L ${tip.x} ${h - m.b} L ${vis[0].x} ${h - m.b} Z`} fill={c} opacity={0.1} />}
             <path d={linePath(vis)} fill="none" stroke={c} strokeWidth={L.vertical ? 6 : 7} strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={tip.x} cy={tip.y} r={11} fill={c} stroke={pal.bg} strokeWidth={4} />
-            {reveal > 0.05 && (
+            {data.settle && settled && !multi && <circle cx={tip.x} cy={tip.y} r={11 + 16 * ((frame % 36) / 36)} fill="none" stroke={c} strokeWidth={4} opacity={1 - (frame % 36) / 36} />}
+            <circle cx={tip.x} cy={tip.y} r={11 + (data.settle ? 3 * pop : 0)} fill={c} stroke={pal.bg} strokeWidth={4} />
+            {reveal > 0.05 && settled && (
               <text x={flip ? tip.x - 18 : tip.x + 18} y={labelY} textAnchor={flip ? "end" : "start"} fontSize={fs} fontWeight={700} fill={pal.ink}
                 stroke={pal.bg} strokeWidth={7} paintOrder="stroke" data-audit="stamp">{fmtNum(val, dec, numberLocale)}</text>
             )}
