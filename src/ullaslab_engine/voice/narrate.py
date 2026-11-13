@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -33,11 +34,12 @@ import soundfile as sf
 from ..audio import Wav, normalize_loudness
 from ..config import language
 from ..tts import base
-from .delivery import load_profile, synth_overrides, take_delivery, default_profile
+from .delivery import load_options, load_profile, synth_overrides, take_delivery, default_profile
 from .naturalness import score
 from .post import postprocess
 from .prosody import PAUSE_S, split_marked, strip_emphasis
 from .settings import voice_settings
+from .takes import TAKE_SEED_STEP, Take, pitch_metrics, select_all
 from .textnorm import normalize_text
 
 log = logging.getLogger("ullaslab.voice")
@@ -115,8 +117,11 @@ def _ref_sha(ref: Path | None) -> str:
 
 
 def chunk_key(text: str, lang: str, engine: str | None, settings: dict, ref_sha: str) -> str:
+    keyed = {k: settings.get(k) for k in _SETTING_KEYS}
+    if settings.get("t3_weights") not in (None, "v2"):      # v2 keys stay exactly what they were before the V3 weights existed
+        keyed["t3_weights"] = settings["t3_weights"]
     blob = json.dumps({"v": CHUNK_CACHE_VERSION, "text": text, "lang": lang, "engine": engine or "auto", "ref": ref_sha,
-                       "settings": {k: settings.get(k) for k in _SETTING_KEYS}}, sort_keys=True, ensure_ascii=False)
+                       "settings": keyed}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -160,6 +165,7 @@ def _synth(text: str, lang: str, ref: Path | None, engine: str | None, settings:
         key = chunk_key(text, lang, engine, st, ref_sha)
         hit = _cache_get(cache, key)
         if hit is not None:
+            hit.meta["chunk_key"] = key
             return hit
         try:
             w = base.tts(text, lang, ref, normalize=False, engine=engine, settings=st)
@@ -168,6 +174,7 @@ def _synth(text: str, lang: str, ref: Path | None, engine: str | None, settings:
             log.warning("chunk failed (attempt %d/%d): %r: %s", k + 1, CHUNK_RETRIES, text[:60], e)
             continue
         _cache_put(cache, key, w)
+        w.meta["chunk_key"] = key
         return w
     raise base.NoVoiceAvailable(f"chunk {text[:80]!r} failed {CHUNK_RETRIES} times: {last}", getattr(last, "failures", None))
 
@@ -226,10 +233,11 @@ def atempo(x: np.ndarray, sr: int, factor: float) -> np.ndarray:
     return np.asarray(y, dtype=np.float32).reshape(-1)
 
 
-def pace_settings(lang: str, overrides: dict | None = None) -> dict:
+def pace_settings(lang: str, overrides: dict | None = None, profile_pace: dict | None = None) -> dict:
+    """voice_defaults.pace < the language's pace < the delivery profile's pace options (pause_floor) < the caller's overrides."""
     from .settings import voice_defaults
     p = {**PACE_DEFAULTS, **(voice_defaults().get("pace") or {}), **(language(lang).get("pace") or {}),
-         **((overrides or {}).get("pace") or {})}
+         **(profile_pace or {}), **((overrides or {}).get("pace") or {})}
     p["target_wpm"] = float(p["target_wpm"] or 0)
     p["max_speedup"] = max(1.0, float(p["max_speedup"]))
     p["pause_floor"] = min(1.0, max(0.0, float(p["pause_floor"])))
@@ -348,19 +356,87 @@ def _chunk_settings(settings: dict, tag: str | None, profile: dict | None, lang:
     return dict(settings, **ov)
 
 
+def default_take_check(text: str, w: Wav, lang: str) -> float:
+    """Per-line accuracy of one take: WER percent of the ASR transcript against the line text, with the voice gate's own
+    transcriber and canonicalisation (asr.transcribe / asr.error_rate)."""
+    from ..asr import error_rate, transcribe
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "take.wav"
+        w.save(p)
+        words = transcribe(p, lang)
+    return float(error_rate(text, " ".join(x[0] for x in words), lang))
+
+
+def _take_metrics(cache: Path | None, w: Wav, text: str, lang: str, check, measure) -> tuple[float, float, float, float]:
+    """(wer, duration, pitch spread, artefact share) of a take, kept next to the chunk cache so a resumed run does not
+    transcribe the same take again. The ASR model size is part of the record: another model re-measures."""
+    from ..asr import model_size
+    key, side = w.meta.get("chunk_key"), None
+    if cache is not None and key:
+        side = cache / f"{key}.take.json"
+        if side.is_file():
+            try:
+                d = json.loads(side.read_text())
+                if d.get("asr") == model_size() and d.get("text") == hashlib.sha256(text.encode()).hexdigest():
+                    return d["wer"], d["dur"], d["pitch"], d["art"]
+            except (OSError, ValueError, KeyError):
+                pass
+    t = _trim(w.samples, w.sr)
+    wer = float(check(text, w, lang))
+    pitch, art = measure(t, w.sr)
+    out = (wer, len(t) / w.sr, pitch, art)
+    if side is not None:
+        side.write_text(json.dumps({"asr": model_size(), "text": hashlib.sha256(text.encode()).hexdigest(), "wer": wer,
+                                    "dur": out[1], "pitch": pitch, "art": art}))
+    return out
+
+
+def _synth_takes(c: Chunk, lang: str, ref: Path | None, eng: str | None, settings: dict, cache: Path | None, ref_sha: str,
+                 n: int, check, measure, stats: dict) -> list[Take]:
+    """N takes of one chunk on seeds base + TAKE_SEED_STEP * j. The first take failing raises like a plain chunk (the caller
+    merges the chunk with the next); a later take failing is skipped. A non-clone engine (the stock-voice fallback) answers
+    the same every time, so it gets one take."""
+    takes: list[Take] = []
+    for j in range(n):
+        st = dict(settings, seed=int(settings.get("seed", 0)) + TAKE_SEED_STEP * j)
+        try:
+            w = _synth(c.text, lang, ref, eng, st, cache, ref_sha)
+        except base.NoVoiceAvailable:
+            if j == 0:
+                raise
+            log.warning("take %d/%d failed for a chunk; skipped", j + 1, n)
+            continue
+        if w.engine != "chatterbox":          # fallback or stock engine: nothing varies between takes, nothing to rank
+            return [Take(st["seed"], 0.0, 0.0, 0.0, 0.0, w)]
+        t0 = time.time()
+        wer, dur, pitch, art = _take_metrics(cache, w, c.text, lang, check, measure)
+        stats["check_s"] += time.time() - t0
+        takes.append(Take(st["seed"], wer, dur, pitch, art, w))
+    return takes
+
+
 def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: dict, cache: Path | None = None,
-          pace: dict | None = None, profile: dict | None = None) -> Wav:
+          pace: dict | None = None, profile: dict | None = None, takes: int = 1, take_check=None,
+          take_measure=None) -> Wav:
     plan = plan_chunks(text, lang)
     if not plan:
         raise ValueError("nothing to narrate")
     ref_sha = _ref_sha(ref)
     waves: list[Wav] = []
+    cands: list[list[Take]] = []
+    tstats = {"check_s": 0.0}
+    check, measure = take_check or default_take_check, take_measure or pitch_metrics
     eng = engine
     i = 0
     while i < len(plan):
         c = plan[i]
         try:
-            w = _synth(c.text, lang, ref, eng, _chunk_settings(settings, c.delivery, profile, lang), cache, ref_sha)
+            if takes > 1:
+                ts = _synth_takes(c, lang, ref, eng, _chunk_settings(settings, c.delivery, profile, lang), cache, ref_sha,
+                                  takes, check, measure, tstats)
+                w = ts[0].wave
+            else:
+                w = _synth(c.text, lang, ref, eng, _chunk_settings(settings, c.delivery, profile, lang), cache, ref_sha)
         except base.NoVoiceAvailable:
             if i + 1 < len(plan):            # last resort: say it together with the next chunk
                 log.warning("merging failed chunk %r into the next one", c.text[:60])
@@ -370,7 +446,19 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
             raise
         eng = eng or w.engine
         waves.append(w)
+        if takes > 1:
+            cands.append(ts)
         i += 1
+    take_info = None
+    if takes > 1 and any(len(ts) > 1 for ts in cands):
+        pick = select_all(cands)
+        waves = [ts[k].wave for ts, k in zip(cands, pick)]
+        kept = [ts[k] for ts, k in zip(cands, pick)]
+        every = [t for ts in cands for t in ts]
+        take_info = {"takes": takes, "lines": len(cands), "check_s": round(tstats["check_s"], 1),
+                     "pitch_kept": round(float(np.mean([t.pitch for t in kept])), 2),
+                     "pitch_all": round(float(np.mean([t.pitch for t in every])), 2),
+                     "first_take_chosen": sum(1 for k in pick if k == 0), "line_wer_kept": [round(t.wer, 1) for t in kept]}
     sr = waves[0].sr
     if any(w.sr != sr for w in waves):
         raise ValueError("sample-rate mismatch between chunks")
@@ -398,6 +486,8 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
     w.meta["chunks"] = len(plan)
     if used_tags:
         w.meta["delivery"] = used_tags
+    if take_info:
+        w.meta["takes"] = take_info
     return w
 
 
@@ -413,14 +503,20 @@ def spoken_text(text: str, lang: str, number_format: str | None = None) -> str:
 
 def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normalize: bool = True,
             engine: str | None = None, gate: bool = True, overrides: dict | None = None,
-            cache_dir: Path | str | None = None, pace: bool = True) -> Wav:
+            cache_dir: Path | str | None = None, pace: bool = True, take_check=None, take_measure=None) -> Wav:
     cfg = language(lang)
-    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile")})
+    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile", "takes")})
     spoken = spoken_text(text, lang, cfg.get("number_format"))
     ref = resolve_ref(Path(ref_wav) if ref_wav else None, st["ref_clip"])
-    pc = pace_settings(lang, overrides) if pace else None
     prof_name = (overrides or {}).get("delivery_profile") or default_profile(lang)
-    profile = load_profile(prof_name) or None          # `baseline` (the default) = {} = today's behaviour exactly
+    profile = load_profile(prof_name) or None          # `baseline` = {} = the behaviour before profiles existed
+    opts = load_options(prof_name)                     # whole-read options of the profile: takes, T3 weights, pause floor
+    takes = int((overrides or {}).get("takes") or opts.get("takes", 1))
+    if "pause_floor" in opts:
+        opts_pace = {"pause_floor": opts["pause_floor"]}
+    else:
+        opts_pace = None
+    pc = pace_settings(lang, overrides, opts_pace) if pace else None
     cache = _cache_dir(cache_dir)
     flags: list[str] = []
     w = None
@@ -428,7 +524,9 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
         s = dict(st, seed=int(st.get("seed", 0)) + attempt, temperature=st["temperature"] * (0.85 if attempt else 1.0))
         if profile:
             s[_TEMP_FACTOR] = 0.85 if attempt else 1.0
-        w = _once(spoken, lang, ref, engine, s, cache, pc, profile)
+        if opts.get("t3_weights"):
+            s["t3_weights"] = opts["t3_weights"]
+        w = _once(spoken, lang, ref, engine, s, cache, pc, profile, takes, take_check, take_measure)
         meta = dict(w.meta)
         w = postprocess(w)
         w.meta = meta

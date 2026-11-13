@@ -14,7 +14,7 @@ import yaml
 from ..config import CONFIG_DIR
 
 _TOKEN_CHARS = r"A-Za-z0-9_"
-_cache: dict[tuple[str, float, str], list[tuple[re.Pattern, str, bool]]] = {}
+_cache: dict[tuple, list[tuple[re.Pattern, str, bool]]] = {}
 
 
 def lexicon_path() -> Path:
@@ -55,10 +55,73 @@ def validate(doc: dict) -> list[str]:
     return errs
 
 
+def pronunciation_path() -> Path:
+    return Path(os.environ.get("ULLASLAB_PRONUNCIATION") or CONFIG_DIR / "pronunciation.yaml")
+
+
+def _spelled(say: str) -> bool:
+    """True when `say` is made only of single capital letters ("C P I"): such a form also takes a plural ("C P Is")."""
+    toks = say.split()
+    return bool(toks) and all(len(t) == 1 and t.isalpha() and t.isupper() for t in toks)
+
+
+# A dotted form ends its sentence at the end of a text, a line or before a pacing marker, or before a word that starts a sentence and
+# hardly ever follows "U.S." inside one ("U.S. The Fed met"; "the U.S. Treasury" and "the U.S. Fed" keep running on).
+_STARTERS = ("The", "A", "An", "It", "This", "That", "These", "Those", "But", "And", "So", "Then", "They", "We", "He", "She", "In", "On",
+             "At", "As", "For", "If", "When", "While", "With", "Now", "Here", "There", "What", "Why", "How", "Some", "Many", "Most",
+             "One", "Our", "Your", "Its", "Their", "Meanwhile", "However", "Yet", "Still", "Today", "Next")
+_SENTENCE_END = r"(?=\s*(?:$|\n|\[\[)|\s+(?:" + "|".join(_STARTERS) + r")\b)"
+
+
+def pronunciation_entries(doc: dict) -> list[dict]:
+    """Lexicon entries for the English pronunciation list (config/pronunciation.yaml): `letters` are spoken as listed; a dotted
+    key ("U.S.") also matches its bare form ("US") and, at the end of a text, keeps its full stop; a letters key that is spelled
+    out also matches its plural ("ETFs", "ETF's") and speaks it as letters plus s; `words` are spoken as listed (explicit, so a
+    word acronym is never spelled)."""
+    letters = {str(k): str(v) for k, v in (doc.get("letters") or {}).items()}
+    words = {str(k): str(v) for k, v in (doc.get("words") or {}).items()}
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    def add(match: str, say: str, **kw):
+        if match not in seen:
+            seen.add(match)
+            out.append({"match": match, "say": say, **kw})
+    for k, v in letters.items():
+        if "." in k:                       # dotted: the stop at the very end of a text is the sentence's own
+            out.append({"match": r"(?<![A-Za-z0-9_.])" + re.escape(k) + _SENTENCE_END, "say": v + ".", "regex": True})
+        add(k, v)
+    for k, v in letters.items():
+        if "." in k:                       # bare form of a dotted key: "US" is spoken as letters too, but not the "US$" currency prefix
+            bare = k.replace(".", "")
+            if bare not in seen and bare not in letters:
+                seen.add(bare)
+                out.append({"match": rf"(?<![A-Za-z0-9_$&.]){re.escape(bare)}(?![A-Za-z0-9_$&])", "say": v, "regex": True})
+    for k, v in list(letters.items()):
+        bare = k.replace(".", "")
+        if _spelled(v) and bare.isalpha():
+            for suffix in ("s", "'s", "\u2019s"):
+                add(bare + suffix, v + suffix)
+    for k, v in words.items():
+        add(k, v)
+    return out
+
+
+def _pronunciation_doc() -> dict:
+    p = pronunciation_path()
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except OSError:
+        return {}
+
+
 def _compile(doc: dict, lang: str) -> list[tuple[re.Pattern, str, bool]]:
     merged: dict[tuple[str, bool, bool], dict] = {}
     for sec in ("common", lang):               # language entries override common ones with the same match
         for e in doc.get(sec) or []:
+            merged[(str(e["match"]), bool(e.get("regex")), bool(e.get("ci")))] = e
+    if lang == "en":                           # the pronunciation list wins over the lexicon for the same match
+        for e in pronunciation_entries(_pronunciation_doc()):
             merged[(str(e["match"]), bool(e.get("regex")), bool(e.get("ci")))] = e
     vals = list(merged.values())
     ordered = [e for e in vals if e.get("regex")] + sorted((e for e in vals if not e.get("regex")), key=lambda e: -len(str(e["match"])))
@@ -71,7 +134,11 @@ def entries_for(lang: str, path: Path | None = None) -> list[tuple[re.Pattern, s
         mtime = p.stat().st_mtime
     except OSError:
         return []
-    key = (str(p), mtime, lang)
+    try:
+        pm = pronunciation_path().stat().st_mtime if lang == "en" else 0.0
+    except OSError:
+        pm = -1.0
+    key = (str(p), mtime + pm, lang, str(pronunciation_path()) if lang == "en" else "")
     if key not in _cache:
         doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         errs = validate(doc)
