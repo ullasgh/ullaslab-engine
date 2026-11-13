@@ -17,7 +17,7 @@ SR = 24000
 LONG = ("Oil prices jumped this spring. One. Shipping through the strait fell sharply, and insurers raised their rates. "
         "Why does that matter for you? Because fuel costs feed into almost everything you buy.\n\n"
         "Some analysts expected a quick recovery. Others did not. Here is what the data shows. "
-        "Traffic stayed low for months while prices stayed high. Follow UllasLab.")
+        "Traffic stayed low for many long months while prices stayed high. Follow UllasLab.")
 
 
 class FakeClone:

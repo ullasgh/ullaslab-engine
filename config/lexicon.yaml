@@ -76,7 +76,8 @@ en:
   - {match: "approx.", say: "approximately"}
   # units (the number is verbalised afterwards: "25 bps" -> "twenty-five basis points")
   - {match: "bps", say: "basis points"}
-  - {match: "bp", say: "basis point"}
+  - {match: '(?<![\d.,])\b(a|one|1)\s?bp\b', say: '\1 basis point', regex: true, ci: true}   # one basis point; every other count is plural
+  - {match: "bp", say: "basis points"}
   - {match: "mb/d", say: "million barrels per day"}
   - {match: "mbd", say: "million barrels per day"}
   - {match: "bbl/d", say: "barrels per day"}

@@ -12,6 +12,14 @@
 #   pause_before   seconds of silence floor before the line (added to the previous line's pause, kept by the pacer)
 #   pause_after    seconds of silence floor after the line (kept by the pacer)
 #   gain_db        level offset of the line after level matching (the master is loudness-normalised afterwards)
+# A profile may also carry `_options` (whole-read, validated by delivery.load_options):
+#   takes        best-of-N takes per line (voice/takes.py): N syntheses on deterministic seeds, each checked by ASR (same WER
+#                canonicalisation as the voice gate) and measured for pitch range; the widest-pitch take among the most accurate
+#                is kept. 1 = off. Costs N times the synthesis time plus one ASR pass per take.
+#   t3_weights   Chatterbox T3 weights: v2 (what chatterbox-tts 0.1.7 downloads) | v3 (pinned, sha256-verified, see tts/chatterbox_engine.py)
+#   pause_floor  the pacer's floor on punctuation pauses as a fraction of their length (languages.yaml pace.pause_floor, 0.6 by default;
+#                1.0 keeps the natural pauses)
+# `baseline` has no tags and no `_options`: byte-for-byte the behaviour before profiles existed.
 # Hard bounds (enforced when the file is read): exaggeration 0.25-0.9, cfg_weight 0.2-0.7, temperature 0.5-0.95,
 # tempo 0.9-1.1, pauses 0-0.7 s, gain +-3 dB. Pauses stay far below the A3 max_silence_s limit of 1.2 s.
 tags: [hook, tension, reveal, explain, caution, signoff]
@@ -38,3 +46,15 @@ profiles:
     explain:  {}
     caution:  {exaggeration: 0.35, tempo: 0.97, pause_before: 0.15}
     signoff:  {exaggeration: 0.35, pause_before: 0.30, tempo: 0.97}
+  # sample4: the owner's choice after listening (2026-11-13) and the English default (languages.yaml en.delivery_profile).
+  # Recipe measured on the reference script: new reference clip 1, V3 weights, best of 2 takes per line (owner decision 2026-11-13: N=2, takes reused across WER retries; 4 stays possible), natural pauses
+  # (pause_floor 1.0, target 150 wpm), and longer pauses with a slower tempo before the reveal, caution and sign-off lines.
+  # No exaggeration, cfg or temperature changes: the documented "expressive" settings did not raise pitch range and failed WER.
+  sample4:
+    _options: {takes: 2, t3_weights: v3, pause_floor: 1.0}
+    hook:     {pause_after: 0.6}
+    tension:  {tempo: 0.97}
+    reveal:   {pause_before: 0.7, tempo: 0.95}
+    explain:  {}
+    caution:  {pause_before: 0.55, tempo: 0.95}
+    signoff:  {pause_before: 0.6, tempo: 0.96}

@@ -136,7 +136,12 @@ def test_make_voices_one_synthesis_per_distinct_narration_with_clone_ref_and_pac
     text, lang, ref, ov, cache = calls[0]
     assert text == " ".join(F.NARRATION) and lang == "en" and ref == w / "voice.wav"
     # the pacer fits to the A3 gate's word count (whitespace tokens of the script), not to the spoken words
-    assert ov == {"pace": {"target_wpm": 150, "words": len(text.split())}} and cache == w / "tts_cache"
+    assert ov == {"pace": {"target_wpm": 150, "words": len(text.split())}, "take_seed": AC.retry_seed("en", 0), "attempt": 0}
+    assert cache == w / "tts_cache"
+    calls.clear()
+    AC.make_voices(w, narrate_fn=fake, log=lambda *_: None, attempt=2)       # a WER retry: same take seed (takes are reused), attempt 2
+    ov2 = calls[0][3]
+    assert ov2["take_seed"] == AC.retry_seed("en", 0) and ov2["attempt"] == 2 and ov2["seed"] == AC.retry_seed("en", 2)
     assert (w / "item" / "voice.short.wav").is_file() and (w / "item" / "voice.reel.wav").is_file()
     assert st["reel"]["same_as"] == "short" and st["short"]["clone_ref"] is True
     assert set(json.loads((w / "voice_stats.json").read_text())["outputs"]) == {"short", "reel"}
@@ -495,7 +500,22 @@ def test_a4_pacing_fails_each_limit(doc, qc, failing):
     assert not g["passed"] and failing in [c["name"] for c in g["checks"] if not c["passed"]]
 
 
+def _one_take(monkeypatch):
+    monkeypatch.setattr("ullaslab_engine.voice.delivery.default_profile", lambda lang=None: "baseline")
+
+
+def test_voice_budget_multiplies_by_the_takes_of_the_english_profile(monkeypatch):
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
+    b = AC.voice_budget(F.scenes_doc(), 150)
+    assert b["takes"] == 2 and b["asr_rtf"] == AC.RUNNER_ASR_RTF
+    # 104 words at 150 wpm: 2 takes synthesised (RTF 16) and 2 transcribed plus the final read's transcription
+    assert b["projected_min"] == pytest.approx(0.693 * (16 * 2 + AC.RUNNER_ASR_RTF * 3), abs=0.3)
+    _one_take(monkeypatch)
+    assert AC.voice_budget(F.scenes_doc(), 150)["projected_min"] == 11.1
+
+
 def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp_path, monkeypatch):
+    _one_take(monkeypatch)
     w = _bundle(tmp_path, target_wpm=150)
     AC.prepare_item(w)
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 104 words at 150 wpm x 16 = 11.1 min > 1
@@ -509,6 +529,7 @@ def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp
 
 
 def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
+    _one_take(monkeypatch)
     monkeypatch.delenv("ULLASLAB_VOICE_BUDGET_MIN", raising=False)
     assert AC.voice_budget(F.scenes_doc(), 150) is None
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
@@ -806,7 +827,8 @@ def test_wer_plus_another_failure_does_not_retry(tmp_path):
 
 
 def test_a_retry_that_cannot_fit_the_voice_budget_is_not_started(tmp_path, monkeypatch):
-    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.1 min of synthesis: it fits)
+    _one_take(monkeypatch)
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects about 11 min of synthesis: it fits)
     p = _Phase(tmp_path, [3.5, 1.0])
     p.step = 200.0                                              # attempt 1 measures 200 s, 600 s are used: a second does not fit
     res, lines = p.run()
