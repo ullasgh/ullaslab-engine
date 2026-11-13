@@ -137,7 +137,9 @@ def test_a_take_that_misreads_is_never_chosen_even_if_it_is_the_widest(chat):
 def test_the_same_inputs_give_the_same_audio_and_selection(chat):
     m1, m2 = Meter(), Meter()
     a, b = _run(chat, m1, 3), _run(chat, m2, 3)
-    assert a.meta["takes"] == b.meta["takes"] and abs(a.duration - b.duration) < 0.05
+    # check_s is wall-clock time spent checking, so it varies between runs; everything else must match
+    ta, tb = ({k: v for k, v in x.meta["takes"].items() if k != "check_s"} for x in (a, b))
+    assert ta == tb and abs(a.duration - b.duration) < 0.05
 
 
 def test_cache_resumes_without_synthesising_or_checking_again(chat, tmp_path):
