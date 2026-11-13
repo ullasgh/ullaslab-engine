@@ -48,14 +48,14 @@ set that entry to `baseline` (or delete it) and English is byte for byte what it
 |---|---|---|
 | reference clip | `languages.yaml` en `ref_clip: 1` | the owner's new recording, clip 1 (the content repo's config says the same; sync test) |
 | V3 weights | `delivery.yaml` `_options.t3_weights: v3`, `tts/chatterbox_engine.py` | the V3 T3 checkpoint, pinned to an exact Hugging Face revision and sha256-verified, loaded by the unchanged 0.1.7 code. Not a library upgrade. |
-| best of N takes | `_options.takes: 4`, `voice/takes.py` | each line is synthesised N times on seeds base + 10 j; each take is checked with the gate's own ASR and WER canonicalisation; the widest p10-p90 pitch among the most accurate takes of the right length, without pitch-jump artefacts, is kept |
+| best of N takes | `_options.takes: 2` (owner decision: N=2; 4 stays possible), `voice/takes.py` | each line is synthesised N times on seeds base + 10 j; each take is transcribed AT THE SPEED IT WILL BE HEARD AT (line tempo x the pacer's estimated speed-up) with the gate's own ASR and WER canonicalisation; only the most accurate takes are eligible, and among them the widest p10-p90 pitch (right length, no pitch-jump artefacts) is kept |
+| WER retry | `studio/actions.voice_phase`, `narrate._extra_lines` | takes keep their seeds across retries and their cached ASR checks are reused; a retry adds one new take to each of the (at most 4) worst lines, or, when no line has an error, to the fastest-spoken lines, then selects again. Nothing already synthesised or transcribed is redone |
 | natural pauses | `_options.pause_floor: 1.0` | the pacer no longer shortens punctuation pauses (target 150 wpm is unchanged) |
 | key-line timing | tags in the profile | 0.55-0.7 s pause before reveal, caution and sign-off lines, 0.6 s after the hook, tempo 0.95-0.97 on those lines |
 
 No gate, limit or threshold changed: A3 wer_pct 3, wpm 135-175, max silence 1.2 s, the duration limits and the WER-only retry (3 attempts,
 seed base + 1000 i) measure whatever the profile produces. The takes are chosen between candidates of the same line only; the file-level gates
-run after that exactly as before. Cost: N times the synthesis time plus one ASR pass per take (see the pull request for the measured figures
-and the runner budget). `ULLASLAB_VOICE_BUDGET_MIN` accounts for it (`studio/actions.voice_budget`).
+run after that exactly as before. Cost: N times the synthesis time plus one ASR pass per take. `ULLASLAB_VOICE_BUDGET_MIN` accounts for both (`studio/actions.voice_budget`, `RUNNER_RTF`, `RUNNER_ASR_RTF`).
 
 ## Letter-reading rule (owner standard 2026-11-13)
 Every short form meant to be read letter by letter is spoken as letters: "U.S." and "US" both as "U S", never as the word "us".
