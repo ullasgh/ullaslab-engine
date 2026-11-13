@@ -463,6 +463,26 @@ def test_mux_keeps_every_video_frame_and_audio_ends_with_it(tmp_path):
     assert av_sync_problems(out, frames) == []
 
 
+def test_brand_mark_is_in_the_cache_key_only_when_present(props_env):
+    pp, public, props = props_env
+    base = keys_for(props, public)
+    assert SC.global_material(props) == {k: props.get(k) for k in ("orientation", "width", "height", "lang", "numberLocale", "rtl", "style", "platform", "durationInFrames")}
+    assert "brandMark" not in SC.global_material(props)           # non-premium keys are unchanged by the premium work
+    p2 = copy.deepcopy(props)
+    p2["brandMark"] = {"viewBox": 24}
+    assert "brandMark" in SC.global_material(p2)
+    assert all(a != b for a, b in zip(base, keys_for(p2, public)))
+
+
+def test_premium_frame_plan_covers_every_new_transition_overlap():
+    sc = lambda i, a, b, t: {"id": i, "narration": {"start_s": a, "end_s": b}, "transition": t}
+    plan = SC.frame_plan([sc("a", 0.0, 2.0, "cut"), sc("b", 2.0, 4.0, "push"), sc("c", 4.0, 6.0, "match_cut"),
+                          sc("d", 6.0, 8.0, "wipe"), sc("e", 8.0, 10.0, "pattern_interrupt")], style="premium")
+    assert [p["until"] - p["end"] for p in plan] == [20, 20, 16, 8, 0]      # push_through, morph, sweep, interrupt
+    segs = SC.segments(plan, 300)
+    assert sum(s["to"] - s["from"] for s in segs) == 300 and any(len(s["visible"]) == 2 for s in segs)
+
+
 # ---------------------------------------------------------------- one small real render (Remotion + Chrome)
 @pytest.mark.skipif(not os.environ.get("RUN_RENDER"), reason="set RUN_RENDER=1 (Remotion + Chrome, about a minute)")
 def test_real_segmented_render_matches_full_render(tmp_path):
@@ -497,6 +517,36 @@ def test_real_segmented_render_matches_full_render(tmp_path):
     warm = tmp_path / "warm.mp4"
     st = SC.render_output(pp, pub, warm, cache, node_render_segments, scale=0.25, log=lambda m: None)
     assert st["reused"] == 3 and warm.read_bytes() == joined.read_bytes()
+
+
+@pytest.mark.skipif(not os.environ.get("RUN_RENDER"), reason="set RUN_RENDER=1 (Remotion + Chrome)")
+def test_real_segmented_render_matches_full_render_premium_style(tmp_path):
+    """Premium style: push_through, morph, sweep and interrupt overlaps plus a brand-mark end card; segments joined equal a full render."""
+    from ullaslab_engine.studio.run import node_render, node_render_segments
+    from ullaslab_engine.studio.captions import build_cues
+    sc = lambda i, a, b, t, txt: {"id": i, "role": "hook", "narration": {"text": txt, "start_s": a, "end_s": b, "words": [
+        {"w": w, "start": round(a + k * 0.3, 3), "end": round(a + k * 0.3 + 0.25, 3)} for k, w in enumerate(txt.split())]},
+        "type": "kinetic", "palette": "policy", "camera_move": "static", "transition": t, "on_screen_text": txt}
+    scenes = [sc("s01", 0.0, 1.5, "cut", "Yield is 4.7"), sc("s02", 1.5, 3.0, "push", "Second idea"), sc("s03", 3.0, 4.5, "match_cut", "Third"),
+              sc("s04", 4.5, 6.0, "wipe", "Fourth idea"), sc("s05", 6.0, 7.5, "pattern_interrupt", "Fifth")]
+    total = 225
+    mark = {"viewBox": 24, "radius": 6, "bg": "#E8A33D", "ink": "#0B0C0E", "strokes": [{"d": "M7.6 15.4a4.4 4.4 0 0 0 8.8 0", "w": 1.6}], "rects": [{"x": 6, "y": 6.2, "w": 3.2, "h": 9, "r": 0.8}]}
+    props = {"style": "premium", "brandMark": mark, "orientation": "vertical", "scenes": scenes, "refs": {}, "lang": "en", "numberLocale": "en-US",
+             "captions": build_cues(scenes), "rtl": False, "durationInFrames": total, "width": 1080, "height": 1920, "endCard": {"fromFrame": 195, "durationInFrames": 30}}
+    pp = tmp_path / "props.json"
+    pp.write_text(json.dumps(props))
+    pub = tmp_path / "public"
+    pub.mkdir()
+    full = tmp_path / "full.mp4"
+    node_render(pp, pub, full, scale=0.25)
+    cache = SC.SceneCache(tmp_path / "cache")
+    joined = tmp_path / "joined.mp4"
+    SC.render_output(pp, pub, joined, cache, node_render_segments, scale=0.25, log=lambda m: None)
+    assert SC.probe_video(joined)["frames"] == SC.probe_video(full)["frames"] == total
+    r = subprocess.run(["ffmpeg", "-loglevel", "info", "-i", str(joined), "-i", str(full), "-lavfi", "[0:v][1:v]psnr=stats_file=-",
+                        "-f", "null", "-"], capture_output=True, text=True)
+    vals = [float(x.split("psnr_avg:")[1].split()[0]) for x in r.stdout.splitlines() if "psnr_avg:" in x]
+    assert len(vals) == total and min([v for v in vals if v != float("inf")] or [99]) > 35
 
 
 @needs_ffmpeg

@@ -59,7 +59,7 @@ def test_premium_item_style_brand_mark_and_word_timings_reach_props(tmp_path):
     mark = {"viewBox": 24, "radius": 6, "bg": "#000000", "ink": "#ffffff", "strokes": [], "rects": []}
     (item / "brand_mark.json").write_text(json.dumps(mark))
     p2, _ = build_props(item, doc, doc["outputs"][0], tmp_path / "pub", clip_prep=lambda *a: None)
-    assert p2["brandMark"] == mark and "brandMark" in SC.GLOBAL_KEYS
+    assert p2["brandMark"] == mark and "brandMark" in SC.OPTIONAL_KEYS
 
 
 def test_premium_transitions_have_frames_and_the_director_names_map_per_style():
@@ -71,3 +71,17 @@ def test_premium_transitions_have_frames_and_the_director_names_map_per_style():
     assert classic[0]["until"] - classic[0]["end"] == 0 and premium[0]["until"] - premium[0]["end"] == SC.TRANSITION_FRAMES["interrupt"]
     own = SC.frame_plan([sc("a", "cut"), sc("b", "push", style="premium")])
     assert own[0]["until"] - own[0]["end"] == SC.TRANSITION_FRAMES["push_through"]
+
+
+def test_premium_default_sfx_is_capped_never_overrides_and_is_off_for_other_styles():
+    from ullaslab_engine.studio import audio as A
+    sc = lambda i, t, **k: {"id": f"s{i}", "narration": {"start_s": float(i), "end_s": i + 1.0}, "transition": t, **k}
+    scenes = [sc(0, "cut")] + [sc(i, "wipe") for i in range(1, 12)] + [sc(12, "pattern_interrupt")]
+    out = A.premium_defaults(scenes, "premium")
+    named = [s for s in out if s.get("sfx")]
+    assert len(named) == A.PREMIUM_SFX_CAP and out[0].get("sfx") is None
+    assert out[12]["sfx"] == "hit"                                   # the interrupt keeps its sound when the cap bites
+    assert A.premium_defaults(scenes, "data-story") is scenes and A.premium_defaults(scenes, None) is scenes
+    own = [sc(0, "cut"), sc(1, "wipe", sfx="none"), sc(2, "wipe", sfx="tick")]
+    assert [s.get("sfx") for s in A.premium_defaults(own, "premium")] == [None, "none", "tick"]   # explicit choices win
+    assert all(n in A.SFX for _, n in [(0, s["sfx"]) for s in named])   # only the existing synthesised effects

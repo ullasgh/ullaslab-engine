@@ -98,12 +98,13 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
   const colW = headerCol(bw, vertical);
   const headLines = vertical ? linesFor(data.headline, T.headline, colW) : Math.min(3, Math.max(1, Math.ceil(((data.headline ?? "").length * 0.54 * T.headline) / colW)));
   const hf = headerFigure(colW, headLines, T);
-  const stampH = T.stamp * 1.25 * 2 + 10 + (data.meta.caveat ? T.stamp * 1.3 : 0);
-  const capH = vertical ? fs * 1.2 * 2 + SP.s : 0;
+  const stampH = T.stamp * 1.25 * 2 + 4 + (data.meta.caveat ? T.stamp * 1.3 : 0);
+  const capH = vertical ? fs * 1.2 + SP.s : 0;
   const plotX = vertical ? 0 : colW + SP.xl, plotW = bw - plotX;
   const plotTop = vertical ? hf.y + hf.size + SP.s : 0;
   const plotH = Math.max(200, bh - plotTop - stampH - capH - SP.s);
-  const m = { l: fs * 2.5, r: 22, t: fs * 2.4, b: fs * 1.9 };
+  const hasMarks = views.some((v) => (v.marks?.length ?? 0) > 0 || v.point?.label);
+  const m = { l: fs * 2.5, r: 22, t: hasMarks ? fs * 2.0 : fs * 0.6, b: fs * 2.5 };
   const X = linear([dom.x0, dom.x1], [m.l, plotW - m.r]);
   const Y = linear([dom.y0, dom.y1], [plotH - m.b, m.t]);
 
@@ -143,7 +144,7 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
   const pops = [...marksAt.flat(), ...kfs.map((k) => k[k.length - 1].f)];
   const popScale = 1 + 0.07 * Math.max(0, ...pops.map((t) => { const a = (f - t) / 16; return a >= 0 && a < 1 ? Math.sin(Math.PI * a) * (1 - a) : 0; }));
   const figure = fmtNum(tipVal, dec, numberLocale);
-  const intro = carryIn ? 1 : EASE.out(range(f, 2, 14));
+  const intro = carryIn ? (f >= 20 ? 1 : 0) : EASE.out(range(f, 2, 14));   // with a morph the carried figure is drawn by the ghost until it lands
   const dim = morphOut ? 0 : 1;
 
   return (
@@ -181,7 +182,7 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
             <text x={m.l - 12} y={Y(t.v) + fs * 0.35} textAnchor="end" fontSize={fs} fill={PT.muted} data-audit="axis">{fmtNum(t.v, dec, numberLocale)}</text>
           </g>
         ))}
-        {xTicks.map((t) => <text key={`${t.key}-${t.op}`} x={t.x} y={plotH - m.b + fs * 1.25} textAnchor="middle" fontSize={fs} fill={PT.muted} opacity={t.op} data-audit="axis">{t.label}</text>)}
+        {xTicks.map((t) => <text key={`${t.key}-${t.op}`} x={t.x} y={plotH - m.b + fs * 1.55} textAnchor="middle" fontSize={fs} fill={PT.muted} opacity={t.op} data-audit="axis">{t.label}</text>)}
         <g clipPath="url(#plotclip)">
           {hl && (() => {
             const hx0 = Math.max(m.l, X(parseX(hl.from))), hx1 = Math.min(plotW - m.r, X(parseX(hl.to)));
@@ -235,6 +236,13 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
       </div>
     </div>
   );
+};
+
+/** The header figure's text on the first frame (the series value where the first view starts). A shared-element morph is only
+ *  allowed to land on it when the carried figure is the same text, so a style can never put a different number in a header. */
+export const initialFigure = (data: PremiumChartData, numberLocale: string): string => {
+  const v0 = viewsOf(data)[0];
+  return fmtNum(valueAt(data.series[0].points, parseX(v0.window.from)), data.decimals ?? 1, numberLocale) + unitSuffix(data.meta.unit);
 };
 
 /** The figure a following scene can morph from: this chart's header figure at the end of the scene. */

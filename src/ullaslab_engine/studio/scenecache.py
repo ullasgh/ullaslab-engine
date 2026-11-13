@@ -185,7 +185,12 @@ def _scene_data(sc: dict, refs: dict):
     return refs.get(ref) if ref else None
 
 
-GLOBAL_KEYS = ("orientation", "width", "height", "lang", "numberLocale", "rtl", "style", "platform", "durationInFrames", "brandMark")
+GLOBAL_KEYS = ("orientation", "width", "height", "lang", "numberLocale", "rtl", "style", "platform", "durationInFrames")
+OPTIONAL_KEYS = ("brandMark",)     # in the key only when present, so keys of items without them are unchanged
+
+
+def global_material(props: dict) -> dict:
+    return {**{k: props.get(k) for k in GLOBAL_KEYS}, **{k: props[k] for k in OPTIONAL_KEYS if k in props}}
 
 
 def segment_key(props: dict, plan: list[dict], seg: dict, *, public: Path, scale: float, renderer: str) -> str:
@@ -204,7 +209,7 @@ def segment_key(props: dict, plan: list[dict], seg: dict, *, public: Path, scale
     if card and not (card["fromFrame"] < b and card["fromFrame"] + max(1, card["durationInFrames"]) > a):
         card = None
     material = {"v": CACHE_VERSION, "renderer": renderer, "comp": "StudioVideo", "fps": FPS, "scale": float(scale),
-                "global": {k: props.get(k) for k in GLOBAL_KEYS}, "range": [a, b], "scenes": scenes, "captions": cues,
+                "global": global_material(props), "range": [a, b], "scenes": scenes, "captions": cues,
                 "endCard": card}
     blob = json.dumps(material, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(blob.encode()).hexdigest()

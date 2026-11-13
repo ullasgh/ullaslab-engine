@@ -183,6 +183,25 @@ def make_sfx_library(dst: Path) -> dict[str, Path]:
     return out
 
 
+# Premium style default (provisional, owner approval needed): a transition sound per scene change, capped per video. Effects are
+# the in-house CC0 set above; levels stay the restrained SFX levels. A scene's own `sfx` field always wins ("none" = silent).
+PREMIUM_SFX = {"push": "whoosh", "wipe": "whoosh", "match_cut": "whoosh", "pattern_interrupt": "hit"}
+PREMIUM_SFX_CAP = 8
+
+
+def premium_defaults(scenes: list[dict], style: str | None) -> list[dict]:
+    """Scenes with the premium default sfx filled in (a copy). No-op for other styles. At most PREMIUM_SFX_CAP sounds in a video;
+    pattern interrupts take priority over whooshes when the cap bites. The first scene has no transition and gets none."""
+    if style != "premium":
+        return scenes
+    out = [dict(s) for s in scenes]
+    cand = [(i, PREMIUM_SFX[s.get("transition")]) for i, s in enumerate(out) if i > 0 and "sfx" not in s and s.get("transition") in PREMIUM_SFX]
+    chosen = sorted(cand, key=lambda c: (c[1] != "hit", c[0]))[:max(0, PREMIUM_SFX_CAP - sum(1 for s in out if s.get("sfx") not in (None, "none")))]
+    for i, name in chosen:
+        out[i]["sfx"] = name
+    return out
+
+
 def sfx_events(scenes: list[dict]) -> list[tuple[str, float]]:
     """(name, start_s) for every scene whose director sfx is not 'none'. The first scene has no transition; sounds
     land on the scene's start (risers lead in so they peak on it)."""

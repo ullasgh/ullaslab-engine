@@ -36,8 +36,9 @@ export const flowLayout = (data: FlowData, bw: number, bh: number, vertical: boo
   const availH = bh - top - 118 - SP.m, availW = bw;
   const gapCross = SP.m;
   const nLevelsGap = Math.max(1, levels - 1);
-  let gapMain = vertical ? SP.xl + SP.s : SP.xxl;
-  const boxW = vertical ? (availW - gapCross * (widest - 1)) / widest : (availW - gapMain * (levels - 1)) / levels;
+  const labelled = data.edges.some((e) => e.label);
+  let gapMain = vertical ? SP.xl + SP.s : labelled ? 340 : 160;   // wide frame: room for the edge label between the boxes
+  const boxW = vertical ? (availW - gapCross * (widest - 1)) / widest : Math.min(620, (availW - gapMain * (levels - 1)) / levels);
   const boxH = vertical ? Math.min(230, (availH - 100 * (levels - 1)) / levels) : Math.min(260, (availH - gapCross * (widest - 1)) / widest);
   // with few levels, spread them over the height instead of leaving a gap at the bottom (never past 220 px)
   if (vertical && levels > 1) gapMain = Math.max(gapMain, Math.min(220, (availH - levels * boxH) / nLevelsGap));
@@ -51,7 +52,7 @@ export const flowLayout = (data: FlowData, bw: number, bh: number, vertical: boo
       rects[n.id] = { x: cnt === 1 ? 0 : idx * (boxW + gapCross), y: y0 + n.level * (boxH + gapMain), w, h: boxH };
     } else {
       const total = cnt * boxH + (cnt - 1) * gapCross;
-      rects[n.id] = { x: n.level * (boxW + gapMain), y: top + (availH - total) / 2 + idx * (boxH + gapCross), w: boxW, h: boxH };
+      rects[n.id] = { x: (availW - (levels * boxW + (levels - 1) * gapMain)) / 2 + n.level * (boxW + gapMain), y: top + (availH - total) / 2 + idx * (boxH + gapCross), w: boxW, h: boxH };
     }
   });
   return { rects, top, boxH, vertical };
@@ -168,7 +169,7 @@ export const PremiumFlow: React.FC<{ data: FlowData }> = ({ data }) => {
               <path d={g.d} fill="none" stroke={PT.teal} strokeWidth={8} strokeLinecap="round" strokeDasharray={ev.strokeDasharray} strokeDashoffset={ev.strokeDashoffset} />
               {k >= 1 && <polygon points="0,-14 24,0 0,14" fill={PT.teal} transform={`translate(${g.ax - (g.ang === 0 ? 24 : 0)} ${g.ay - (g.ang === 90 ? 24 : 0)}) rotate(${g.ang})`} />}
               {pulse && <circle cx={pulse.x} cy={pulse.y} r={9} fill={PT.amber} opacity={0.95} />}
-              {e.label && k >= 0.9 && <text x={g.mx} y={g.my - 14} textAnchor="middle" fontSize={T.label} fontWeight={700} fill={PT.amber} stroke={PT.navy0} strokeWidth={8} paintOrder="stroke" data-audit="stamp" opacity={EASE.out(range(f, t0 + 16, 10))}>{e.label}</text>}
+              {e.label && k >= 0.9 && <text x={L.vertical ? g.mx + 22 : g.mx} y={L.vertical ? g.my + 12 : g.my - 14} textAnchor={L.vertical ? "start" : "middle"} fontSize={T.label} fontWeight={700} fill={PT.amber} stroke={PT.navy0} strokeWidth={8} paintOrder="stroke" data-audit="stamp" opacity={EASE.out(range(f, t0 + 16, 10))}>{e.label}</text>}
             </g>
           );
         })}

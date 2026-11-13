@@ -11,7 +11,7 @@ import { PremiumBackdrop, type BackdropId } from "./Backdrops";
 import { contentPose, moveFor, type Pose } from "./camera";
 import { usePremium, type Carry } from "./context";
 import { EASE, clamp01, mix, range } from "./motion";
-import { PremiumLineChart, chartCarry, headerCol, headerFigure, type PremiumChartData } from "./PChart";
+import { PremiumLineChart, chartCarry, initialFigure, headerCol, headerFigure, type PremiumChartData } from "./PChart";
 import { PremiumFlow, flowCarry } from "./PFlow";
 import { PremiumKinetic, kineticCarry } from "./PKinetic";
 import { PT, PTYPE } from "./tokens";
@@ -33,8 +33,9 @@ export const carryOf = (s: StudioScene, data: unknown, bw: number, bh: number, o
 };
 
 /** Where a morph lands: only a premium line chart has a header figure to land on. */
-export const carryTarget = (s: StudioScene, data: unknown, bw: number, o: "horizontal" | "vertical") => {
+export const carryTarget = (s: StudioScene, data: unknown, bw: number, o: "horizontal" | "vertical", carry?: Carry | null, locale = "en-US") => {
   if (s.type !== "chart" || !isLine(data)) return null;
+  if (carry && carry.text.replace(/[^0-9.]/g, "") !== initialFigure(data as PremiumChartData, locale).replace(/[^0-9.]/g, "")) return null;   // same number only
   const T = PTYPE[o];
   const d = data as PremiumChartData;
   const colW = headerCol(bw, o === "vertical");

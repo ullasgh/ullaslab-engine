@@ -661,6 +661,7 @@ def test_chart_stamp_drops_the_freshness_tag_before_it_is_drawn():
     k = A.to_kit_chart("c1", c)
     assert k["meta"]["source"]["name"] == "Source: FRED, St. Louis Fed, DGS10. As of 2026-11-09."
     assert k["meta"]["freshness"] == c.get("freshness", "RECENT")           # the tag stays in the data
+    assert A.stamp_name("Source: FRED, DGS10. As of 2026-11-09. [RECENT]") == "Source: FRED, DGS10"   # the date is drawn once, from as_of
     assert A.stamp_name("Source: x [LAGGED]") == "Source: x" and A.stamp_name("Source: [x] plan") == "Source: [x] plan"
 
 

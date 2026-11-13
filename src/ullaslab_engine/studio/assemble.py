@@ -45,13 +45,15 @@ def load_chart_specs(item: Path) -> dict[str, dict]:
     return {}
 
 
+_AS_OF = re.compile(r"[\s.]*As of \d{4}-\d{2}-\d{2}\.?\s*$", re.I)
 _STAMP_TAG = re.compile(r"\s*\[(?:LIVE|RECENT|LAGGED|EXPECTATION|INFERRED)\]\s*$")
 
 
 def stamp_name(name: str) -> str:
     """The source stamp as a viewer sees it. The content repo's stamp ends with the freshness tag ("... As of 2026-11-09.
     [RECENT]"); the tag belongs to the data ledger (meta.freshness), never on screen (studio QC: no freshness labels)."""
-    return _STAMP_TAG.sub("", name or "")
+    out = _STAMP_TAG.sub("", name or "")
+    return _AS_OF.sub("", out) or out        # the as-of date is drawn once, from meta.source.as_of
 
 
 def infer_decimals(values: list) -> int:

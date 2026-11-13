@@ -128,3 +128,19 @@ test("the brand mark is data supplied by the item: the public engine source hold
   assert.doesNotMatch(src, /M7\.6|8\.8 0|E8A33D/i, "no logo path or brand-square colour literal");
   assert.match(src, /brandMark|BrandMark/);
 });
+
+test("camera bounds are pinned to absolute numbers: a pose beyond 5% scale or 14 px shift is a failure, and a pose that exceeds the safe box is detected", () => {
+  assert.equal(CAM.maxScale, 1.05); assert.equal(CAM.maxShift, 14);
+  for (const o of ["vertical", "horizontal"]) {
+    const safe = safeOf(o), inner = contentBox(safe);
+    for (const move of [...CAMERA_MOVES, undefined]) for (let i = 0; i <= 50; i++) {
+      const p = contentPose(move, i / 50, 1);
+      assert.ok(p.scale <= 1.05 + 1e-9 && Math.abs(p.x) <= 14 + 1e-9 && Math.abs(p.y) <= 14 + 1e-9, `${move} pose out of the absolute bound`);
+    }
+    // the checker itself must fail a pose that is too big
+    assert.equal(poseKeepsInside(inner, safe, { scale: 1.12, x: 0, y: 0 }), false);
+    assert.equal(poseKeepsInside(inner, safe, { scale: 1, x: 120, y: 0 }), false);
+    // and the content box must not shrink away to nothing or grow past the safe box
+    assert.ok(inner.x1 - inner.x0 > (safe.x1 - safe.x0) * 0.9 && inner.x0 >= safe.x0 && inner.x1 <= safe.x1);
+  }
+});

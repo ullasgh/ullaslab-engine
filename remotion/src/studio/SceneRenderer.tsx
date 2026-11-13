@@ -138,9 +138,9 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scene
         }
         const next = scenes[i + 1];
         const prev = scenes[i - 1];
-        const target = s.transition === "morph" && i > 0 && styles[i - 1] === "premium" ? carryTarget(s, data, bw, orientation) : null;
+        const target = s.transition === "morph" && i > 0 && styles[i - 1] === "premium" ? carryTarget(s, data, bw, orientation, carries[i - 1], locale) : null;
         const carryIn: Carry | null = target ? carries[i - 1] : null;
-        const morphOut = !!next && next.transition === "morph" && styles[i + 1] === "premium" && !!carries[i] && !!carryTarget(next, datas[i + 1], bw, orientation);
+        const morphOut = !!next && next.transition === "morph" && styles[i + 1] === "premium" && !!carries[i] && !!carryTarget(next, datas[i + 1], bw, orientation, carries[i], locale);
         const exitKind: TransitionKind | null = next ? (next.transition ?? "cut") : null;
         return (
           <Sequence key={s.id} from={s.start} durationInFrames={dur + overlap} name={`${s.type}:${s.id}`}>
