@@ -674,7 +674,10 @@ def test_end_lines_equal_the_content_repo_glossaries_when_a_checkout_is_present(
     if not root or not (Path(root) / "config" / "glossary").is_dir():
         pytest.skip("set ULLASLAB_CONTENT_DIR to a content checkout (the branch with PR 71) to compare the sign-offs")
     for lang, line in E.END_LINES.items():
-        if lang == "en":
-            continue      # English is the schema constant END_LINE in the content repo, not a glossary entry
+        if lang == "en":      # English is the END_LINE constant in the content repo's editorial/schema.py, not a glossary entry
+            import re
+            m = re.search(r'^END_LINE = "([^"]+)"', (Path(root) / "src" / "ullaslab" / "editorial" / "schema.py").read_text(encoding="utf-8"), re.M)
+            assert m and m.group(1) == line
+            continue
         g = yaml.safe_load((Path(root) / "config" / "glossary" / f"{lang}.yaml").read_text(encoding="utf-8"))
         assert g["end_line"] == line, lang
