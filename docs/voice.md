@@ -29,10 +29,10 @@ The gated `ai4bharat/indic-parler-tts` weights are not fetched from Hugging Face
 A scene's `narration.delivery` (scenes.json, one of hook / tension / reveal / explain / caution / signoff; written by the scriptwriter and
 director) reaches the voice as a `[[d:<tag>]]` marker that `studio/actions.output_text` puts in front of the scene's text. The marker is
 never spoken, counted as a word or shown (`prosody.strip_markers`). `narrate()` turns each sentence's tag into synthesis settings for the
-active profile, `voice_defaults.delivery_profile` in `config/languages.yaml` (`baseline`, `mild`, `strong`, `tuned`; the profiles live in
+active profile, `voice_defaults.delivery_profile` in `config/languages.yaml` or the language's own `delivery_profile` (`baseline`, `mild`, `strong`, `tuned`, `sample4`; the profiles live in
 `config/delivery.yaml`): Chatterbox `exaggeration`, `cfg_weight` and `temperature` per sentence, plus a per-line tempo, level offset and
 pause before/after (kept by the pacer). `baseline` is empty: every line gets the one global setting, byte for byte as before tags existed.
-The default stays `baseline` until the owner picks a profile after listening to the samples. No QA gate or limit depends on the profile:
+The global default stays `baseline`; English uses `sample4` (owner's choice after listening, 2026-11-13, see below). No QA gate or limit depends on the profile:
 A3 (wpm 135-175, WER 3%, max silence 1.2 s, loudness), the duration limit and the WER-only retry (seed base + 1000 * attempt, 3 attempts)
 measure whatever the profile produces. Bounds on every profile value are enforced when `config/delivery.yaml` is read
 (`delivery.BOUNDS`). Chatterbox guidance (upstream README): higher `exaggeration` tends to speed speech up; lower `cfg_weight` (about 0.3)
