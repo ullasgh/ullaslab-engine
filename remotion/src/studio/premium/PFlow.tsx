@@ -39,7 +39,7 @@ export const flowLayout = (data: FlowData, bw: number, bh: number, vertical: boo
   const labelled = data.edges.some((e) => e.label);
   let gapMain = vertical ? SP.xl + SP.s : labelled ? 340 : 160;   // wide frame: room for the edge label between the boxes
   const boxW = vertical ? (availW - gapCross * (widest - 1)) / widest : Math.min(620, (availW - gapMain * (levels - 1)) / levels);
-  const boxH = vertical ? Math.min(230, (availH - 100 * (levels - 1)) / levels) : Math.min(260, (availH - gapCross * (widest - 1)) / widest);
+  const boxH = vertical ? Math.min(280, (availH - 100 * (levels - 1)) / levels) : Math.min(260, (availH - gapCross * (widest - 1)) / widest);
   // with few levels, spread them over the height instead of leaving a gap at the bottom (never past 220 px)
   if (vertical && levels > 1) gapMain = Math.max(gapMain, Math.min(220, (availH - levels * boxH) / nLevelsGap));
   const rects: Record<string, Rect> = {};
@@ -169,7 +169,7 @@ export const PremiumFlow: React.FC<{ data: FlowData }> = ({ data }) => {
               <path d={g.d} fill="none" stroke={PT.teal} strokeWidth={8} strokeLinecap="round" strokeDasharray={ev.strokeDasharray} strokeDashoffset={ev.strokeDashoffset} />
               {k >= 1 && <polygon points="0,-14 24,0 0,14" fill={PT.teal} transform={`translate(${g.ax - (g.ang === 0 ? 24 : 0)} ${g.ay - (g.ang === 90 ? 24 : 0)}) rotate(${g.ang})`} />}
               {pulse && <circle cx={pulse.x} cy={pulse.y} r={9} fill={PT.amber} opacity={0.95} />}
-              {e.label && k >= 0.9 && <text x={L.vertical ? g.mx + 22 : g.mx} y={L.vertical ? g.my + 12 : g.my - 14} textAnchor={L.vertical ? "start" : "middle"} fontSize={T.label} fontWeight={700} fill={PT.amber} stroke={PT.navy0} strokeWidth={8} paintOrder="stroke" data-audit="stamp" opacity={EASE.out(range(f, t0 + 16, 10))}>{e.label}</text>}
+              {e.label && k >= 0.9 && <text x={L.vertical ? g.mx + 22 : lay.rects[e.from].x} y={L.vertical ? g.my + 12 : lay.rects[e.from].y + lay.rects[e.from].h + 44} textAnchor="start" fontSize={T.label} fontWeight={700} fill={PT.amber} stroke={PT.navy0} strokeWidth={8} paintOrder="stroke" data-audit="stamp" opacity={EASE.out(range(f, t0 + 16, 10))}>{e.label}</text>}
             </g>
           );
         })}

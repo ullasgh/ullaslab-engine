@@ -74,7 +74,7 @@ export const PRESETS: Record<StyleId, StylePreset> = {
     type: { number: 1, display: 1, headline: 1 },
     motion: { camera: 1, stagger: 6, enter: 18, overshoot: 0.1 },
     layout: { radius: 26, border: 3, backdrop: "grid", align: "center" },
-    captions: { emphasiseNumbers: true, mergeNotation: true },
+    captions: { emphasiseNumbers: false, mergeNotation: true },
     chart: { zeroBaseline: false, band: false, requireSource: true },
   },
 };

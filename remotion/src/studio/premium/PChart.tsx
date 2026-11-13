@@ -104,7 +104,7 @@ export const PremiumLineChart: React.FC<{ data: PremiumChartData }> = ({ data })
   const plotTop = vertical ? hf.y + hf.size + SP.s : 0;
   const plotH = Math.max(200, bh - plotTop - stampH - capH - SP.s);
   const hasMarks = views.some((v) => (v.marks?.length ?? 0) > 0 || v.point?.label);
-  const m = { l: fs * 2.5, r: 22, t: hasMarks ? fs * 2.0 : fs * 0.6, b: fs * 2.5 };
+  const m = { l: fs * 2.5, r: 22, t: hasMarks ? fs * 1.9 : fs * 0.5, b: fs * 2.4 };
   const X = linear([dom.x0, dom.x1], [m.l, plotW - m.r]);
   const Y = linear([dom.y0, dom.y1], [plotH - m.b, m.t]);
 
