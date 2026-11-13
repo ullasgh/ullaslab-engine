@@ -184,7 +184,7 @@ def make_sfx_library(dst: Path) -> dict[str, Path]:
 
 
 # Premium style default (provisional, owner approval needed): a transition sound per scene change, capped per video. Effects are
-# the in-house CC0 set above; levels stay the restrained SFX levels. A scene's own `sfx` field always wins ("none" = silent).
+# the in-house CC0 set above; levels stay the restrained SFX levels. A scene's own non-"none" `sfx` always wins; scenes.json requires the field and directors write "none", so "none" means "use the premium default".
 PREMIUM_SFX = {"push": "whoosh", "wipe": "whoosh", "match_cut": "whoosh", "pattern_interrupt": "hit"}
 PREMIUM_SFX_CAP = 8
 
@@ -195,7 +195,7 @@ def premium_defaults(scenes: list[dict], style: str | None) -> list[dict]:
     if style != "premium":
         return scenes
     out = [dict(s) for s in scenes]
-    cand = [(i, PREMIUM_SFX[s.get("transition")]) for i, s in enumerate(out) if i > 0 and "sfx" not in s and s.get("transition") in PREMIUM_SFX]
+    cand = [(i, PREMIUM_SFX[s.get("transition")]) for i, s in enumerate(out) if i > 0 and s.get("sfx") in (None, "none") and s.get("transition") in PREMIUM_SFX]
     chosen = sorted(cand, key=lambda c: (c[1] != "hit", c[0]))[:max(0, PREMIUM_SFX_CAP - sum(1 for s in out if s.get("sfx") not in (None, "none")))]
     for i, name in chosen:
         out[i]["sfx"] = name

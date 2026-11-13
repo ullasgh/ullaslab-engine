@@ -83,5 +83,5 @@ def test_premium_default_sfx_is_capped_never_overrides_and_is_off_for_other_styl
     assert out[12]["sfx"] == "hit"                                   # the interrupt keeps its sound when the cap bites
     assert A.premium_defaults(scenes, "data-story") is scenes and A.premium_defaults(scenes, None) is scenes
     own = [sc(0, "cut"), sc(1, "wipe", sfx="none"), sc(2, "wipe", sfx="tick")]
-    assert [s.get("sfx") for s in A.premium_defaults(own, "premium")] == [None, "none", "tick"]   # explicit choices win
+    assert [s.get("sfx") for s in A.premium_defaults(own, "premium")] == [None, "whoosh", "tick"]   # a named effect wins; "none" takes the default
     assert all(n in A.SFX for _, n in [(0, s["sfx"]) for s in named])   # only the existing synthesised effects
