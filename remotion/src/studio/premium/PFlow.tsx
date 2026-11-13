@@ -33,12 +33,12 @@ export const flowLayout = (data: FlowData, bw: number, bh: number, vertical: boo
   const byLevel: string[][] = Array.from({ length: levels }, () => []);
   data.nodes.forEach((n) => byLevel[n.level].push(n.id));
   const widest = Math.max(...byLevel.map((l) => l.length));
-  const availH = bh - top - 52 - SP.m, availW = bw;
+  const availH = bh - top - 118 - SP.m, availW = bw;
   const gapCross = SP.m;
   const nLevelsGap = Math.max(1, levels - 1);
   let gapMain = vertical ? SP.xl + SP.s : SP.xxl;
   const boxW = vertical ? (availW - gapCross * (widest - 1)) / widest : (availW - gapMain * (levels - 1)) / levels;
-  const boxH = vertical ? Math.min(230, (availH - gapMain * (levels - 1)) / levels) : Math.min(260, (availH - gapCross * (widest - 1)) / widest);
+  const boxH = vertical ? Math.min(230, (availH - 100 * (levels - 1)) / levels) : Math.min(260, (availH - gapCross * (widest - 1)) / widest);
   // with few levels, spread them over the height instead of leaving a gap at the bottom (never past 220 px)
   if (vertical && levels > 1) gapMain = Math.max(gapMain, Math.min(220, (availH - levels * boxH) / nLevelsGap));
   const rects: Record<string, Rect> = {};
@@ -121,10 +121,10 @@ export const PremiumFlow: React.FC<{ data: FlowData }> = ({ data }) => {
   );
 
   if (tug) {
-    const srcs = order.filter(({ n }) => !data.edges.some((e) => e.from === n.id)).map((o) => o.n);
+    const srcs = order.filter(({ n }) => !data.edges.some((e) => e.to === n.id)).map((o) => o.n);
     const knot = data.nodes.find((n) => data.edges.some((e) => e.to === n.id)) ?? data.nodes[data.nodes.length - 1];
     const sway = breathe(f, 54, 12);
-    const kx = bw / 2 + (L.vertical ? 0 : sway), ky = lay.top + (bh - lay.top - 52 - SP.m) / 2 + (L.vertical ? sway : 0);
+    const kx = bw / 2 + (L.vertical ? 0 : sway), ky = lay.top + (bh - lay.top - 118 - SP.m) / 2 + (L.vertical ? sway : 0);
     const kr = 54;
     const arrive = EASE.out(range(f, land[knot.id] - 6, 16));
     return wrap(
