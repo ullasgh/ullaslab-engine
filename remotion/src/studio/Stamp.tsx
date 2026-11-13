@@ -12,7 +12,8 @@ export const StudioSourceStamp: React.FC<{ source: SourceInfo; freshness?: Tag; 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16, minHeight: 52, width: "100%", ...style }}>
       <span data-audit="stamp" style={{ fontSize: L.type.stamp, color: pal.muted, flex: "1 1 0", minWidth: 0, lineHeight: 1.2, overflowWrap: "anywhere" }}>
-        {stampText(lang, source.name, source.as_of)}
+        {(() => { const t = stampText(lang, source.name, source.as_of); const i = source.as_of ? t.lastIndexOf(source.as_of) : -1;
+          return i > 0 ? <>{t.slice(0, i)}<span style={{ whiteSpace: "nowrap" }}>{source.as_of}</span>{t.slice(i + source.as_of.length)}</> : t; })()}   {/* the date never splits at a hyphen */}
       </span>
     </div>
   );

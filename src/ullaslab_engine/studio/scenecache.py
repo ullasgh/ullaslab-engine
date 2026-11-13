@@ -56,9 +56,12 @@ CACHE_VERSION = 1
 REMOTION = ROOT / "remotion"
 # Mirrors remotion/src/studio/scenes.ts TRANSITION_FRAMES and director.ts TRANSITION_MAP (parity: tests/fixtures/scene_frames.json,
 # checked by tests/test_scenecache.py and remotion/scripts/studio.test.mjs against the TypeScript).
-TRANSITION_FRAMES = {"cut": 0, "crossfade": 12, "wipe": 14, "match_move": 16}
+TRANSITION_FRAMES = {"cut": 0, "crossfade": 12, "wipe": 14, "match_move": 16, "push_through": 20, "morph": 20, "sweep": 16, "interrupt": 8}
 TRANSITION_MAP = {"cut": "cut", "crossfade": "crossfade", "wipe": "wipe", "match_cut": "match_move", "push": "match_move",
                   "dip_to_black": "crossfade", "pattern_interrupt": "cut"}
+# Premium style: the director names map onto the premium transitions (premium/PremiumEnter.tsx), mirrors director.ts PREMIUM_TRANSITION_MAP.
+PREMIUM_TRANSITION_MAP = {"cut": "cut", "crossfade": "crossfade", "wipe": "sweep", "match_cut": "morph", "push": "push_through",
+                          "dip_to_black": "crossfade", "pattern_interrupt": "interrupt"}
 CAPTION_MARGIN_S = 0.5
 DEFAULT_MAX_MB = 4096
 _KEY_RE = re.compile(r"[0-9a-f]{64}")
@@ -74,14 +77,15 @@ def js_round(x: float) -> int:
     return math.floor(x + 0.5)
 
 
-def _kit_transition(sc: dict) -> str:
+def _kit_transition(sc: dict, item_style: str | None = None) -> str:
     t = sc.get("transition") or "cut"
-    if "narration" in sc:                # director scene -> kit transition
-        return TRANSITION_MAP.get(t, "cut")
+    if "narration" in sc:                # director scene -> kit transition; a scene's own style wins over the item's (premium maps differently)
+        style = sc.get("style") or item_style
+        return (PREMIUM_TRANSITION_MAP if style == "premium" else TRANSITION_MAP).get(t, "cut")
     return t if t in TRANSITION_FRAMES else "cut"
 
 
-def frame_plan(scenes: list[dict], fps: int = FPS, fallback_s: float = 3.0) -> list[dict]:
+def frame_plan(scenes: list[dict], fps: int = FPS, fallback_s: float = 3.0, style: str | None = None) -> list[dict]:
     """[{id, index, start, end, until}] with `until` = end + overlapAfter (the frame the scene's Sequence stops drawing).
     Same arithmetic as fromDirectorScenes + overlapAfter in the renderer."""
     out, cursor = [], 0
@@ -98,7 +102,7 @@ def frame_plan(scenes: list[dict], fps: int = FPS, fallback_s: float = 3.0) -> l
         out.append({"id": sc["id"], "index": i, "start": start, "end": end})
     for i, p in enumerate(out):
         nxt = scenes[i + 1] if i + 1 < len(scenes) else None
-        p["until"] = p["end"] + (TRANSITION_FRAMES[_kit_transition(nxt)] if nxt else 0)
+        p["until"] = p["end"] + (TRANSITION_FRAMES[_kit_transition(nxt, style)] if nxt else 0)
     return out
 
 
@@ -182,6 +186,11 @@ def _scene_data(sc: dict, refs: dict):
 
 
 GLOBAL_KEYS = ("orientation", "width", "height", "lang", "numberLocale", "rtl", "style", "platform", "durationInFrames")
+OPTIONAL_KEYS = ("brandMark",)     # in the key only when present, so keys of items without them are unchanged
+
+
+def global_material(props: dict) -> dict:
+    return {**{k: props.get(k) for k in GLOBAL_KEYS}, **{k: props[k] for k in OPTIONAL_KEYS if k in props}}
 
 
 def segment_key(props: dict, plan: list[dict], seg: dict, *, public: Path, scale: float, renderer: str) -> str:
@@ -200,7 +209,7 @@ def segment_key(props: dict, plan: list[dict], seg: dict, *, public: Path, scale
     if card and not (card["fromFrame"] < b and card["fromFrame"] + max(1, card["durationInFrames"]) > a):
         card = None
     material = {"v": CACHE_VERSION, "renderer": renderer, "comp": "StudioVideo", "fps": FPS, "scale": float(scale),
-                "global": {k: props.get(k) for k in GLOBAL_KEYS}, "range": [a, b], "scenes": scenes, "captions": cues,
+                "global": global_material(props), "range": [a, b], "scenes": scenes, "captions": cues,
                 "endCard": card}
     blob = json.dumps(material, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(blob.encode()).hexdigest()
@@ -345,7 +354,7 @@ RenderSegments = Callable[..., None]   # (props_path, public, [{"from", "to" (in
 
 
 def plan_output(props: dict, public: Path, scale: float, renderer: str | None = None) -> tuple[list[dict], list[dict]]:
-    plan = frame_plan(props["scenes"])
+    plan = frame_plan(props["scenes"], style=props.get("style"))
     segs = segments(plan, int(props["durationInFrames"]))
     stamp = renderer or renderer_stamp()
     for s in segs:

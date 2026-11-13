@@ -8,10 +8,17 @@ import { FootageScene, type FootageData } from "./Footage";
 import { GlobeScene, MapScene, type GlobeData, type MapData } from "./geo";
 import { KineticText } from "./Kinetic";
 import { CardStack, ChalkSteps, CreatorKinetic } from "./StyleKit";
-import { isStyledType, resolveStyle, type StyleId } from "./styles";
+import { isStyledType, resolveStyle, stripEmphasis, type StyleId } from "./styles";
 import type { Orientation, Platform } from "./layout";
 import { normalizeScenes, type DirectorScene } from "./director";
-import { overlapAfter, resolveData, transitionProgress, validateScenes, type StudioScene, type TransitionKind } from "./scenes";
+import { TRANSITION_FRAMES, overlapAfter, resolveData, transitionProgress, validateScenes, type StudioScene, type TransitionKind } from "./scenes";
+import { backdropFor, type BackdropId } from "./premium/Backdrops";
+import { PremiumProvider, type Carry } from "./premium/context";
+import { PremiumArt, MorphGhost, carryOf, carryTarget, poseAt } from "./premium/PremiumScene";
+import { contentBox } from "./premium/camera";
+import { PremiumEnter } from "./premium/PremiumEnter";
+import { toLocalWords } from "./premium/words";
+import { studioLayout } from "./layout";
 
 export type ChartSceneData =
   | ({ kind: "line" } & LineData) | ({ kind: "bar" } & BarData) | ({ kind: "yield" } & YieldData) | ({ kind: "counter" } & CounterData);
@@ -25,6 +32,7 @@ export type SceneRendererProps = {
   platform?: Platform;      // safe-area template: "both" (stricter union, default) or one platform
   reserveBottom?: number;   // px held back at the bottom of the safe box (burned-in captions)
   style?: StyleId;          // item video style (V2 M2); a scene's own `style` wins; absent = the default look
+  brandMark?: unknown;      // premium end card only (see premium/PEnd.tsx); read by StudioVideo, not by the scenes
 };
 
 // Data-licensing gate: a styled chart, timeline or flow scene must carry its source (the stamp is always drawn by ChartShell).
@@ -45,7 +53,8 @@ const StyledKinetic: React.FC<{ text: string }> = ({ text }) => {
 };
 
 const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) => {
-  const text = scene.on_screen_text;
+  // Kinetic scenes parse the markup themselves; everywhere else the words are shown plain.
+  const text = scene.type === "kinetic" || scene.on_screen_text === undefined ? scene.on_screen_text : stripEmphasis(scene.on_screen_text);
   const cam = useCameraStyle(scene.camera_move);
   const { pal, preset } = useStudio();
   assertSource(scene, data, preset.chart.requireSource);
@@ -61,7 +70,7 @@ const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) =
     case "globe": return <AbsoluteFill style={{ background: pal.bg }}><Backdrop grid={false} /><GlobeScene data={data as GlobeData} headline={text} camera={scene.camera_move} /></AbsoluteFill>;
     case "chart": {
       const d = data as ChartSceneData;
-      const h = text ?? d.headline;
+      const h = text ?? (d.headline === undefined ? undefined : stripEmphasis(d.headline));
       switch (d.kind) {
         case "line": return withBackdrop(<LineChart data={{ ...d, headline: h }} />);
         case "bar": return withBackdrop(<BarChart data={{ ...d, headline: h }} />);
@@ -70,8 +79,8 @@ const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) =
         default: throw new Error(`scene ${scene.id}: unknown chart kind "${(d as { kind?: string }).kind}"`);
       }
     }
-    case "timeline": return withBackdrop(<Timeline data={{ ...(data as TimelineData), headline: text ?? (data as TimelineData).headline }} />);
-    case "flow": return withBackdrop(<FlowDiagram data={{ ...(data as FlowData), headline: text ?? (data as FlowData).headline }} />);
+    case "timeline": return withBackdrop(<Timeline data={{ ...(data as TimelineData), headline: text ?? stripEmphasis((data as TimelineData).headline ?? "") }} />);
+    case "flow": return withBackdrop(<FlowDiagram data={{ ...(data as FlowData), headline: text ?? stripEmphasis((data as FlowData).headline ?? "") }} />);
     case "kinetic": return withBackdrop(<StyledKinetic text={text ?? ""} />);
   }
 };
@@ -98,18 +107,53 @@ const Enter: React.FC<{ kind: TransitionKind; first: boolean; accent: string; ch
 };
 
 export const SceneRenderer: React.FC<SceneRendererProps> = ({ orientation, scenes: raw, refs, lang, numberLocale, reserveBottom, platform, style: itemStyle }) => {
-  const scenes = normalizeScenes(raw);
+  const scenes = normalizeScenes(raw, 30, itemStyle);
   const errs = validateScenes(scenes, refs);
   if (errs.length) throw new Error(`scenes.json invalid:\n${errs.join("\n")}`);
+  const styles = scenes.map((s) => (isStyledType(s.type) ? resolveStyle(itemStyle, s.style) : undefined));   // footage, map and globe render unchanged
+  // premium: per-scene backdrop (never the same twice in a row), and the figure a morph carries from one scene to the next
+  const L = studioLayout(orientation, reserveBottom ?? 0, platform ?? "both", "premium");
+  const cb = contentBox({ x0: L.x0, y0: L.y0, x1: L.x1, y1: L.y1 });
+  const bw = cb.x1 - cb.x0, bh = cb.y1 - cb.y0;
+  let prevBackdrop: BackdropId | undefined;
+  const backdrops = scenes.map((s, i) => { if (styles[i] !== "premium") return undefined; const b = backdropFor(s.role, s.type, prevBackdrop); prevBackdrop = b; return b; });
+  const locale = numberLocale ?? "en-US";
+  const datas = scenes.map((s) => resolveData(s, refs));
+  const carries = scenes.map((s, i) => (styles[i] === "premium" ? carryOf(s, datas[i], bw, bh, orientation, locale) : null));
   return (
     <AbsoluteFill>
       {scenes.map((s, i) => {
-        const data = resolveData(s, refs);
-        const style = isStyledType(s.type) ? resolveStyle(itemStyle, s.style) : undefined;   // footage, map and globe render unchanged
+        const data = datas[i];
+        const style = styles[i];
+        const overlap = overlapAfter(scenes, i);
+        const dur = s.end - s.start;
+        if (style !== "premium") {
+          return (
+            <Sequence key={s.id} from={s.start} durationInFrames={dur + overlap} name={`${s.type}:${s.id}`}>
+              <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom} platform={platform} style={style}>
+                <SceneEnter scene={s} first={i === 0}><Art scene={s} data={data} /></SceneEnter>
+              </StudioProvider>
+            </Sequence>
+          );
+        }
+        const next = scenes[i + 1];
+        const prev = scenes[i - 1];
+        const target = s.transition === "morph" && i > 0 && styles[i - 1] === "premium" ? carryTarget(s, data, bw, orientation, carries[i - 1], locale) : null;
+        const carryIn: Carry | null = target ? carries[i - 1] : null;
+        const morphOut = !!next && next.transition === "morph" && styles[i + 1] === "premium" && !!carries[i] && !!carryTarget(next, datas[i + 1], bw, orientation, carries[i], locale);
+        const exitKind: TransitionKind | null = next ? (next.transition ?? "cut") : null;
         return (
-          <Sequence key={s.id} from={s.start} durationInFrames={s.end - s.start + overlapAfter(scenes, i)} name={`${s.type}:${s.id}`}>
-            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom} platform={platform} style={style}>
-              <SceneEnter scene={s} first={i === 0}><Art scene={s} data={data} /></SceneEnter>
+          <Sequence key={s.id} from={s.start} durationInFrames={dur + overlap} name={`${s.type}:${s.id}`}>
+            <StudioProvider orientation={orientation} topic={s.palette} lang={lang} numberLocale={numberLocale} reserveBottom={reserveBottom} platform={platform} style="premium">
+              <PremiumProvider dur={dur} overlap={overlap} words={toLocalWords(s.words, s.start)} role={s.role} index={i} carryIn={carryIn} morphOut={morphOut}>
+                <PremiumEnter kind={s.transition ?? "cut"} first={i === 0}>
+                  <PremiumArt scene={s} data={data} index={i} backdrop={backdrops[i]!} exitKind={exitKind} />
+                  {carryIn && target && prev && (
+                    <MorphGhost carry={carryIn} target={target} from={poseAt(prev, i - 1, prev.end - prev.start, prev.end - prev.start)} to={poseAt(s, i, TRANSITION_FRAMES.morph, dur)}
+                      boxX={cb.x0} boxY={cb.y0} cx={(L.x0 + L.x1) / 2} cy={(L.y0 + L.y1) / 2} />
+                  )}
+                </PremiumEnter>
+              </PremiumProvider>
             </StudioProvider>
           </Sequence>
         );

@@ -162,7 +162,7 @@ const QAScene: React.FC<{ scene: Scene; tl: TlScene }> = ({ scene, tl }) => {
   );
 };
 
-// End card (scene kind "disclaimer" kept for manifest compatibility): "Follow UllasLab" + "Education only" in the video's language.
+// End card (scene kind "disclaimer" kept for manifest compatibility): "Follow UllasLab." in the video's language.
 // The full disclaimer is NOT shown in the video; it is the first line of the description / caption (owner decision 2026-11-09).
 const DisclaimerScene: React.FC = () => {
   const { p, L } = useCtx();
@@ -171,7 +171,7 @@ const DisclaimerScene: React.FC = () => {
     <Content style={{ justifyContent: "center" }}>
       <Card style={{ padding: 44, border: `4px solid ${C.grid}`, textAlign: "center", direction: p.rtl ? "rtl" : "ltr" }}>
         <div data-audit="headline" style={{ fontSize: L.type.headline, fontWeight: 700, lineHeight: 1.2, color: C.text }}>{follow}</div>
-        <div data-audit="body" style={{ fontSize: L.type.body, lineHeight: 1.4, color: C.muted, marginTop: 16 }}>{edu}</div>
+        {edu && <div data-audit="body" style={{ fontSize: L.type.body, lineHeight: 1.4, color: C.muted, marginTop: 16 }}>{edu}</div>}
       </Card>
     </Content>
   );

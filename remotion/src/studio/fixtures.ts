@@ -112,6 +112,22 @@ export const STYLE_DEMO_REFS: Record<string, unknown> = {
     annotations: [{ x: "2022-09", label: "Tightening" }],
   } satisfies ChartSceneData,
 };
+// premium demo: a chart sequence (two views of one series), a converging relationship diagram and a number reveal. Fixture values only.
+const premiumPts = Array.from({ length: 24 }, (_, i) => ({ x: `2026-10-${String(i + 1).padStart(2, "0")}`, y: +(4.2 + 0.06 * i - 0.5 * Math.sin(i / 3.2)).toFixed(2) }));
+STYLE_DEMO_REFS.line_sequence = {
+  kind: "line",
+  meta: { ...meta("Demo yield", "Percent", "1 Oct to 24 Oct 2026"), caveat: undefined }, decimals: 2,
+  series: [{ name: "Demo", points: premiumPts }],
+  views: [
+    { window: { from: "2026-10-01", to: "2026-10-16" }, marks: [{ x: "2026-10-09", label: "High", value: premiumPts[8].y }], point: { x: "2026-10-16", label: "Latest", value: premiumPts[15].y } },
+    { window: { from: "2026-10-09", to: "2026-10-24" }, highlight: { from: "2026-10-16", to: "2026-10-24", label: "Last week" }, point: { x: "2026-10-24", label: "Latest", value: premiumPts[23].y } },
+  ],
+};
+STYLE_DEMO_REFS.flow_converge = {
+  meta: meta("Demo relationship", "no scale", "illustration"),
+  nodes: [{ id: "a", label: "Firm supply", level: 0 }, { id: "b", label: "Sticky inflation", level: 0 }, { id: "c", label: "Longer yields pay more", level: 1, tone: "accent2" }],
+  edges: [{ from: "a", to: "c" }, { from: "b", to: "c", label: "if both hold" }],
+} satisfies FlowData;
 const row = (style: StyleId, specs: Partial<StudioScene>[]): StudioScene[] =>
   specs.map((x, i) => ({ id: `${style}-${i + 1}`, type: "kinetic", start: i * L, end: (i + 1) * L, palette: "policy", camera_move: "push", transition: i ? "crossfade" : "cut", ...x }) as StudioScene);
 export const STYLE_DEMO_SCENES: Record<StyleId, StudioScene[]> = {
@@ -129,6 +145,11 @@ export const STYLE_DEMO_SCENES: Record<StyleId, StudioScene[]> = {
     { on_screen_text: "Principal: 100|Rate: 5%|100 x 0.05|= Interest: 5" },
     { on_screen_text: "Real rate = nominal - inflation|4.5% - 3.0%|= 1.5%" },
     { type: "chart", data_ref: "line_rates", on_screen_text: "Rates chase inflation" },
+  ]),
+  premium: row("premium", [
+    { type: "chart", data_ref: "line_sequence", on_screen_text: "Two views, one line", camera_move: "none" },
+    { type: "flow", data_ref: "flow_converge", on_screen_text: "Two forces, one result", camera_move: "none", transition: "sweep" },
+    { on_screen_text: "A yield of *4.7%*", camera_move: "none", transition: "push_through" },
   ]),
   "clean-tech": row("clean-tech", [
     { on_screen_text: "Oil: the price rises|Imports: the bill grows|Currency: pressure builds|Policy: the response" },

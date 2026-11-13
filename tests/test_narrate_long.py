@@ -17,7 +17,7 @@ SR = 24000
 LONG = ("Oil prices jumped this spring. One. Shipping through the strait fell sharply, and insurers raised their rates. "
         "Why does that matter for you? Because fuel costs feed into almost everything you buy.\n\n"
         "Some analysts expected a quick recovery. Others did not. Here is what the data shows. "
-        "Traffic stayed low for months while prices stayed high. Follow UllasLab. Education only.")
+        "Traffic stayed low for many long months while prices stayed high. Follow UllasLab.")
 
 
 class FakeClone:
@@ -102,7 +102,7 @@ def test_persistent_failure_merges_into_next_then_raises_naming_the_chunk(eng):
     e = eng(FakeClone(fail={"Some analysts expected a quick recovery.": 99}))
     N.narrate(LONG, "en", engine="fakeclone", gate=False)
     assert any(t.startswith("Some analysts expected a quick recovery. Others did not.") for t, _ in e.calls)
-    eng(FakeClone(fail={"Follow Ullas Lab. Education only.": 99}))      # the last chunk has no next one to join
+    eng(FakeClone(fail={"Follow Ullas Lab.": 99}))      # the last chunk has no next one to join
     with pytest.raises(NoVoiceAvailable, match="Follow Ullas Lab"):     # (the lexicon speaks the brand as two words)
         N.narrate(LONG, "en", engine="fakeclone", gate=False)
 

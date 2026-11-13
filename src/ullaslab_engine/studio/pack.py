@@ -106,7 +106,7 @@ def publishing_pack(item: Path, doc: dict, meta: dict, assets: list[dict], audio
         if o["output"] != "long":
             L += ["", f"{o['output']} hook title: {_hook_title(o)}"]
     # The full disclaimer is the FIRST line of the YouTube description and the Instagram caption (the video itself ends
-    # with "Follow UllasLab. Education only." instead; owner decision 2026-11-09).
+    # with "Follow UllasLab." instead; owner decision 2026-11-09).
     L += ["", "## Description (long)", "", DISCLAIMER, "", longo["scenes"][0]["narration"]["text"], ""]
     src = _chart_sources(item, doc)
     if src:

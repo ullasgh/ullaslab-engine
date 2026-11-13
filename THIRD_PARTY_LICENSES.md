@@ -22,6 +22,7 @@ Not used on purpose: learned MOS predictors UTMOS, TorchAudio-SQUIM and DNSMOS (
 | Component | Licence | Notes |
 |---|---|---|
 | Remotion 4.0.541 (`remotion`, `@remotion/*`) | Remotion License (free tier) | Free for individuals and for-profit organisations with up to 3 employees, commercial use included. 4 or more employees need a Company License. The licence changes in Remotion 5.0: re-read before upgrading. |
+| `@remotion/paths`, `@remotion/noise` 4.0.541 | Remotion License (same as Remotion above) | Premium video style: path draw-on (evolvePath), seeded noise. `@remotion/layout-utils` was deliberately NOT added (text fitting uses the existing fitSize). No third-party code snippets were adapted: the premium motion presets, easing and spring functions are written in-house; the reference repositories were read only. |
 | React 19 | MIT | |
 | Noto Sans families via `@fontsource/*` (Latin, Devanagari, Tamil, Telugu, Kannada, Malayalam, Bengali, Gujarati, Arabic, JP) | SIL OFL 1.1 | Fonts are copied at install time into `remotion/public/fonts` (git-ignored) and embedded in rendered video frames. |
 | numpy, SciPy, soundfile, PyAV | BSD | |

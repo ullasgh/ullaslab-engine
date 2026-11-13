@@ -1,13 +1,16 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
 import { C, fontFor } from "../brand";
+import { collectText, useBrandFonts } from "../fonts";
 import { SceneRenderer, type SceneRendererProps } from "./SceneRenderer";
 
 export type StudioThumbProps = SceneRendererProps & { headline: string; art?: boolean };
 
 // 1280x720 thumbnail: the hook scene's art (rendered at 1920x1080 and scaled) under a scrim, plus the headline.
 // Headline text is supplied by the caller from the hook's own on-screen text: no figures or claims are added here.
-export const StudioThumb: React.FC<StudioThumbProps> = ({ headline, art = true, ...scene }) => (
+export const StudioThumb: React.FC<StudioThumbProps> = ({ headline, art = true, ...scene }) => {
+  useBrandFonts(scene.lang ?? "en", collectText({ headline, scene }));
+  return (
   <AbsoluteFill style={{ background: C.bg, overflow: "hidden" }}>
     {art && (
       <div style={{ position: "absolute", left: 0, top: 0, width: 1920, height: 1080, transform: "scale(0.6667)", transformOrigin: "0 0" }}>
@@ -29,4 +32,5 @@ export const StudioThumb: React.FC<StudioThumbProps> = ({ headline, art = true, 
       <div style={{ fontSize: 34, fontWeight: 700, color: C.primary, letterSpacing: 2 }}>UllasLab</div>
     </div>
   </AbsoluteFill>
-);
+  );
+};

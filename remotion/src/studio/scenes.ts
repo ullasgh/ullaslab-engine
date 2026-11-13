@@ -6,7 +6,9 @@ export const SCENE_TYPES = ["footage", "map", "globe", "chart", "timeline", "flo
 export type SceneType = (typeof SCENE_TYPES)[number];
 export const CAMERA_MOVES = ["none", "push", "pull", "pan_left", "pan_right"] as const;
 export type CameraMove = (typeof CAMERA_MOVES)[number];
-export const TRANSITIONS = ["cut", "crossfade", "wipe", "match_move"] as const; // restrained set on purpose
+// The first four are the restrained set every style may use. The last four belong to the premium style (director.ts PREMIUM_TRANSITION_MAP
+// maps the director's names onto them); their frame mirror is studio/scenecache.py.
+export const TRANSITIONS = ["cut", "crossfade", "wipe", "match_move", "push_through", "morph", "sweep", "interrupt"] as const;
 export type TransitionKind = (typeof TRANSITIONS)[number];
 
 export type StudioScene = {
@@ -21,9 +23,13 @@ export type StudioScene = {
   camera_move?: CameraMove;
   transition?: TransitionKind;     // how this scene enters
   style?: StyleId;                 // per-scene style preset (V2 M2); falls back to the item style
+  // Passed through from the director's scene (premium style): the narration's word timings (seconds from the video start), the
+  // scene role, and the camera the director asked for. Absent for kit-shaped scenes.
+  words?: { w: string; start: number; end: number }[] | null;
+  role?: string;
 };
 
-export const TRANSITION_FRAMES: Record<TransitionKind, number> = { cut: 0, crossfade: 12, wipe: 14, match_move: 16 };
+export const TRANSITION_FRAMES: Record<TransitionKind, number> = { cut: 0, crossfade: 12, wipe: 14, match_move: 16, push_through: 20, morph: 20, sweep: 16, interrupt: 8 };
 
 export const validateScenes = (scenes: StudioScene[], refs: Record<string, unknown> = {}): string[] => {
   const errs: string[] = [];

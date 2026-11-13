@@ -25,7 +25,7 @@ for (const style of styles) {
       const output = path.join(outDir, `${style}-${aspect.replace(":", "x")}-f${frame}.png`);
       const rec = { style, aspect, frame, file: path.basename(output), width: composition.width, height: composition.height, elements: [] };
       await renderStill({ serveUrl, composition, frame, output, inputProps, logLevel: "error",
-        onBrowserLog: (l) => { if (l.text.startsWith("[[AUDIT]]")) rec.elements = JSON.parse(l.text.slice(9)).elements; } });
+        onBrowserLog: (l) => { if (l.text.startsWith("[[AUDIT]]")) { const a = JSON.parse(l.text.slice(9)); rec.elements = a.elements; rec.fonts = a.fonts ?? []; } } });
       audit.push(rec);
       console.log(output);
     }

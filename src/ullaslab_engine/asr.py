@@ -8,9 +8,9 @@ from .captions import NO_SPACE_LANGS
 
 _MODEL = {}
 # Style hint only (no script text): keeps the ASR from writing decimals as 5 ,550 and percentages as 525%, and spells the
-# brand of the fixed sign-off ("Follow UllasLab. Education only.", in every video) the way the script does (WP8: Whisper
+# brand of the fixed sign-off ("Follow UllasLab.", in every video) the way the script does (WP8: Whisper
 # wrote it as "Ullis lab", two word errors per video against the 3% WER gate).
-_PROMPT = "The rate is 5.25 percent, up 0.5 percentage points. The ratio is 3.5%. Follow UllasLab. Education only."
+_PROMPT = "The rate is 5.25 percent, up 0.5 percentage points. The ratio is 3.5%. Follow UllasLab."
 
 
 def initial_prompt(lang: str) -> str | None:
