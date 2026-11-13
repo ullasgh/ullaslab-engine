@@ -139,3 +139,20 @@ test("pickTicks drops x labels that would overlap and keeps the first clear one"
   assert.deepEqual(pickTicks([60, 150], [100, 100], 10), [0]);                    // touching (gap 0) is dropped
   assert.deepEqual(pickTicks([], [], 10), []);
 });
+
+test("every studio composition loads the brand fonts, and the audit checks them", () => {
+  const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  for (const f of ["studio/StudioVideo.tsx", "studio/StudioThumb.tsx", "studio/StyleDemo.tsx", "studio/StudioDemo.tsx", "Video.tsx"]) {
+    assert.match(src(f), /useBrandFonts\(/, `${f} must call useBrandFonts`);
+  }
+  assert.match(src("components/audit.tsx"), /fontLoaded\(/);
+  assert.doesNotMatch(src("fonts.ts"), /document\.fonts\.check/, "check() is true when no face is declared; it cannot detect missing CSS");
+});
+
+test("emphasis markup never shows as literal asterisks outside the kinetic styles", async () => {
+  const { stripEmphasis, parseSteps, parseCards } = await import("../src/studio/styles.ts");
+  assert.equal(stripEmphasis("Yields *rise* when *prices* fall"), "Yields rise when prices fall");
+  assert.equal(stripEmphasis("a * b"), "a  b");
+  assert.deepEqual(parseSteps("*Rate* up|=*Price* down"), [{ text: "Rate up", result: false }, { text: "Price down", result: true }]);
+  assert.deepEqual(parseCards("*Cause*: *effect* here"), [{ title: "Cause", detail: "effect here" }]);
+});
