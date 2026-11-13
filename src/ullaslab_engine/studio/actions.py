@@ -143,11 +143,15 @@ def gate_words(text: str) -> int:
 # 43172041796 (429 s for 37 s), 15.6 on run 43178997058 (641 s for 41 s, with the slow-down pacer). The slower figure,
 # rounded up, so the guard is not optimistic. Used only to refuse, before any synthesis, an item that cannot finish.
 RUNNER_RTF = 16.0
+# Transcription seconds per second of speech, faster-whisper large-v3 int8 on CPU. Measured on the owner's Mac (about 0.8, see the
+# sample-4 report); the runner's 4 vCPU are assumed 2x slower. Used only for the same refuse-early guard.
+RUNNER_ASR_RTF = 1.6
 
 
 def voice_budget(doc: dict, wpm: float) -> dict | None:
     """Projected synthesis minutes for the distinct narrations of the item vs ULLASLAB_VOICE_BUDGET_MIN (unset = no limit,
-    e.g. on the owner's Mac). Numbers only."""
+    e.g. on the owner's Mac). Best-of-N profiles synthesise N takes per line and transcribe each one (RUNNER_ASR_RTF per second of
+    speech), plus one transcription of the finished read; a single-take profile adds no transcription term. Numbers only."""
     import os
     raw = os.environ.get("ULLASLAB_VOICE_BUDGET_MIN")
     if not raw:
@@ -155,9 +159,11 @@ def voice_budget(doc: dict, wpm: float) -> dict | None:
     words = sum(len(strip_markers(t).split()) for t in {output_text(o) for o in doc["outputs"]})
     speech_min = words / max(wpm, 1.0)
     from ..voice.delivery import default_profile, load_options
-    takes = int(load_options(default_profile("en")).get("takes", 1))     # best-of-N: N syntheses per line (ASR per take is extra, small)
-    return {"words": words, "speech_min": round(speech_min, 1), "rtf": RUNNER_RTF, "takes": takes,
-            "projected_min": round(speech_min * RUNNER_RTF * takes, 1), "budget_min": float(raw)}
+    takes = int(load_options(default_profile("en")).get("takes", 1))
+    asr_calls = takes + 1 if takes > 1 else 0         # a single take (baseline) is not transcribed by the voice step: figure unchanged
+    projected = speech_min * (RUNNER_RTF * takes + RUNNER_ASR_RTF * asr_calls)
+    return {"words": words, "speech_min": round(speech_min, 1), "rtf": RUNNER_RTF, "asr_rtf": RUNNER_ASR_RTF, "takes": takes,
+            "projected_min": round(projected, 1), "budget_min": float(raw)}
 
 
 def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "en", log: Callable = print,
@@ -195,6 +201,9 @@ def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "
         overrides = {"pace": {"target_wpm": st["target_wpm"], "words": gate_words(text)}} if st.get("target_wpm") else None
         if attempt:   # a retry: a new deterministic seed (the chunk cache is keyed by seed, so attempt 1's audio is not replayed)
             overrides = {**(overrides or {}), "seed": retry_seed(lang, attempt)}
+        # best-of-N profiles: the takes of attempt 1 keep their seeds (and their cached ASR checks) on a retry; only the lines that
+        # missed get one new take per retry (voice/narrate._extra_lines), then the takes are selected again
+        overrides = {**(overrides or {}), "take_seed": retry_seed(lang, 0), "attempt": attempt}
         w = narrate_fn(text, lang, ref, cache_dir=work / "tts_cache", overrides=overrides)
         w.save(dst)
         pace = (getattr(w, "meta", None) or {}).get("pace") or {}

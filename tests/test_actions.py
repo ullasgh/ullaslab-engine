@@ -136,7 +136,12 @@ def test_make_voices_one_synthesis_per_distinct_narration_with_clone_ref_and_pac
     text, lang, ref, ov, cache = calls[0]
     assert text == " ".join(F.NARRATION) and lang == "en" and ref == w / "voice.wav"
     # the pacer fits to the A3 gate's word count (whitespace tokens of the script), not to the spoken words
-    assert ov == {"pace": {"target_wpm": 150, "words": len(text.split())}} and cache == w / "tts_cache"
+    assert ov == {"pace": {"target_wpm": 150, "words": len(text.split())}, "take_seed": AC.retry_seed("en", 0), "attempt": 0}
+    assert cache == w / "tts_cache"
+    calls.clear()
+    AC.make_voices(w, narrate_fn=fake, log=lambda *_: None, attempt=2)       # a WER retry: same take seed (takes are reused), attempt 2
+    ov2 = calls[0][3]
+    assert ov2["take_seed"] == AC.retry_seed("en", 0) and ov2["attempt"] == 2 and ov2["seed"] == AC.retry_seed("en", 2)
     assert (w / "item" / "voice.short.wav").is_file() and (w / "item" / "voice.reel.wav").is_file()
     assert st["reel"]["same_as"] == "short" and st["short"]["clone_ref"] is True
     assert set(json.loads((w / "voice_stats.json").read_text())["outputs"]) == {"short", "reel"}
@@ -482,7 +487,9 @@ def _one_take(monkeypatch):
 def test_voice_budget_multiplies_by_the_takes_of_the_english_profile(monkeypatch):
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
     b = AC.voice_budget(F.scenes_doc(), 150)
-    assert b["takes"] == 4 and b["projected_min"] == pytest.approx(11.3 * 4, abs=0.3)
+    assert b["takes"] == 2 and b["asr_rtf"] == AC.RUNNER_ASR_RTF
+    # 106 words at 150 wpm: 2 takes synthesised (RTF 16) and 2 transcribed plus the final read's transcription
+    assert b["projected_min"] == pytest.approx(0.707 * (16 * 2 + AC.RUNNER_ASR_RTF * 3), abs=0.3)
     _one_take(monkeypatch)
     assert AC.voice_budget(F.scenes_doc(), 150)["projected_min"] == 11.3
 

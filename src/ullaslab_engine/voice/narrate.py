@@ -50,6 +50,7 @@ MAX_LEVEL_DB = 6.0
 FADE_S = 0.008
 TRIM_DB = -45.0
 CHUNK_CACHE_VERSION = 1
+MAX_EXTRA_LINES = 4        # a WER retry adds a take to at most this many lines
 PACE_DEFAULTS = {"target_wpm": 150, "max_speedup": 1.15, "pause_floor": 0.6, "max_slowdown": 1.15, "pause_ceiling": 1.3}
 PAUSE_CAP_S = 0.55  # longest pause the slow-down may create (A3 max_silence_s 1.2 s also counts trimmed chunk edges)
 _UNSPACED = {"ja", "zh", "th"}
@@ -367,76 +368,80 @@ def default_take_check(text: str, w: Wav, lang: str) -> float:
     return float(error_rate(text, " ".join(x[0] for x in words), lang))
 
 
-def _take_metrics(cache: Path | None, w: Wav, text: str, lang: str, check, measure) -> tuple[float, float, float, float]:
-    """(wer, duration, pitch spread, artefact share) of a take, kept next to the chunk cache so a resumed run does not
-    transcribe the same take again. The ASR model size is part of the record: another model re-measures."""
+def _take_metrics(cache: Path | None, w: Wav, text: str, lang: str, check, measure,
+                  speed: float = 1.0) -> tuple[float, float, float, float]:
+    """(wer, duration, pitch spread, artefact share) of a take. The ASR check runs on the take at the speed it will be heard at
+    (`speed`: the line's tempo times the pacer's estimated speed-up), because a take that reads cleanly at natural speed can
+    mis-read a word once the pacer has sped the read up. Records sit next to the chunk cache, one per (take, speed), so a
+    resumed run or a WER retry never transcribes the same take at the same speed again. The ASR model size is part of the record."""
     from ..asr import model_size
-    key, side = w.meta.get("chunk_key"), None
+    key, side, rec = w.meta.get("chunk_key"), None, {}
+    tag = f"{speed:.2f}"
+    th = hashlib.sha256(text.encode()).hexdigest()
     if cache is not None and key:
         side = cache / f"{key}.take.json"
         if side.is_file():
             try:
-                d = json.loads(side.read_text())
-                if d.get("asr") == model_size() and d.get("text") == hashlib.sha256(text.encode()).hexdigest():
-                    return d["wer"], d["dur"], d["pitch"], d["art"]
+                rec = json.loads(side.read_text())
+                if rec.get("asr") != model_size() or rec.get("text") != th or "speeds" not in rec:
+                    rec = {}
+                elif tag in rec["speeds"]:
+                    r = rec["speeds"][tag]
+                    return r["wer"], rec["dur"], rec["pitch"], rec["art"]
             except (OSError, ValueError, KeyError):
-                pass
+                rec = {}
     t = _trim(w.samples, w.sr)
-    wer = float(check(text, w, lang))
-    pitch, art = measure(t, w.sr)
+    heard = Wav(atempo(t, w.sr, speed), w.sr) if abs(speed - 1.0) > 0.004 else Wav(t, w.sr)
+    wer = float(check(text, heard, lang))
+    if "pitch" in rec:
+        pitch, art = rec["pitch"], rec["art"]
+    else:
+        pitch, art = measure(t, w.sr)
     out = (wer, len(t) / w.sr, pitch, art)
     if side is not None:
-        side.write_text(json.dumps({"asr": model_size(), "text": hashlib.sha256(text.encode()).hexdigest(), "wer": wer,
-                                    "dur": out[1], "pitch": pitch, "art": art}))
+        rec = {"asr": model_size(), "text": th, "dur": out[1], "pitch": pitch, "art": art,
+               "speeds": {**(rec.get("speeds") or {}), tag: {"wer": wer}}}
+        side.write_text(json.dumps(rec))
     return out
 
 
-def _synth_takes(c: Chunk, lang: str, ref: Path | None, eng: str | None, settings: dict, cache: Path | None, ref_sha: str,
-                 n: int, check, measure, stats: dict) -> list[Take]:
-    """N takes of one chunk on seeds base + TAKE_SEED_STEP * j. The first take failing raises like a plain chunk (the caller
-    merges the chunk with the next); a later take failing is skipped. A non-clone engine (the stock-voice fallback) answers
-    the same every time, so it gets one take."""
-    takes: list[Take] = []
-    for j in range(n):
-        st = dict(settings, seed=int(settings.get("seed", 0)) + TAKE_SEED_STEP * j)
-        try:
-            w = _synth(c.text, lang, ref, eng, st, cache, ref_sha)
-        except base.NoVoiceAvailable:
-            if j == 0:
-                raise
-            log.warning("take %d/%d failed for a chunk; skipped", j + 1, n)
-            continue
-        if w.engine != "chatterbox":          # fallback or stock engine: nothing varies between takes, nothing to rank
-            return [Take(st["seed"], 0.0, 0.0, 0.0, 0.0, w)]
-        t0 = time.time()
-        wer, dur, pitch, art = _take_metrics(cache, w, c.text, lang, check, measure)
-        stats["check_s"] += time.time() - t0
-        takes.append(Take(st["seed"], wer, dur, pitch, art, w))
-    return takes
+def _extra_lines(cands: list[list[Take]], plan: list[Chunk], attempt: int, lang: str) -> list[int]:
+    """Lines that get one more take on a WER retry (attempt >= 1): the ones whose best take still has word errors, worst first;
+    when no line has a recorded error (the miss came from the joins, not a line) the fastest-spoken lines, whose words are the
+    likeliest to blur once the read is sped up. At most MAX_EXTRA_LINES; none on the first attempt."""
+    if attempt <= 0:
+        return []
+    def best(ts):
+        return min(t.wer for t in ts)
+    bad = sorted((i for i, ts in enumerate(cands) if best(ts) > 0), key=lambda i: -best(cands[i]))
+    if bad:
+        return bad[:MAX_EXTRA_LINES]
+    def rate(i):
+        d = max(t.dur for t in cands[i]) or 1.0
+        return _words(plan[i].text, lang) / d
+    return sorted(range(len(cands)), key=lambda i: -rate(i))[:MAX_EXTRA_LINES]
 
 
 def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: dict, cache: Path | None = None,
           pace: dict | None = None, profile: dict | None = None, takes: int = 1, take_check=None,
-          take_measure=None) -> Wav:
+          take_measure=None, attempt: int = 0) -> Wav:
     plan = plan_chunks(text, lang)
     if not plan:
         raise ValueError("nothing to narrate")
     ref_sha = _ref_sha(ref)
     waves: list[Wav] = []
-    cands: list[list[Take]] = []
-    tstats = {"check_s": 0.0}
+    tstats = {"check_s": 0.0, "asr_calls": 0}
     check, measure = take_check or default_take_check, take_measure or pitch_metrics
+    tseed = int(settings.get("take_seed", settings.get("seed", 0)))
     eng = engine
     i = 0
-    while i < len(plan):
+    while i < len(plan):                    # take 0 of every line (the only take when takes == 1)
         c = plan[i]
+        st = _chunk_settings(settings, c.delivery, profile, lang)
+        if takes > 1:
+            st = dict(st, seed=tseed)
         try:
-            if takes > 1:
-                ts = _synth_takes(c, lang, ref, eng, _chunk_settings(settings, c.delivery, profile, lang), cache, ref_sha,
-                                  takes, check, measure, tstats)
-                w = ts[0].wave
-            else:
-                w = _synth(c.text, lang, ref, eng, _chunk_settings(settings, c.delivery, profile, lang), cache, ref_sha)
+            w = _synth(c.text, lang, ref, eng, st, cache, ref_sha)
         except base.NoVoiceAvailable:
             if i + 1 < len(plan):            # last resort: say it together with the next chunk
                 log.warning("merging failed chunk %r into the next one", c.text[:60])
@@ -446,17 +451,47 @@ def _once(text: str, lang: str, ref: Path | None, engine: str | None, settings: 
             raise
         eng = eng or w.engine
         waves.append(w)
-        if takes > 1:
-            cands.append(ts)
         i += 1
     take_info = None
-    if takes > 1 and any(len(ts) > 1 for ts in cands):
+    if takes > 1 and eng == "chatterbox":
+        sr0 = waves[0].sr
+        # the pacer's speed change is known (about) before the extra takes: fit it on the first takes, so every take is checked
+        # at the speed it will be heard at (line tempo x the global factor)
+        tp, tpa, tk, _u = (level_match([_trim(w.samples, sr0) for w in waves], sr0), [c.pause for c in plan], [c.keep for c in plan], {})
+        if profile:
+            tp, tpa, tk, _u = apply_delivery(tp, tpa, tk, [c.delivery for c in plan], profile, sr0)
+        glob = 1.0
+        if pace is not None:
+            glob = fit_pace(tp, tpa, tk, pace.get("words") or _words(" ".join(c.text for c in plan), lang), sr0, pace)[2]["speedup"]
+
+        def speed_of(c: Chunk) -> float:
+            return glob * float((profile or {}).get(c.delivery or "", {}).get("tempo", 1.0))
+
+        def take(i: int, j: int) -> Take | None:
+            c = plan[i]
+            st = dict(_chunk_settings(settings, c.delivery, profile, lang), seed=tseed + TAKE_SEED_STEP * j)
+            try:
+                w = waves[i] if j == 0 else _synth(c.text, lang, ref, eng, st, cache, ref_sha)
+            except base.NoVoiceAvailable:
+                log.warning("take %d failed for a chunk; skipped", j + 1)
+                return None
+            t0 = time.time()
+            wer, dur, pitch, art = _take_metrics(cache, w, c.text, lang, check, measure, speed_of(c))
+            tstats["check_s"] += time.time() - t0
+            tstats["asr_calls"] += 1
+            return Take(st["seed"], wer, dur, pitch, art, w)
+        cands = [[t for t in (take(k, j) for j in range(takes)) if t] for k in range(len(plan))]
+        for k in _extra_lines(cands, plan, attempt, lang):       # WER retry: one new take for each worst line, then re-select
+            for j in range(takes, takes + attempt):
+                t = take(k, j)
+                if t:
+                    cands[k].append(t)
         pick = select_all(cands)
         waves = [ts[k].wave for ts, k in zip(cands, pick)]
         kept = [ts[k] for ts, k in zip(cands, pick)]
         every = [t for ts in cands for t in ts]
-        take_info = {"takes": takes, "lines": len(cands), "check_s": round(tstats["check_s"], 1),
-                     "pitch_kept": round(float(np.mean([t.pitch for t in kept])), 2),
+        take_info = {"takes": takes, "lines": len(cands), "check_s": round(tstats["check_s"], 1), "asr_calls": tstats["asr_calls"],
+                     "speed_est": round(glob, 3), "pitch_kept": round(float(np.mean([t.pitch for t in kept])), 2),
                      "pitch_all": round(float(np.mean([t.pitch for t in every])), 2),
                      "first_take_chosen": sum(1 for k in pick if k == 0), "line_wer_kept": [round(t.wer, 1) for t in kept]}
     sr = waves[0].sr
@@ -505,7 +540,7 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
             engine: str | None = None, gate: bool = True, overrides: dict | None = None,
             cache_dir: Path | str | None = None, pace: bool = True, take_check=None, take_measure=None) -> Wav:
     cfg = language(lang)
-    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile", "takes")})
+    st = voice_settings(lang, {k: v for k, v in (overrides or {}).items() if k not in ("pace", "delivery_profile", "takes", "take_seed", "attempt")})
     spoken = spoken_text(text, lang, cfg.get("number_format"))
     ref = resolve_ref(Path(ref_wav) if ref_wav else None, st["ref_clip"])
     prof_name = (overrides or {}).get("delivery_profile") or default_profile(lang)
@@ -526,7 +561,10 @@ def narrate(text: str, lang: str, ref_wav: Path | str | None = None, *, normaliz
             s[_TEMP_FACTOR] = 0.85 if attempt else 1.0
         if opts.get("t3_weights"):
             s["t3_weights"] = opts["t3_weights"]
-        w = _once(spoken, lang, ref, engine, s, cache, pc, profile, takes, take_check, take_measure)
+        if (overrides or {}).get("take_seed") is not None:      # takes keep their seeds across WER retries: the cache reuses them
+            s["take_seed"] = int(overrides["take_seed"]) + attempt
+        w = _once(spoken, lang, ref, engine, s, cache, pc, profile, takes, take_check, take_measure,
+                  int((overrides or {}).get("attempt") or 0))
         meta = dict(w.meta)
         w = postprocess(w)
         w.meta = meta

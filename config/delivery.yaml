@@ -47,11 +47,11 @@ profiles:
     caution:  {exaggeration: 0.35, tempo: 0.97, pause_before: 0.15}
     signoff:  {exaggeration: 0.35, pause_before: 0.30, tempo: 0.97}
   # sample4: the owner's choice after listening (2026-11-13) and the English default (languages.yaml en.delivery_profile).
-  # Recipe measured on the reference script: new reference clip 1, V3 weights, best of 4 takes per line, natural pauses
+  # Recipe measured on the reference script: new reference clip 1, V3 weights, best of 2 takes per line (owner decision 2026-11-13: N=2, takes reused across WER retries; 4 stays possible), natural pauses
   # (pause_floor 1.0, target 150 wpm), and longer pauses with a slower tempo before the reveal, caution and sign-off lines.
   # No exaggeration, cfg or temperature changes: the documented "expressive" settings did not raise pitch range and failed WER.
   sample4:
-    _options: {takes: 4, t3_weights: v3, pause_floor: 1.0}
+    _options: {takes: 2, t3_weights: v3, pause_floor: 1.0}
     hook:     {pause_after: 0.6}
     tension:  {tempo: 0.97}
     reveal:   {pause_before: 0.7, tempo: 0.95}

@@ -242,7 +242,7 @@ def test_config_default_is_baseline_in_languages_yaml_and_english_uses_sample4()
 
 # ---------------------------------------------------------------- sample4 profile and whole-read options
 def test_sample4_recipe_is_what_the_owner_heard():
-    assert D.load_options("sample4") == {"takes": 4, "t3_weights": "v3", "pause_floor": 1.0}
+    assert D.load_options("sample4") == {"takes": 2, "t3_weights": "v3", "pause_floor": 1.0}
     p = D.load_profile("sample4")
     assert p["hook"] == {"pause_after": 0.6} and p["tension"] == {"tempo": 0.97}
     assert p["reveal"] == {"pause_before": 0.7, "tempo": 0.95} and p["caution"] == {"pause_before": 0.55, "tempo": 0.95}

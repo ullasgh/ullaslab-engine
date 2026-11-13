@@ -181,3 +181,68 @@ def test_a_failing_later_take_is_skipped_not_fatal(chat):
     chat.synth = flaky
     w = _run(chat, m, 3)
     assert w.duration > 3 and w.meta["takes"]["lines"] >= 1
+
+
+# ---------------------------------------------------------------- accuracy at the heard speed, reuse across WER retries
+class SpeedMeter(Meter):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.lens: list[float] = []
+
+    def check(self, text, w, lang):
+        self.lens.append(len(w.samples) / w.sr)
+        return super().check(text, w, lang)
+
+
+def test_the_take_is_checked_at_the_speed_it_will_be_heard_at(chat):
+    slow = FakeClone(words_per_s=1.8)          # reads slowly: the pacer will speed the read up, so the check must hear it sped up
+    chat.words_per_s = 1.8
+    m = SpeedMeter()
+    w = _run(chat, m, 2, overrides={"pace": {"target_wpm": 150, "words": 20}})
+    f = w.meta["takes"]["speed_est"]
+    assert f > 1.02 and w.meta["pace"]["speedup"] > 1.02
+    raw = [len(c.samples) / c.sr for c in [chat.synth(t, "en", None, {"seed": 0}) for t, _ in chat.calls[:1]]]
+    assert min(m.lens) < raw[0] * 0.97          # heard faster than synthesised
+
+
+def test_a_retry_reuses_every_take_and_check_and_adds_one_take_to_the_worst_lines_only(chat, tmp_path):
+    lines = [c.text for c in N.plan_chunks(N.spoken_text(TEXT, "en", "western"))]
+    bad = lines[1]
+    m = Meter(wer_for=lambda text, k: 8.0 if text == bad else 0.0)          # no take of line 1 reads right
+    ov = {"take_seed": 0, "attempt": 0}
+    _run(chat, m, 2, cache_dir=tmp_path, overrides=ov)
+    s0, c0 = len(chat.calls), len(m.checks)
+    assert s0 == 2 * len(lines) and c0 == 2 * len(lines)
+    m2 = Meter(wer_for=lambda text, k: 8.0 if text == bad else 0.0)
+    w = _run(chat, m2, 2, cache_dir=tmp_path, overrides={"take_seed": 0, "attempt": 1})
+    assert len(chat.calls) - s0 == 1 and [t for t, _ in chat.calls[s0:]] == [bad]       # one new take, for the bad line only
+    assert [t for t, _ in m2.checks] == [bad]                                           # only the new take is transcribed
+    assert {s["seed"] for t, s in chat.calls if t == bad} == {0, 10, 20}
+    assert w.meta["takes"]["asr_calls"] == 2 * len(lines) + 1
+
+
+def test_a_retry_without_a_culprit_line_still_adds_takes_to_the_fastest_lines_and_never_more_than_the_cap(chat, tmp_path):
+    m = Meter()
+    _run(chat, m, 2, cache_dir=tmp_path, overrides={"take_seed": 0, "attempt": 0})
+    s0 = len(chat.calls)
+    _run(chat, Meter(), 2, cache_dir=tmp_path, overrides={"take_seed": 0, "attempt": 2})
+    added = len(chat.calls) - s0
+    assert 0 < added <= N.MAX_EXTRA_LINES * 2
+
+
+def test_first_attempt_adds_no_extra_takes(chat, tmp_path):
+    m = Meter(wer_for=lambda text, k: 5.0)
+    _run(chat, m, 2, cache_dir=tmp_path, overrides={"take_seed": 0, "attempt": 0})
+    lines = len(N.plan_chunks(N.spoken_text(TEXT, "en", "western")))
+    assert len(chat.calls) == 2 * lines
+
+
+def test_a_check_at_another_speed_is_a_new_record_and_the_same_speed_is_cached(chat, tmp_path):
+    m = Meter()
+    _run(chat, m, 2, cache_dir=tmp_path, overrides={"take_seed": 0})
+    n = len(m.checks)
+    _run(chat, Meter(), 2, cache_dir=tmp_path, overrides={"take_seed": 0})
+    assert n == 2 * len(N.plan_chunks(N.spoken_text(TEXT, "en", "western")))
+    m3 = Meter()
+    _run(chat, m3, 2, cache_dir=tmp_path, overrides={"take_seed": 0, "pace": {"target_wpm": 90, "words": 20}})   # other speed: re-checked
+    assert len(m3.checks) > 0
