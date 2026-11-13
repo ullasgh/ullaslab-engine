@@ -121,12 +121,6 @@ def story_strings(lang: str) -> dict:
     return STRINGS.get(lang, STRINGS["en"])
 
 
-def edu_line(disclaimer: dict | str, lang: str) -> str:
-    d = disclaimer if isinstance(disclaimer, str) else (disclaimer.get(lang) or disclaimer.get("en") or "")
-    mm = _SENT.match(d.strip())
-    return (mm.group(1) if mm else d.strip()).rstrip(".।") or "Education only"
-
-
 _SOURCE_PREFIX = re.compile(r"^\s*(?:sources?|fuente|fonte|स्रोत|ஆதாரம்|మూలం|ಮೂಲ|ഉറവിടം|সূত্র|સ્ત્રોત|المصدر|出典)\s*[:：\-–—]\s*", re.I)
 
 
@@ -154,7 +148,7 @@ def make_props(m: dict, lang: str, duration: float, audio_name: str | None) -> d
     sub = (st.get("sub") or {}).get(lang, "")
     S = story_strings(lang)
     return {"lang": lang, "text": st["text"][lang], "sub": sub, "source": source_stamp(m, lang),
-            "edu": edu_line(m["disclaimer"], lang), "cta": S["cta"],
+            "cta": S["cta"],      # no fixed "Education only" line on the card (owner decision 2026-11-13); the disclaimer stays in the caption
             "aiVoice": S["ai"] if m.get("synthetic_voice") else "", "durationS": duration,
             "audio": audio_name or "", "rtl": lang == "ar", "accent": "#4FD1C5"}
 
@@ -176,7 +170,8 @@ def qa_story(props: dict, audio: Wav | None, layout: dict | None, video_duration
               _chk("text_chars", len(props["text"]), c["max_text_chars"], 0 < len(props["text"]) <= c["max_text_chars"]),
               _chk("sub_chars", len(props["sub"]), c["max_sub_chars"], len(props["sub"]) <= c["max_sub_chars"]),
               _chk("cta_present", bool(props["cta"]), True, bool(props["cta"])),
-              _chk("education_line_present", bool(props["edu"]), True, bool(props["edu"]))]
+              # the retired fixed line must not be drawn: props from an older bundle that still carry `edu` fail loudly
+              _chk("no_retired_education_line", bool(props.get("edu")), False, not props.get("edu"))]
     if audio is not None:
         lufs, tp = loudness_lufs(audio), true_peak_dbtp(audio)
         lo, hi = c["loudness_lufs"] - c["loudness_tolerance_lu"], c["loudness_lufs"] + c["loudness_tolerance_lu"]
