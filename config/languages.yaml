@@ -23,6 +23,9 @@ voice_defaults:
   # Narration pace (voice/narrate.py): words per minute including pauses. Met by shortening punctuation pauses (never
   # below pause_floor of their length; [[hook]] [[payoff]] [[pause]] markers are kept) and then a pitch-preserving
   # tempo change of at most max_speedup. target_wpm 0 turns it off. A language entry may carry its own `pace:` block.
+  # Per-line delivery (config/delivery.yaml, voice/delivery.py): baseline | mild | strong | tuned. baseline = one global setting for every
+  # line (the behaviour before delivery tags existed). Owner picks the profile after listening to the samples.
+  delivery_profile: baseline
   pace:
     target_wpm: 150
     max_speedup: 1.15

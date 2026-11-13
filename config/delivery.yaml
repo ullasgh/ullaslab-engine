@@ -1,0 +1,40 @@
+# Per-line delivery profiles for narration (voice/delivery.py). The script/scene data carries a delivery TAG per scene
+# (scenes.json narration.delivery); the active PROFILE (languages.yaml voice_defaults.delivery_profile) says what each tag
+# does to the synthesis of that line. `baseline` = today's behaviour exactly: one global setting for every line. Nothing here
+# touches a QA gate or a limit (config/quality.yaml); the gates measure whatever the profile produces.
+#
+# Fields per tag (all optional; omitted = the global voice setting):
+#   exaggeration   Chatterbox emotion scalar for that line (upstream default 0.5; ours 0.4; 0.7+ is "dramatic")
+#   cfg_weight     Chatterbox guidance; lower (~0.3) gives slower, more deliberate pacing and compensates the speed-up that a
+#                  higher exaggeration causes (upstream README). Ignored for non-English native-accent voices (forced to 0).
+#   temperature    sampling temperature for that line (variation of intonation)
+#   tempo          pitch-preserving tempo of that line before the pacer fits the whole read (1.0 = unchanged, <1 slower)
+#   pause_before   seconds of silence floor before the line (added to the previous line's pause, kept by the pacer)
+#   pause_after    seconds of silence floor after the line (kept by the pacer)
+#   gain_db        level offset of the line after level matching (the master is loudness-normalised afterwards)
+# Hard bounds (enforced when the file is read): exaggeration 0.25-0.9, cfg_weight 0.2-0.7, temperature 0.5-0.95,
+# tempo 0.9-1.1, pauses 0-0.7 s, gain +-3 dB. Pauses stay far below the A3 max_silence_s limit of 1.2 s.
+tags: [hook, tension, reveal, explain, caution, signoff]
+profiles:
+  baseline: {}
+  mild:
+    hook:     {exaggeration: 0.55, cfg_weight: 0.45}
+    tension:  {exaggeration: 0.50, cfg_weight: 0.45}
+    reveal:   {exaggeration: 0.55, cfg_weight: 0.40}
+    explain:  {}
+    caution:  {exaggeration: 0.35}
+    signoff:  {exaggeration: 0.35}
+  strong:
+    hook:     {exaggeration: 0.70, cfg_weight: 0.30, temperature: 0.8}
+    tension:  {exaggeration: 0.60, cfg_weight: 0.35, temperature: 0.8}
+    reveal:   {exaggeration: 0.70, cfg_weight: 0.30, temperature: 0.8}
+    explain:  {exaggeration: 0.45, cfg_weight: 0.50}
+    caution:  {exaggeration: 0.30, cfg_weight: 0.50}
+    signoff:  {exaggeration: 0.35, cfg_weight: 0.50}
+  tuned:
+    hook:     {exaggeration: 0.60, cfg_weight: 0.40, pause_after: 0.30, gain_db: 0.5}
+    tension:  {exaggeration: 0.55, cfg_weight: 0.40, tempo: 0.97}
+    reveal:   {exaggeration: 0.60, cfg_weight: 0.35, pause_before: 0.30, tempo: 0.96, gain_db: 0.5}
+    explain:  {}
+    caution:  {exaggeration: 0.35, tempo: 0.97, pause_before: 0.15}
+    signoff:  {exaggeration: 0.35, pause_before: 0.30, tempo: 0.97}

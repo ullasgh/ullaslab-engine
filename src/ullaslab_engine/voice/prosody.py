@@ -39,7 +39,8 @@ _DECIMAL = re.compile(r"\d[.,]$")
 
 def strip_markers(text: str) -> str:
     """Remove pacing markers (for TTS paths that do not split sentences)."""
-    return strip_emphasis(re.sub(r"[ \t]*\[\[(?:hook|payoff|pause(?::\d+(?:\.\d+)?)?)\]\][ \t]*", " ", text)).strip()
+    text = re.sub(r"[ \t]*\[\[(?:hook|payoff|pause(?::\d+(?:\.\d+)?)?)\]\][ \t]*", " ", text)
+    return strip_emphasis(re.sub(r"[ \t]*\[\[d:[A-Za-z_]+\]\][ \t]*", " ", text)).strip()
 
 
 def mark_pacing(text: str, payoff_at: int | None = None) -> str:
@@ -85,7 +86,8 @@ def split_marked(text: str) -> list[tuple[str, float, bool]]:
             chunk = chunk.strip()
             if not chunk:
                 continue
-            if parts and (_ABBREV.search(parts[-1]) or _DECIMAL.search(parts[-1])):
+            # a delivery marker at the start is a scene boundary: "4.84. [[d:signoff]] Follow..." is two sentences, not a decimal
+            if parts and not chunk.startswith("[[d:") and (_ABBREV.search(parts[-1]) or _DECIMAL.search(parts[-1])):
                 parts[-1] += " " + chunk
             else:
                 parts.append(chunk)
