@@ -115,7 +115,7 @@ def keys_for(props: dict, public: Path, scale=1.0, renderer=STAMP) -> list[str]:
 def test_frame_plan_matches_the_typescript_renderer():
     fx = json.loads((ROOT / "tests" / "fixtures" / "scene_frames.json").read_text())
     for c in fx["cases"]:
-        got = [{k: p[k] for k in ("id", "start", "end", "until")} for p in SC.frame_plan(c["scenes"])]
+        got = [{k: p[k] for k in ("id", "start", "end", "until")} for p in SC.frame_plan(c["scenes"], style=c.get("style"))]
         assert got == c["expected"], c["name"]
     assert SC.js_round(31.5) == 32 and SC.js_round(64.5) == 65 and SC.js_round(-0.5) == 0   # not banker's rounding
 

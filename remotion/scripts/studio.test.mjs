@@ -126,7 +126,7 @@ test("frame plan parity with the Python scene cache (tests/fixtures/scene_frames
   const fx = JSON.parse(fs.readFileSync(new URL("../../tests/fixtures/scene_frames.json", import.meta.url)));
   assert.ok(fx.cases.length >= 4);
   for (const c of fx.cases) {
-    const n = normalizeScenes(c.scenes);
+    const n = normalizeScenes(c.scenes, 30, c.style);
     const got = n.map((s, i) => ({ id: s.id, start: s.start, end: s.end, until: s.end + overlapAfter(n, i) }));
     assert.deepEqual(got, c.expected, c.name);
   }

@@ -15,6 +15,7 @@ from .captions import build_cues
 
 ASPECT_SIZE = {"16:9": (1920, 1080, "horizontal"), "9:16": (1080, 1920, "vertical")}
 CHART_FILES = ("chart_specs.json", "charts.resolved.json", "chart.json")
+BRAND_MARK_FILE = "brand_mark.json"   # optional, premium style: {viewBox, radius, bg, ink, strokes[], rects[]} for the animated end-card mark
 VISUAL_FILE = "visual_data.json"   # data for map/globe/timeline/flow scenes, keyed by '<output>/<scene id>', data_ref.ref or scene id; flow and timeline REQUIRE an entry
 NUMBER_LOCALE = {"western": "en-US", "indian": "en-IN", "arabic_western": "en-US"}
 
@@ -176,6 +177,79 @@ def apply_chart_view(sid: str, kit: dict, view: dict) -> dict:
     return out
 
 
+# ------------------------------------------------------------------ chart sequences (premium style)
+MAX_VIEWS = 4
+SEQ_VIEW_KEYS = {"window", "highlight", "point", "marks", "at_word"}
+
+
+def apply_chart_views(sid: str, kit: dict, views: list) -> dict:
+    """A scene's chart as a SEQUENCE of views of one line chart (premium style): the renderer scrubs and zooms the window between
+    them while marks and the tip land on the spoken words. Same honesty rules as apply_chart_view: windows, marks, points and
+    highlights are observation dates of the series, and every value shown is read from the series, never typed. The kit keeps
+    the whole series so the window can move over it. `at_word` is the narrated word a view, mark or highlight lands on."""
+    at = f"{sid}: chart_views"
+    if kit.get("kind") != "line":
+        raise AssembleError(f"{at} needs a line chart, this chart is '{kit.get('kind')}'")
+    if not isinstance(views, list) or not 1 <= len(views) <= MAX_VIEWS:
+        raise AssembleError(f"{at} must list 1 to {MAX_VIEWS} views")
+    series = kit["series"]
+    if len(series) != 1:
+        raise AssembleError(f"{at} supports a single-series line chart, this one has {len(series)}")
+    pts = list(series[0]["points"])
+    have = {_xkey(p["x"]): p for p in pts}
+    out_views = []
+    prev_lo = None
+    for i, v in enumerate(views):
+        vat = f"{at}[{i}]"
+        extra = set(v) - SEQ_VIEW_KEYS
+        if extra:
+            raise AssembleError(f"{vat} has unknown key(s) {sorted(extra)}; allowed {sorted(SEQ_VIEW_KEYS)}")
+        win = v.get("window") or {}
+        if win.get("from") is None or win.get("to") is None:
+            raise AssembleError(f"{vat} needs a window with from and to")
+        lo, hi = _xkey(win["from"]), _xkey(win["to"])
+        if lo > hi:
+            raise AssembleError(f"{vat} window starts after it ends")
+        inwin = [p for p in pts if lo <= _xkey(p["x"]) <= hi]
+        if len(inwin) < 2:
+            raise AssembleError(f"{vat} window holds {len(inwin)} observation(s); a view needs at least 2")
+
+        def obs(x, what: str) -> dict:
+            k = _xkey(x)
+            if k not in have or not (lo <= k <= hi):
+                raise AssembleError(f"{vat} {what} is not an observation date inside its window (use a date the series has a value for)")
+            return have[k]
+        marks = list(v.get("marks") or [])
+        if len(marks) > MAX_MARKS:
+            raise AssembleError(f"{vat} has {len(marks)} marks; at most {MAX_MARKS}")
+        res: dict = {"window": {"from": win["from"], "to": win["to"]}}
+        if v.get("at_word"):
+            res["atWord"] = str(v["at_word"])
+        res["marks"] = []
+        for m in marks:
+            o = obs(m["x"], "mark")
+            res["marks"].append({"x": o["x"], "value": o["y"], **({"label": str(m["label"]).strip()} if m.get("label") else {}),
+                                 **({"atWord": str(m["at_word"])} if m.get("at_word") else {})})
+        if v.get("point") is not None:
+            o = obs(v["point"]["x"], "point")
+            res["point"] = {"x": o["x"], "value": o["y"], **({"label": str(v["point"]["label"]).strip()} if v["point"].get("label") else {}),
+                            **({"atWord": str(v["point"]["at_word"])} if v["point"].get("at_word") else {})}
+            res["marks"] = [m for m in res["marks"] if _xkey(m["x"]) <= _xkey(o["x"])]
+        hl = v.get("highlight")
+        if hl:
+            a, b = _xkey(hl["from"]), _xkey(hl["to"])
+            if a > b or a < lo or b > hi:
+                raise AssembleError(f"{vat} highlight must lie inside the view")
+            res["highlight"] = {"from": hl["from"], "to": hl["to"], **({"label": hl["label"]} if hl.get("label") else {}),
+                                **({"atWord": str(hl["at_word"])} if hl.get("at_word") else {})}
+        out_views.append(res)
+        prev_lo = lo
+    del prev_lo
+    first, last = views[0]["window"]["from"], views[-1]["window"]["to"]
+    return {**kit, "views": out_views, "includeZero": False, "decimals": kit.get("decimals", 1),
+            "meta": {**kit["meta"], "period": f"{first} to {last}"}}
+
+
 # ------------------------------------------------------------------ visual data (flow / timeline) validation
 def validate_visual(sid: str, kind: str, data) -> None:
     """Shape the renderer needs. A bad entry fails here, with the scene id, instead of crashing the renderer mid-video."""
@@ -223,7 +297,15 @@ def check_visuals(item: Path, doc: dict) -> list[str]:
                         raise AssembleError(f"{sid}: {t} scene has no entry in {VISUAL_FILE} (its data_ref ref or its scene id); "
                                             f"add its data or change the scene type. The render stops here: a {t} scene is never turned into a text card")
                     validate_visual(sid, t, data)
-                if sc.get("chart_view") is not None:
+                if sc.get("chart_views") is not None:
+                    if t != "chart":
+                        raise AssembleError(f"{sid}: chart_views is only for chart scenes")
+                    cref = (sc.get("data_ref") or {}).get("ref")
+                    if sc.get("chart_view") is not None:
+                        raise AssembleError(f"{sid}: give chart_view or chart_views, not both")
+                    if cref in charts:
+                        apply_chart_views(sid, to_kit_chart(cref, charts[cref]), sc["chart_views"])
+                elif sc.get("chart_view") is not None:
                     if t != "chart":
                         raise AssembleError(f"{sid}: chart_view is only for chart scenes")
                     cref = (sc.get("data_ref") or {}).get("ref")
@@ -290,7 +372,7 @@ def default_visual(kind: str, text: str) -> dict | None:
     return None
 
 
-STYLES = ("data-story", "creator-motion", "chalk-talk", "clean-tech")   # keep in sync with remotion/src/studio/styles.ts (tested)
+STYLES = ("data-story", "creator-motion", "chalk-talk", "clean-tech", "premium")   # keep in sync with remotion/src/studio/styles.ts (tested)
 
 
 def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str = "en", allow_placeholder: bool = False,
@@ -317,7 +399,15 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
             if ref not in charts:
                 raise AssembleError(f"{name}/{sid}: data_ref '{ref}' not found in {'/'.join(CHART_FILES)}")
             kit = to_kit_chart(ref, charts[ref])
-            if sc.get("chart_view") is not None:
+            if sc.get("chart_views") is not None:
+                if sc.get("chart_view") is not None:
+                    raise AssembleError(f"{name}/{sid}: give chart_view or chart_views, not both")
+                # a sequence of views of one chart (premium): the whole series plus the views the renderer scrubs between
+                kit = apply_chart_views(f"{name}/{sid}", kit, sc["chart_views"])
+                ref = f"{ref}@{sid}"
+                sc["data_ref"] = {"kind": "chart", "ref": ref}
+                del sc["chart_views"]
+            elif sc.get("chart_view") is not None:
                 # this scene's own view of the chart: its own refs entry, so two scenes can show different windows of one chart
                 kit = apply_chart_view(f"{name}/{sid}", kit, sc["chart_view"])
                 kit["revealFrames"] = max(24, min(80, round(dur * FPS * 0.6) - 10))
@@ -374,6 +464,9 @@ def build_props(item: Path, doc: dict, output: dict, public: Path, *, lang: str 
         if sc.get("style") is not None and sc["style"] not in STYLES:
             warns.append(f"{name}/{sc['id']}: unknown style {sc['style']!r} ignored")
             del sc["style"]
-    return {**props_style, "orientation": orient, "scenes": scenes, "refs": refs, "lang": lang, "numberLocale": NUMBER_LOCALE.get(nf, "en-US"),
+    mark = {}
+    if (item / BRAND_MARK_FILE).is_file():    # premium end card: the brand mark as data from the private item (the public engine holds no logo)
+        mark = {"brandMark": json.loads((item / BRAND_MARK_FILE).read_text(encoding="utf-8"))}
+    return {**props_style, **mark, "orientation": orient, "scenes": scenes, "refs": refs, "lang": lang, "numberLocale": NUMBER_LOCALE.get(nf, "en-US"),
             "captions": cues, "rtl": lang == "ar", "durationInFrames": total, "width": w, "height": h,
             "endCard": {"fromFrame": card_from, "durationInFrames": max(1, total - card_from)}}, warns

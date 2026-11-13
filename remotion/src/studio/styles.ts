@@ -5,7 +5,7 @@
 // Absent style = today's look, byte for byte: every helper returns the neutral value for `undefined`.
 import { STUDIO_TYPE, type TypeScale } from "./palettes.ts";
 
-export const STYLE_IDS = ["data-story", "creator-motion", "chalk-talk", "clean-tech"] as const;
+export const STYLE_IDS = ["data-story", "creator-motion", "chalk-talk", "clean-tech", "premium"] as const;
 export type StyleId = (typeof STYLE_IDS)[number];
 export const isStyleId = (s: unknown): s is StyleId => typeof s === "string" && (STYLE_IDS as readonly string[]).includes(s);
 
@@ -67,6 +67,15 @@ export const PRESETS: Record<StyleId, StylePreset> = {
     layout: { radius: 28, border: 3, backdrop: "clean", align: "start" },
     captions: { emphasiseNumbers: false, mergeNotation: true },
     chart: { zeroBaseline: true, band: false, requireSource: true },
+  },
+  // premium: scene art, camera, transitions and end card are drawn by studio/premium/*; these tokens only feed the shared layout and captions.
+  premium: {
+    id: "premium",
+    type: { number: 1, display: 1, headline: 1 },
+    motion: { camera: 1, stagger: 6, enter: 18, overshoot: 0.1 },
+    layout: { radius: 26, border: 3, backdrop: "grid", align: "center" },
+    captions: { emphasiseNumbers: true, mergeNotation: true },
+    chart: { zeroBaseline: false, band: false, requireSource: true },
   },
 };
 
