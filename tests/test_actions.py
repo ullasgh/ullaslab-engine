@@ -498,14 +498,14 @@ def test_a4_pacing_fails_each_limit(doc, qc, failing):
 def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp_path, monkeypatch):
     w = _bundle(tmp_path, target_wpm=150)
     AC.prepare_item(w)
-    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 106 words at 150 wpm x 16 = 11.3 min > 1
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 104 words at 150 wpm x 16 = 11.1 min > 1
     called = []
     with pytest.raises(AC.ActionsError, match="voice budget"):
         AC.make_voices(w, narrate_fn=lambda *a, **k: called.append(1), log=lambda *_: None)
     assert called == []
     qa = AC.export(w)
     g = qa["gates"]["runner_budget"]
-    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 11.3
+    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 11.1
 
 
 def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
@@ -513,7 +513,7 @@ def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
     assert AC.voice_budget(F.scenes_doc(), 150) is None
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
     b = AC.voice_budget(F.scenes_doc(), 150)
-    assert b["words"] == 106 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration
+    assert b["words"] == 104 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration
     assert b["rtf"] == AC.RUNNER_RTF >= 15.6     # never below the slowest runner rate measured (run 43178997058)
 
 
@@ -588,8 +588,8 @@ def test_names_come_from_the_lexicon_not_from_code(tmp_path, monkeypatch):
 
 def test_wer_diff_lists_the_differing_tokens_for_the_private_log():
     from ullaslab_engine.asr import wer_diff
-    d = wer_diff("It was 4.95 percent on the day. " + SIGN_OFF, "It was 4.95 percent percent on the day. Follow Ula's lab. Education on.", "en")
-    assert d == ["I ->percent", "S only->on"]
+    d = wer_diff("It was 4.95 percent on the day. " + SIGN_OFF, "It was 4.95 percent percent on the day. Follow Ula's lab.", "en")
+    assert d == ["I ->percent"]
     assert wer_diff("a b c", "a b c", "en") == []
 
 
@@ -806,7 +806,7 @@ def test_wer_plus_another_failure_does_not_retry(tmp_path):
 
 
 def test_a_retry_that_cannot_fit_the_voice_budget_is_not_started(tmp_path, monkeypatch):
-    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.3 min of synthesis: it fits)
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.1 min of synthesis: it fits)
     p = _Phase(tmp_path, [3.5, 1.0])
     p.step = 200.0                                              # attempt 1 measures 200 s, 600 s are used: a second does not fit
     res, lines = p.run()

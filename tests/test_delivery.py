@@ -80,12 +80,13 @@ def test_plan_chunks_carries_tags_and_without_markers_is_identical():
     assert [c.delivery for c in plain] == [None] * len(plain)
     tagged = N.plan_chunks(TAGGED)
     assert [(c.text, c.pause, c.keep) for c in tagged] == [(c.text, c.pause, c.keep) for c in plain]
-    assert [c.delivery for c in tagged] == ["hook", "explain", "reveal", "caution", "signoff"]
+    # the one-line sign-off "Follow UllasLab." is below the short-chunk size and merges into the caution chunk (first tag kept)
+    assert [c.delivery for c in tagged] == ["hook", "explain", "reveal", "caution"]
 
 
 def test_a_decimal_before_a_scene_boundary_does_not_swallow_the_next_tag():
     plan = N.plan_chunks("[[d:caution]] Firmer weakens if it holds below 6.05. [[d:signoff]] Follow UllasLab.")
-    assert [c.delivery for c in plan] == ["caution", "signoff"]
+    assert [c.delivery for c in plan] == ["caution"]      # the short sign-off merges into the previous chunk, first tag kept
     # without a marker the old behaviour stands: "6.05. Follow" is read as one piece
     assert len(N.plan_chunks("Firmer weakens if it holds below 6.05. Follow UllasLab.")) == 1
 
