@@ -410,7 +410,7 @@ def safe_zone_gate(item: Path, doc: dict, audit_fn: Callable | None) -> dict:
     from .safe_audit import audit_frames, check_audit, node_audit
     audit_fn = audit_fn or node_audit
     q = quality()["A5_mobile_readability"]
-    tot = {"frames": 0, "scenes": 0, "outside": 0, "small_text": 0, "low_contrast": 0, "size_bad": 0}
+    tot = {"frames": 0, "scenes": 0, "outside": 0, "small_text": 0, "low_contrast": 0, "size_bad": 0, "fonts": 0, "font_missing": 0}
     min_cr, max_words = 99.0, 0
     for o in doc["outputs"]:
         n = o["output"]
@@ -424,11 +424,13 @@ def safe_zone_gate(item: Path, doc: dict, audit_fn: Callable | None) -> dict:
         frames = audit_frames(o["scenes"], int(props["durationInFrames"]))
         r = check_audit(audit_fn(pp, item / "work" / "final" / "public", frames, item / "work" / f"audit.{n}.json"),
                         orientation_of(o["aspect"]))
-        for k in ("frames", "outside", "small_text", "low_contrast"):
+        for k in ("frames", "outside", "small_text", "low_contrast", "fonts", "font_missing"):
             tot[k] += r[k]
         tot["size_bad"] += 0 if r["size_ok"] else 1
         min_cr, max_words = min(min_cr, r["min_contrast"]), max(max_words, r["max_words"])
-    checks = [_check("elements_outside_safe_zone", tot["outside"], 0, tot["outside"] == 0),
+    checks = [_check("brand_font_loaded", tot["font_missing"] if tot["fonts"] else "no font data", 0,
+                     tot["fonts"] > 0 and tot["font_missing"] == 0),
+              _check("elements_outside_safe_zone", tot["outside"], 0, tot["outside"] == 0),
               _check("text_below_min_px", tot["small_text"], 0, tot["small_text"] == 0),
               _check("contrast_failures", tot["low_contrast"], 0, tot["low_contrast"] == 0),
               _check("min_contrast_ratio", min_cr, q["min_contrast_ratio"], min_cr >= q["min_contrast_ratio"]),

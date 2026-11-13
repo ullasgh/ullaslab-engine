@@ -44,6 +44,10 @@ def check_still(rec: dict, png: Path) -> list[str]:
     why = blank(png)
     if why:
         bad.append(f"{tag}: blank still, {why}")
+    fonts = rec.get("fonts", [])
+    if not fonts:
+        bad.append(f"{tag}: no rendered-font data in the audit")
+    bad += [f"{tag}: font {f['family']} {f['weight']} not loaded (fallback face rendered)" for f in fonts if not f.get("loaded")]
     b = caption_boxes(orient, lines=1)
     sx0, sy0, sx1, sy1 = b["safe"]
     cx0, cy0, cx1, cy1 = b["content"]

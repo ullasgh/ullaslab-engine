@@ -183,7 +183,7 @@ def _rendered(w: Path, *, qc_verdict="WARN", words=None, freeze="PASS"):
 
 
 def _audit_ok(props, public, frames, out):
-    return {"width": 1080, "height": 1920, "frames": [{"frame": f, "elements": [
+    return {"width": 1080, "height": 1920, "frames": [{"frame": f, "fonts": [{"family": "Noto Sans", "weight": 700, "loaded": True}], "elements": [
         {"role": "headline", "x": 100, "y": 400, "w": 600, "h": 90, "fontPx": 68},
         {"role": "caption", "x": 100, "y": 1300, "w": 700, "h": 80, "fontPx": 44}]} for f in frames]}
 
@@ -245,6 +245,26 @@ def test_export_fails_on_text_outside_the_safe_zone(tmp_path):
     a5 = {c["name"]: c for c in qa["gates"]["A5"]["checks"]}
     assert not qa["passed"] and a5["elements_outside_safe_zone"]["value"] == 2   # one per output
     assert a5["frames_audited"]["passed"] and a5["frames_audited"]["limit"] == 12   # every timed scene of both outputs
+
+
+def test_export_fails_when_the_brand_font_did_not_load(tmp_path):
+    w, _ = _ready(tmp_path)
+
+    def fallback(props, public, frames, out):
+        a = _audit_ok(props, public, frames, out)
+        a["frames"][0]["fonts"] = [{"family": "Noto Sans", "weight": 700, "loaded": False}]
+        return a
+    qa = AC.export(w, asr_wer=lambda r, h, l: 0.0, audit_fn=fallback)
+    a5 = {c["name"]: c for c in qa["gates"]["A5"]["checks"]}
+    assert not qa["passed"] and not a5["brand_font_loaded"]["passed"] and a5["brand_font_loaded"]["value"] == 2
+
+
+def test_check_audit_counts_missing_fonts_and_no_data_fails_closed():
+    base = {"width": 1080, "height": 1920, "frames": [{"frame": 1, "elements": [], "fonts": [
+        {"family": "Noto Sans", "weight": 400, "loaded": True}, {"family": "Noto Sans", "weight": 700, "loaded": False}]}]}
+    r = SA.check_audit(base, "vertical")
+    assert (r["fonts"], r["font_missing"]) == (2, 1)
+    assert SA.check_audit({"width": 1080, "height": 1920, "frames": [{"frame": 1, "elements": []}]}, "vertical")["fonts"] == 0
 
 
 def test_export_without_a_render_still_writes_a_failing_qa(tmp_path):

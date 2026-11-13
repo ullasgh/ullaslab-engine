@@ -8,7 +8,7 @@ import { FootageScene, type FootageData } from "./Footage";
 import { GlobeScene, MapScene, type GlobeData, type MapData } from "./geo";
 import { KineticText } from "./Kinetic";
 import { CardStack, ChalkSteps, CreatorKinetic } from "./StyleKit";
-import { isStyledType, resolveStyle, type StyleId } from "./styles";
+import { isStyledType, resolveStyle, stripEmphasis, type StyleId } from "./styles";
 import type { Orientation, Platform } from "./layout";
 import { normalizeScenes, type DirectorScene } from "./director";
 import { overlapAfter, resolveData, transitionProgress, validateScenes, type StudioScene, type TransitionKind } from "./scenes";
@@ -45,7 +45,8 @@ const StyledKinetic: React.FC<{ text: string }> = ({ text }) => {
 };
 
 const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) => {
-  const text = scene.on_screen_text;
+  // Kinetic scenes parse the markup themselves; everywhere else the words are shown plain.
+  const text = scene.type === "kinetic" || scene.on_screen_text === undefined ? scene.on_screen_text : stripEmphasis(scene.on_screen_text);
   const cam = useCameraStyle(scene.camera_move);
   const { pal, preset } = useStudio();
   assertSource(scene, data, preset.chart.requireSource);
@@ -61,7 +62,7 @@ const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) =
     case "globe": return <AbsoluteFill style={{ background: pal.bg }}><Backdrop grid={false} /><GlobeScene data={data as GlobeData} headline={text} camera={scene.camera_move} /></AbsoluteFill>;
     case "chart": {
       const d = data as ChartSceneData;
-      const h = text ?? d.headline;
+      const h = text ?? (d.headline === undefined ? undefined : stripEmphasis(d.headline));
       switch (d.kind) {
         case "line": return withBackdrop(<LineChart data={{ ...d, headline: h }} />);
         case "bar": return withBackdrop(<BarChart data={{ ...d, headline: h }} />);
@@ -70,8 +71,8 @@ const Art: React.FC<{ scene: StudioScene; data: unknown }> = ({ scene, data }) =
         default: throw new Error(`scene ${scene.id}: unknown chart kind "${(d as { kind?: string }).kind}"`);
       }
     }
-    case "timeline": return withBackdrop(<Timeline data={{ ...(data as TimelineData), headline: text ?? (data as TimelineData).headline }} />);
-    case "flow": return withBackdrop(<FlowDiagram data={{ ...(data as FlowData), headline: text ?? (data as FlowData).headline }} />);
+    case "timeline": return withBackdrop(<Timeline data={{ ...(data as TimelineData), headline: text ?? stripEmphasis((data as TimelineData).headline ?? "") }} />);
+    case "flow": return withBackdrop(<FlowDiagram data={{ ...(data as FlowData), headline: text ?? stripEmphasis((data as FlowData).headline ?? "") }} />);
     case "kinetic": return withBackdrop(<StyledKinetic text={text ?? ""} />);
   }
 };

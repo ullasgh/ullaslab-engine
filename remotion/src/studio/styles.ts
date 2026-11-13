@@ -166,13 +166,17 @@ export const sketchLine = (w: number, seed: number, amp = 2.5): string => {
 };
 
 /* ----------------------------------------------------------------------------------------- text markup */
+/** `*word*` is emphasis markup for the kinetic styles only. Any other place (step lines, cards, chart and diagram headlines,
+ *  footage / map / globe titles) shows the plain words: literal asterisks never reach the screen. */
+export const stripEmphasis = (text: string): string => text.replace(/\*([^*]*)\*/g, "$1").replace(/\*/g, "");
+
 /** Chalk-talk steps: "|"-separated lines; a line starting with "=" is the highlighted result (the "=" itself is dropped). */
 export const parseSteps = (text: string): { text: string; result: boolean }[] =>
-  text.split("|").map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith("=") ? { text: l.replace(/^=+\s*/, ""), result: true } : { text: l, result: false }));
+  stripEmphasis(text).split("|").map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith("=") ? { text: l.replace(/^=+\s*/, ""), result: true } : { text: l, result: false }));
 
 /** Clean-tech cards: "|"-separated; "Title: detail" splits on the first colon. */
 export const parseCards = (text: string): { title: string; detail?: string }[] =>
-  text.split("|").map((l) => l.trim()).filter(Boolean).map((l) => {
+  stripEmphasis(text).split("|").map((l) => l.trim()).filter(Boolean).map((l) => {
     const i = l.indexOf(":");
     return i > 0 && i < l.length - 1 ? { title: l.slice(0, i).trim(), detail: l.slice(i + 1).trim() } : { title: l };
   });

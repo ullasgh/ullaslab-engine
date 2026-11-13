@@ -71,7 +71,7 @@ def test_style_does_not_change_chart_data_or_endcard(tmp_path):
 
 # ------------------------------------------------------------------ still checker on synthetic stills
 def rec(**kw):
-    base = {"style": "data-story", "aspect": "16:9", "frame": 75, "file": "a.png", "width": 1920, "height": 1080, "elements": [
+    base = {"style": "data-story", "aspect": "16:9", "frame": 75, "file": "a.png", "width": 1920, "height": 1080, "fonts": [{"family": "Noto Sans", "weight": 700, "loaded": True}], "elements": [
         {"role": "headline", "x": 100, "y": 60, "w": 800, "h": 90, "fontPx": 80},
         {"role": "stamp", "x": 100, "y": 780, "w": 900, "h": 44, "fontPx": 36},
         {"role": "caption", "x": 500, "y": 960, "w": 900, "h": 70, "fontPx": 50}]}
@@ -104,6 +104,8 @@ def test_checker_passes_good_still_and_flags_each_failure(tmp_path):
     assert any("below" in b for b in check_still(r, f))
     r = rec(); r["elements"][2]["x"] = 5
     assert any("caption leaves the safe box" in b for b in check_still(r, f))
+    assert any("not loaded" in b for b in check_still(rec(fonts=[{"family": "Noto Sans", "weight": 700, "loaded": False}]), f))
+    assert any("no rendered-font data" in b for b in check_still(rec(fonts=[]), f))
     assert any("still missing" in b for b in check_still(rec(), tmp_path / "none.png"))
     assert any("no headline" in b for b in check_still(rec(elements=[]), f))
 
