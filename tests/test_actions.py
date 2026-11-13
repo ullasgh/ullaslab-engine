@@ -475,7 +475,20 @@ def test_a4_pacing_fails_each_limit(doc, qc, failing):
     assert not g["passed"] and failing in [c["name"] for c in g["checks"] if not c["passed"]]
 
 
+def _one_take(monkeypatch):
+    monkeypatch.setattr("ullaslab_engine.voice.delivery.default_profile", lambda lang=None: "baseline")
+
+
+def test_voice_budget_multiplies_by_the_takes_of_the_english_profile(monkeypatch):
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
+    b = AC.voice_budget(F.scenes_doc(), 150)
+    assert b["takes"] == 4 and b["projected_min"] == pytest.approx(11.3 * 4, abs=0.3)
+    _one_take(monkeypatch)
+    assert AC.voice_budget(F.scenes_doc(), 150)["projected_min"] == 11.3
+
+
 def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp_path, monkeypatch):
+    _one_take(monkeypatch)
     w = _bundle(tmp_path, target_wpm=150)
     AC.prepare_item(w)
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 106 words at 150 wpm x 16 = 11.3 min > 1
@@ -489,6 +502,7 @@ def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp
 
 
 def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
+    _one_take(monkeypatch)
     monkeypatch.delenv("ULLASLAB_VOICE_BUDGET_MIN", raising=False)
     assert AC.voice_budget(F.scenes_doc(), 150) is None
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
@@ -785,6 +799,7 @@ def test_wer_plus_another_failure_does_not_retry(tmp_path):
 
 
 def test_a_retry_that_cannot_fit_the_voice_budget_is_not_started(tmp_path, monkeypatch):
+    _one_take(monkeypatch)
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.3 min of synthesis: it fits)
     p = _Phase(tmp_path, [3.5, 1.0])
     p.step = 200.0                                              # attempt 1 measures 200 s, 600 s are used: a second does not fit

@@ -154,8 +154,10 @@ def voice_budget(doc: dict, wpm: float) -> dict | None:
         return None
     words = sum(len(strip_markers(t).split()) for t in {output_text(o) for o in doc["outputs"]})
     speech_min = words / max(wpm, 1.0)
-    return {"words": words, "speech_min": round(speech_min, 1), "rtf": RUNNER_RTF,
-            "projected_min": round(speech_min * RUNNER_RTF, 1), "budget_min": float(raw)}
+    from ..voice.delivery import default_profile, load_options
+    takes = int(load_options(default_profile("en")).get("takes", 1))     # best-of-N: N syntheses per line (ASR per take is extra, small)
+    return {"words": words, "speech_min": round(speech_min, 1), "rtf": RUNNER_RTF, "takes": takes,
+            "projected_min": round(speech_min * RUNNER_RTF * takes, 1), "budget_min": float(raw)}
 
 
 def make_voices(work: Path, *, narrate_fn: Callable | None = None, lang: str = "en", log: Callable = print,
