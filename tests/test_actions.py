@@ -62,7 +62,7 @@ def test_fixture_bundle_is_valid_public_safe_and_inside_the_short_limits():
     assert m["studio"]["primary"] == "short" and m["orientation"] == "vertical"
     words = sum(len(t.split()) for t in F.NARRATION)
     assert 75 <= words <= 135          # 30-60 s at 150 wpm; the content repo's Short cap is 135 words
-    assert F.NARRATION[-1].endswith("Follow UllasLab. Education only.")
+    assert F.NARRATION[-1].endswith("Follow UllasLab.")
     blob = json.dumps([m, F.scenes_doc(), F.chart()]).lower()
     assert "macro" not in blob and "synthetic" in blob
     jsonschema.validate(F.scenes_doc(), json.loads((ROOT / "tests/fixtures/scenes/scenes.schema.json").read_text()))
@@ -366,7 +366,7 @@ def test_wer_counts_a_real_word_error_after_canonicalisation():
 
 def test_asr_prompt_spells_the_sign_off_brand():
     from ullaslab_engine import asr
-    assert "UllasLab" in asr._PROMPT and "Education only." in asr._PROMPT
+    assert "UllasLab" in asr._PROMPT and "Education only" not in asr._PROMPT
 
 
 # ------------------------------------------------------------------ CLI glue
@@ -498,14 +498,14 @@ def test_a4_pacing_fails_each_limit(doc, qc, failing):
 def test_voice_budget_refuses_before_any_synthesis_and_export_names_the_gate(tmp_path, monkeypatch):
     w = _bundle(tmp_path, target_wpm=150)
     AC.prepare_item(w)
-    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 106 words at 150 wpm x 16 = 11.3 min > 1
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "1")     # 104 words at 150 wpm x 16 = 11.1 min > 1
     called = []
     with pytest.raises(AC.ActionsError, match="voice budget"):
         AC.make_voices(w, narrate_fn=lambda *a, **k: called.append(1), log=lambda *_: None)
     assert called == []
     qa = AC.export(w)
     g = qa["gates"]["runner_budget"]
-    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 11.3
+    assert not qa["passed"] and not g["passed"] and g["checks"][0]["value"] == 11.1
 
 
 def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
@@ -513,7 +513,7 @@ def test_voice_budget_off_without_the_env(tmp_path, monkeypatch):
     assert AC.voice_budget(F.scenes_doc(), 150) is None
     monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "60")
     b = AC.voice_budget(F.scenes_doc(), 150)
-    assert b["words"] == 106 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration
+    assert b["words"] == 104 and b["projected_min"] <= b["budget_min"]   # short and reel share one narration
     assert b["rtf"] == AC.RUNNER_RTF >= 15.6     # never below the slowest runner rate measured (run 43178997058)
 
 
@@ -548,28 +548,28 @@ def pace_words_override_reaches_once():
     return N.pace_settings("en")["words"] == 0
 
 
-SIGN_OFF = "Follow UllasLab. Education only."
+SIGN_OFF = "Follow UllasLab."
 
 
-@pytest.mark.parametrize("heard", ["Follow Ulos' lab, education only.", "Follow Ullas lab. Education only.", "Follow Ullis Lab education only",
-                                   "follow Ula s lab, education only", "Follow Ula's lab. Education only.", "Follow Ulaslab. Education only.",
-                                   "Follow Ola's lab education only", "Follow Ullah slab. Education only."])
+@pytest.mark.parametrize("heard", ["Follow Ulos' lab", "Follow Ullas lab", "Follow Ullis Lab",
+                                   "follow Ula s lab", "Follow Ula's lab", "Follow Ulaslab",
+                                   "Follow Ola's lab", "Follow Ullah slab"])
 def test_the_lexicon_name_is_accepted_in_every_spelling_the_asr_gives_it(heard):
     """The brand is a proper name no ASR can spell; its entry in config/lexicon.yaml carries `name: true`."""
     from ullaslab_engine.asr import error_rate
     assert error_rate(SIGN_OFF, heard, "en") == 0.0
 
 
-@pytest.mark.parametrize("heard", ["Follow us lab. Education only.", "Follow Alice lab. Education only.", "Follow Wallace lab. Education only.",
-                                   "Follow Ellis club. Education only.", "Follow Ullas laugh. Education only.", "Follow all. Education only.",
-                                   "Follow Ulysses lab. Education only."])
+@pytest.mark.parametrize("heard", ["Follow us lab", "Follow Alice lab", "Follow Wallace lab",
+                                   "Follow Ellis club", "Follow Ullas laugh", "Follow all",
+                                   "Follow Ulysses lab"])
 def test_near_miss_words_are_not_absorbed_into_the_name(heard):
     from ullaslab_engine.asr import error_rate
     assert error_rate(SIGN_OFF, heard, "en") > 0
 
 
-@pytest.mark.parametrize("heard", ["Follow Google lab. Education only.", "Follow Ulysses. Education only.", "Follow us. Education only.",
-                                   "Follow Ullas lab. Education on.", "Follow Ullas lab education only now", "Follow the lab. Education only."])
+@pytest.mark.parametrize("heard", ["Follow Google lab", "Follow Ulysses", "Follow us",
+                                   "Follow Ullas lab now", "Follow the lab"])
 def test_other_words_around_the_name_still_count_as_errors(heard):
     from ullaslab_engine.asr import error_rate
     assert error_rate(SIGN_OFF, heard, "en") > 0
@@ -583,13 +583,13 @@ def test_names_come_from_the_lexicon_not_from_code(tmp_path, monkeypatch):
     monkeypatch.setenv("ULLASLAB_LEXICON", str(lex))
     assert W.proper_names("en") == []
     from ullaslab_engine.asr import error_rate
-    assert error_rate(SIGN_OFF, "Follow Ulos lab. Education only.", "en") > 0       # no `name: true`, no leniency
+    assert error_rate(SIGN_OFF, "Follow Ulos lab", "en") > 0       # no `name: true`, no leniency
 
 
 def test_wer_diff_lists_the_differing_tokens_for_the_private_log():
     from ullaslab_engine.asr import wer_diff
-    d = wer_diff("It was 4.95 percent on the day. " + SIGN_OFF, "It was 4.95 percent percent on the day. Follow Ula's lab. Education on.", "en")
-    assert d == ["I ->percent", "S only->on"]
+    d = wer_diff("It was 4.95 percent on the day. " + SIGN_OFF, "It was 4.95 percent percent on the day. Follow Ula's lab.", "en")
+    assert d == ["I ->percent"]
     assert wer_diff("a b c", "a b c", "en") == []
 
 
@@ -806,7 +806,7 @@ def test_wer_plus_another_failure_does_not_retry(tmp_path):
 
 
 def test_a_retry_that_cannot_fit_the_voice_budget_is_not_started(tmp_path, monkeypatch):
-    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.3 min of synthesis: it fits)
+    monkeypatch.setenv("ULLASLAB_VOICE_BUDGET_MIN", "12")       # 720 s (the fixture projects 11.1 min of synthesis: it fits)
     p = _Phase(tmp_path, [3.5, 1.0])
     p.step = 200.0                                              # attempt 1 measures 200 s, 600 s are used: a second does not fit
     res, lines = p.run()

@@ -20,7 +20,7 @@ NARRATION = [
     "This made up chart shows a price index climbing from one hundred to one hundred and twelve over three years.",
     "Savings that earn less than that climb lose buying power, while savings that keep pace hold their ground.",
     "Economists call the gap between the two the real return, and it is worth checking before comparing any two options.",
-    "So next time a number looks large, ask what it buys. Follow UllasLab. Education only.",
+    "So next time a number looks large, ask what it buys. Follow UllasLab.",
 ]
 ROLES = ["hook", "setup", "evidence", "mechanism", "consequence", "disclaimer"]
 # One `flow` scene whose data_point ref has a visual_data.json entry (VISUAL), and one chart scene that shows a zoomed

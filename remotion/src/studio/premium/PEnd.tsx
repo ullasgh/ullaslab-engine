@@ -43,7 +43,7 @@ export const AnimatedMark: React.FC<{ mark: BrandMark; size: number }> = ({ mark
   );
 };
 
-const Card: React.FC<{ rtl?: boolean; mark?: BrandMark; showEdu?: boolean }> = ({ rtl, mark, showEdu = false }) => {
+const Card: React.FC<{ rtl?: boolean; mark?: BrandMark; showEdu?: boolean }> = ({ rtl, mark, showEdu = true }) => {
   const { L, lang } = useStudio();
   const f = useCurrentFrame();
   const T = PTYPE[L.o];
@@ -59,7 +59,7 @@ const Card: React.FC<{ rtl?: boolean; mark?: BrandMark; showEdu?: boolean }> = (
         {mark && <AnimatedMark mark={mark} size={msize} />}
         <div style={{ height: SP.xs }} />
         <div data-audit="headline" style={{ fontSize: T.headline * 1.1, fontWeight: 700, lineHeight: 1.15, opacity: EASE.out(range(f, 24, 12)), transform: `translateY(${(1 - EASE.out(range(f, 24, 14))) * 18}px)` }}>{follow}</div>
-        {showEdu && <div data-audit="body" style={{ fontSize: T.body, color: PT.muted, lineHeight: 1.25, opacity: EASE.out(range(f, 34, 12)), transform: `translateY(${(1 - EASE.out(range(f, 34, 14))) * 14}px)` }}>{edu}</div>}
+        {showEdu && edu && <div data-audit="body" style={{ fontSize: T.body, color: PT.muted, lineHeight: 1.25, opacity: EASE.out(range(f, 34, 12)), transform: `translateY(${(1 - EASE.out(range(f, 34, 14))) * 14}px)` }}>{edu}</div>}
         <div style={{ width: 120 + breathe(f, 80, 28), height: 6, background: PT.amber, borderRadius: 3, marginTop: SP.s, opacity: EASE.out(range(f, 40, 10)) }} />
       </div>
     </AbsoluteFill>
