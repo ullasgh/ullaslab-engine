@@ -27,7 +27,7 @@ TAGGED = ("[[d:hook]] Copper stocks eased but a firmer case remains. [[d:explain
 def test_vocabulary_is_fixed_and_the_yaml_agrees():
     assert D.TAGS == ("hook", "tension", "reveal", "explain", "caution", "signoff")
     assert tuple(yaml.safe_load((CONFIG_DIR / "delivery.yaml").read_text())["tags"]) == D.TAGS
-    assert D.profile_names() == ["baseline", "mild", "strong", "tuned"]
+    assert D.profile_names() == ["baseline", "mild", "strong", "tuned", "sample4"]
 
 
 def test_every_shipped_profile_loads_inside_its_bounds():
@@ -42,8 +42,9 @@ def test_every_shipped_profile_loads_inside_its_bounds():
 
 def test_baseline_profile_is_empty_and_default_is_baseline():
     assert D.load_profile("baseline") == {}
-    assert D.default_profile("en") == "baseline"
-    assert D.default_profile() == "baseline"
+    assert D.default_profile() == "baseline"            # languages without their own entry
+    assert D.default_profile("hi") == "baseline"
+    assert D.default_profile("en") == "sample4"         # owner decision 2026-11-13: English narration uses sample4
 
 
 def test_profile_validation_rejects_bad_names_tags_fields_and_values(tmp_path, monkeypatch):
@@ -99,7 +100,7 @@ def test_short_chunk_merge_keeps_the_first_tag():
 def _calls(eng, text, profile=None, **kw):
     e = FakeClone(words_per_s=2.6)
     eng(e)
-    ov = {"delivery_profile": profile} if profile else None
+    ov = {"delivery_profile": profile or "baseline"}      # English defaults to sample4; these tests pin the profile they mean
     N.narrate(text, "en", engine="fakeclone", gate=False, normalize=False, overrides=ov, **kw)
     return e.calls
 
@@ -227,8 +228,59 @@ def test_every_delivery_pause_stays_well_under_the_silence_limit():
     limit = quality()["A3_narration"]["max_silence_s"]
     for name in D.profile_names():
         for st in D.load_profile(name).values():
-            assert st.get("pause_before", 0) + st.get("pause_after", 0) + 0.55 < limit
+            # apply_delivery keeps the LONGER of the previous line's pause_after and this line's pause_before (max, not a sum);
+            # the trimmed chunk edges add about 0.1 s to the measured gap (A3 max_silence_s counts them)
+            assert max(st.get("pause_before", 0), st.get("pause_after", 0)) + 0.1 < limit
 
 
-def test_config_default_is_baseline_in_languages_yaml():
-    assert yaml.safe_load((CONFIG_DIR / "languages.yaml").read_text())["voice_defaults"]["delivery_profile"] == "baseline"
+def test_config_default_is_baseline_in_languages_yaml_and_english_uses_sample4():
+    cfg = yaml.safe_load((CONFIG_DIR / "languages.yaml").read_text())
+    assert cfg["voice_defaults"]["delivery_profile"] == "baseline"
+    assert {x["code"]: x.get("delivery_profile") for x in cfg["languages"]}["en"] == "sample4"
+    assert {x["code"]: x["ref_clip"] for x in cfg["languages"] if x["code"] == "en"} == {"en": 1}   # one reference clip: clip 1
+
+
+# ---------------------------------------------------------------- sample4 profile and whole-read options
+def test_sample4_recipe_is_what_the_owner_heard():
+    assert D.load_options("sample4") == {"takes": 4, "t3_weights": "v3", "pause_floor": 1.0}
+    p = D.load_profile("sample4")
+    assert p["hook"] == {"pause_after": 0.6} and p["tension"] == {"tempo": 0.97}
+    assert p["reveal"] == {"pause_before": 0.7, "tempo": 0.95} and p["caution"] == {"pause_before": 0.55, "tempo": 0.95}
+    assert p["signoff"] == {"pause_before": 0.6, "tempo": 0.96} and p["explain"] == {}
+    assert all(not {"exaggeration", "cfg_weight", "temperature"} & set(v) for v in p.values())   # sampling untouched
+
+
+def test_baseline_and_the_older_profiles_have_no_options():
+    for name in ("baseline", "mild", "strong", "tuned"):
+        assert D.load_options(name) == {}
+
+
+def test_options_validation(monkeypatch):
+    for bad, msg in [({"p": {"_options": {"takes": 0}}}, "outside 1..8"), ({"p": {"_options": {"takes": 9}}}, "outside 1..8"),
+                     ({"p": {"_options": {"takes": 2.5}}}, "outside 1..8"), ({"p": {"_options": {"t3_weights": "v4"}}}, "not one of"),
+                     ({"p": {"_options": {"pause_floor": 1.5}}}, "outside 0..1"), ({"p": {"_options": {"speed": 1}}}, "unknown key")]:
+        monkeypatch.setattr(D, "_load", lambda name, bad=bad: {"profiles": bad})
+        with pytest.raises(ValueError, match=msg):
+            D.load_options("p")
+    monkeypatch.setattr(D, "_load", lambda name: {"profiles": {"p": {"_options": {"takes": 3}, "hook": {"tempo": 0.95}}}})
+    assert D.load_options("p") == {"takes": 3} and D.load_profile("p") == {"hook": {"tempo": 0.95}}
+
+
+def test_english_default_carries_the_sample4_options_and_baseline_is_the_one_value_rollback(eng):
+    new = _calls(eng, TAGGED, "sample4")
+    assert all(s.get("t3_weights") == "v3" for _, s in new)
+    old = _calls(eng, TAGGED, "baseline")
+    assert all("t3_weights" not in s for _, s in old)                     # exactly the settings dict of the version before
+    assert D.default_profile("en") == "sample4"
+
+
+def test_sample4_sets_the_pace_floor_and_baseline_keeps_the_old_one():
+    assert N.pace_settings("en", None, {"pause_floor": 1.0})["pause_floor"] == 1.0
+    assert N.pace_settings("en", None)["pause_floor"] == 0.6
+    assert N.pace_settings("en", {"pace": {"pause_floor": 0.8}}, {"pause_floor": 1.0})["pause_floor"] == 0.8   # explicit overrides still win
+    assert N.pace_settings("en", None, {"pause_floor": 1.0})["target_wpm"] == 150                          # target pace unchanged
+
+
+def test_the_gate_limits_are_not_a_function_of_the_profile():
+    a3 = quality()["A3_narration"]
+    assert (a3["max_wer_pct"], a3["wpm_min"], a3["wpm_max"], a3["max_silence_s"]) == (3, 135, 175, 1.2)

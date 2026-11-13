@@ -14,7 +14,7 @@ Generic code only; no voice data lives in this repo (`tests` assert no audio fil
 | `voice/delivery.py` | per-line delivery: the tag vocabulary (hook, tension, reveal, explain, caution, signoff), the `[[d:tag]]` marker, the tag-to-settings mapping per profile (`config/delivery.yaml`) |
 | `voice/demo.py` | local listening page + choices form for the owner |
 
-Chatterbox guidance (upstream README, checked 2026-11-08): "Ensure that the reference clip matches the specified language tag. Otherwise, language transfer outputs may inherit the accent of the reference clip's language. To mitigate this, set `cfg_weight` to `0`." Defaults `exaggeration=0.5, cfg_weight=0.5` work for most prompts; we use 0.4 for calmer narration. Upstream now offers a V3 checkpoint (`t3_model="v3"`); we stay on the pinned 0.1.7 (V2) until a deliberate upgrade.
+Chatterbox guidance (upstream README, checked 2026-11-08): "Ensure that the reference clip matches the specified language tag. Otherwise, language transfer outputs may inherit the accent of the reference clip's language. To mitigate this, set `cfg_weight` to `0`." Defaults `exaggeration=0.5, cfg_weight=0.5` work for most prompts; we use 0.4 for calmer narration. Upstream also offers a V3 checkpoint (`t3_model="v3"` on master). The library stays pinned at 0.1.7; English narration loads the V3 weights file from a pinned Hugging Face revision with a sha256 check (see "Sample 4" below). Every other language stays on V2.
 Indic Parler-TTS: recommended speakers from the model card (hi Rohit/Divya, ta Jaya/Kavitha, te Prakash/Lalitha, kn Suresh/Anu, ml Anjali/Harish, mr Sanjay/Sunita, bn Arjun/Aditi, gu Yash/Neha); description asks for a calm, neutral narration tone, "very clear audio", close recording.
 
 CLI (local): `voice-analyze --file F`, `voice-prepare --file F --out DIR`, `voice-score --file W`, `voice-demo --out DIR [--refs DIR] [--langs a,b] [--max-per-lang N]`.
@@ -37,3 +37,30 @@ A3 (wpm 135-175, WER 3%, max silence 1.2 s, loudness), the duration limit and th
 measure whatever the profile produces. Bounds on every profile value are enforced when `config/delivery.yaml` is read
 (`delivery.BOUNDS`). Chatterbox guidance (upstream README): higher `exaggeration` tends to speed speech up; lower `cfg_weight` (about 0.3)
 slows it back down.
+
+
+## Sample 4: the English narration (owner decision 2026-11-13)
+After listening to the samples the owner chose "sample 4" for all English narration. It is the delivery profile `sample4`
+(`config/delivery.yaml`), selected by `delivery_profile: sample4` on the `en` entry of `config/languages.yaml`. Rollback is one value:
+set that entry to `baseline` (or delete it) and English is byte for byte what it was before: one take per line, V2 weights, pace floor 0.6.
+
+| part | where | what |
+|---|---|---|
+| reference clip | `languages.yaml` en `ref_clip: 1` | the owner's new recording, clip 1 (the content repo's config says the same; sync test) |
+| V3 weights | `delivery.yaml` `_options.t3_weights: v3`, `tts/chatterbox_engine.py` | the V3 T3 checkpoint, pinned to an exact Hugging Face revision and sha256-verified, loaded by the unchanged 0.1.7 code. Not a library upgrade. |
+| best of N takes | `_options.takes: 4`, `voice/takes.py` | each line is synthesised N times on seeds base + 10 j; each take is checked with the gate's own ASR and WER canonicalisation; the widest p10-p90 pitch among the most accurate takes of the right length, without pitch-jump artefacts, is kept |
+| natural pauses | `_options.pause_floor: 1.0` | the pacer no longer shortens punctuation pauses (target 150 wpm is unchanged) |
+| key-line timing | tags in the profile | 0.55-0.7 s pause before reveal, caution and sign-off lines, 0.6 s after the hook, tempo 0.95-0.97 on those lines |
+
+No gate, limit or threshold changed: A3 wer_pct 3, wpm 135-175, max silence 1.2 s, the duration limits and the WER-only retry (3 attempts,
+seed base + 1000 i) measure whatever the profile produces. The takes are chosen between candidates of the same line only; the file-level gates
+run after that exactly as before. Cost: N times the synthesis time plus one ASR pass per take (see the pull request for the measured figures
+and the runner budget). `ULLASLAB_VOICE_BUDGET_MIN` accounts for it (`studio/actions.voice_budget`).
+
+## Letter-reading rule (owner standard 2026-11-13)
+Every short form meant to be read letter by letter is spoken as letters: "U.S." and "US" both as "U S", never as the word "us".
+`config/pronunciation.yaml` lists generic public initialisms (`letters`) and acronyms spoken as words (`words`); `voice/lexicon.py` turns it into lexicon
+entries for English (dotted key also matches its bare form and keeps a sentence stop at the end of a text; plurals "ETFs", "ETF's" speak as letters plus s;
+the lexicon's `bp` is plural except after "1", "a" and "one"). `wer_norm` compares the written and spoken forms alike ("U.S.", "US", "U S"; "1 bp",
+"1 basis point"). The private content repo keeps the same list for its script gate; `tests/test_pronunciation.py` (engine, with `ULLASLAB_CONTENT_DIR`)
+and `tests/test_voice.py` (content, with `ULLASLAB_ENGINE_DIR`) fail when the two drift.
