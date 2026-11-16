@@ -8,6 +8,11 @@ from ..audio import Wav
 from .base import EngineUnavailable
 
 MODEL = "ai4bharat/indic-parler-tts"
+# Commits read from the local Parler cache on 2026-11-16. PARLER_REVISION must equal the revision of the mirrored
+# snapshot (payload model.revision): an offline load looks for exactly this snapshot name.
+PARLER_REVISION = "660bc53c64ae83150613264111708a0465211237"
+T5_MODEL = "google/flan-t5-large"  # the description encoder's tokenizer (the model config names it)
+T5_REVISION = "0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a"
 # Recommended speakers from the model card (checked 2026-11-08); index 0 is the default, 1 the alternative.
 RECOMMENDED = {
     "hi": ["Rohit", "Divya"], "ta": ["Jaya", "Kavitha"], "te": ["Prakash", "Lalitha"], "kn": ["Suresh", "Anu"],
@@ -36,9 +41,12 @@ class IndicParlerEngine:
         from parler_tts import ParlerTTSForConditionalGeneration
         from transformers import AutoTokenizer
         self._torch = torch
-        self._model = ParlerTTSForConditionalGeneration.from_pretrained(MODEL).to("cpu")
-        self._tok = AutoTokenizer.from_pretrained(MODEL)
-        self._dtok = AutoTokenizer.from_pretrained(self._model.config.text_encoder._name_or_path)
+        self._model = ParlerTTSForConditionalGeneration.from_pretrained(MODEL, revision=PARLER_REVISION).to("cpu")
+        self._tok = AutoTokenizer.from_pretrained(MODEL, revision=PARLER_REVISION)
+        enc = self._model.config.text_encoder._name_or_path
+        if enc != T5_MODEL:  # the model config must still name the encoder whose revision is pinned here
+            raise EngineUnavailable(f"unexpected description encoder {enc!r}")
+        self._dtok = AutoTokenizer.from_pretrained(enc, revision=T5_REVISION)
 
     def supports(self, lang: str) -> bool:
         return lang in SPEAKERS

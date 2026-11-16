@@ -1,12 +1,19 @@
 """Chatterbox-Multilingual (MIT) voice clone. Pin version: upstream retired Aug 2026 (feasibility B3).
 Languages of ours it covers: en, hi, es, pt, ar, ja. Output carries Resemble's PerTh watermark (kept)."""
 from __future__ import annotations
+import os
 from pathlib import Path
 import numpy as np
 from ..audio import Wav
 from .base import EngineUnavailable
 
 _LANGS = {"en", "hi", "es", "pt", "ar", "ja"}
+REPO_ID = "ResembleAI/chatterbox"
+# Commit of ResembleAI/chatterbox read from the local Hugging Face cache on 2026-11-16. chatterbox-tts 0.1.7's own
+# from_pretrained downloads revision "main"; we download this commit and load it with from_local instead.
+CHATTERBOX_REVISION = "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18"
+# Same file list as chatterbox-tts 0.1.7 ChatterboxMultilingualTTS.from_pretrained.
+_FILES = ["ve.pt", "t3_mtl23ls_v2.safetensors", "s3gen.pt", "grapheme_mtl_merged_expanded_v1.json", "conds.pt", "Cangjie5_TC.json"]
 
 
 class ChatterboxEngine:
@@ -16,9 +23,12 @@ class ChatterboxEngine:
 
     def __init__(self):
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS  # ImportError -> EngineUnavailable
+        from huggingface_hub import snapshot_download
         import torch
         dev = "cuda" if torch.cuda.is_available() else "cpu"
-        self._model = ChatterboxMultilingualTTS.from_pretrained(device=dev)
+        ckpt = snapshot_download(repo_id=REPO_ID, repo_type="model", revision=CHATTERBOX_REVISION, allow_patterns=_FILES,
+                                 token=os.getenv("HF_TOKEN"))
+        self._model = ChatterboxMultilingualTTS.from_local(ckpt, dev)
 
     def supports(self, lang: str) -> bool:
         return lang in _LANGS

@@ -1,0 +1,19 @@
+# Dependency update PRs for the public engine. Updates only open pull requests; nothing merges by itself.
+# Actions are pinned by full commit SHA (tests/test_workflows.py); Dependabot keeps the SHA and the version comment current.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "npm"
+    directory: "/remotion"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
