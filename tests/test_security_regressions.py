@@ -83,7 +83,7 @@ def test_chatterbox_downloads_the_pinned_snapshot_not_main(monkeypatch):
     monkeypatch.setitem(sys.modules, "chatterbox.mtl_tts", types.SimpleNamespace(ChatterboxMultilingualTTS=Cls))
     monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False)))
     eng = chatterbox_engine.ChatterboxEngine()
-    assert eng._model == "model"
+    assert eng.model("v2") == "model"  # loading is now lazy and per-variant; the v2 load must still use the pinned snapshot
     assert got["revision"] == chatterbox_engine.CHATTERBOX_REVISION and got["repo_id"] == "ResembleAI/chatterbox"
     assert got["local"] == ("/cache/snap", "cpu")
 
