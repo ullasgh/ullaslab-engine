@@ -18,6 +18,12 @@ from ..audio import Wav
 from .base import EngineUnavailable
 
 _LANGS = {"en", "hi", "es", "pt", "ar", "ja"}
+REPO_ID = "ResembleAI/chatterbox"
+# Commit of ResembleAI/chatterbox read from the local Hugging Face cache on 2026-11-16. chatterbox-tts 0.1.7's own
+# from_pretrained downloads revision "main"; we download this commit and load it with from_local instead.
+CHATTERBOX_REVISION = "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18"
+# Same file list as chatterbox-tts 0.1.7 ChatterboxMultilingualTTS.from_pretrained.
+_FILES = ["ve.pt", "t3_mtl23ls_v2.safetensors", "s3gen.pt", "grapheme_mtl_merged_expanded_v1.json", "conds.pt", "Cangjie5_TC.json"]
 
 V3_REPO = "ResembleAI/chatterbox"
 V3_REVISION = "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18"     # repo head on 2026-11-13 (last modified 2026-06-10)
@@ -83,7 +89,11 @@ class ChatterboxEngine:
                 return self._cls.from_local(td.name, dev)
             finally:
                 td.cleanup()                 # the weights are in memory; the links are not needed any more
-        return self._cls.from_pretrained(device=dev)
+        # v2: the pinned commit (not the moving "main" that from_pretrained would fetch), loaded from the local files
+        from huggingface_hub import snapshot_download
+        ckpt = snapshot_download(repo_id=REPO_ID, repo_type="model", revision=CHATTERBOX_REVISION, allow_patterns=_FILES,
+                                 token=os.getenv("HF_TOKEN"))
+        return self._cls.from_local(ckpt, dev)
 
     def model(self, variant: str = "v2"):
         if variant not in T3_VARIANTS:

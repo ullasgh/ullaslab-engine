@@ -115,7 +115,10 @@ def mask_lines(p: dict) -> list[str]:
 def download(url: str, dest: Path, max_bytes: int = MAX_BUNDLE_BYTES) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with requests.get(url, stream=True, timeout=(10, 120)) as r:
+        # Presigned R2 URLs never redirect: a redirect would leave the allow-listed host, so it is refused.
+        with requests.get(url, stream=True, timeout=(10, 120), allow_redirects=False) as r:
+            if 300 <= r.status_code < 400:
+                raise TransferError("download refused: unexpected redirect")
             r.raise_for_status()
             n = 0
             with open(dest, "wb") as f:
@@ -132,7 +135,9 @@ def download(url: str, dest: Path, max_bytes: int = MAX_BUNDLE_BYTES) -> Path:
 def upload(url: str, path: Path, content_type: str = "application/octet-stream") -> None:
     try:
         with open(path, "rb") as f:
-            r = requests.put(url, data=f, headers={"Content-Type": content_type}, timeout=(10, 600))
+            r = requests.put(url, data=f, headers={"Content-Type": content_type}, timeout=(10, 600), allow_redirects=False)
+        if 300 <= r.status_code < 400:
+            raise TransferError("upload refused: unexpected redirect")
         r.raise_for_status()
     except requests.RequestException as e:
         raise TransferError(f"upload failed ({type(e).__name__})") from None

@@ -25,6 +25,15 @@ def initial_prompt(lang: str) -> str | None:
         return None
 
 
+# Hugging Face commit hashes of the faster-whisper conversions (Systran/faster-whisper-<size>), read from the local
+# cache on 2026-11-16. A size without an entry is refused: an unpinned download follows the repo's moving `main`.
+# To move to a new revision, review it upstream, then change the hash here.
+WHISPER_REVISIONS = {
+    "large-v3": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+    "small": "536b0662742c02347bc0e980a01041f333bce120",
+}
+
+
 def model_size() -> str:
     return os.environ.get("ULLASLAB_ASR_MODEL", "large-v3")
 
@@ -34,7 +43,10 @@ def transcribe(path: Path, lang: str) -> list[tuple[str, float, float]]:
     from faster_whisper import WhisperModel
     size = model_size()
     if size not in _MODEL:
-        _MODEL[size] = WhisperModel(size, device="cpu", compute_type="int8")
+        if size not in WHISPER_REVISIONS:
+            raise ValueError(f"ASR model {size!r} has no pinned revision (pinned: {', '.join(sorted(WHISPER_REVISIONS))}); "
+                             "add its commit hash to asr.WHISPER_REVISIONS")
+        _MODEL[size] = WhisperModel(size, device="cpu", compute_type="int8", revision=WHISPER_REVISIONS[size])
     from .audio import Wav, resample
     audio = resample(Wav.load(path), 16000).samples  # decode ourselves: no dependency on PyAV decoding
     segs, _ = _MODEL[size].transcribe(audio, language=lang, word_timestamps=True, beam_size=5, initial_prompt=initial_prompt(lang),
