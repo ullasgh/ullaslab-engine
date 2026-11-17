@@ -6,7 +6,7 @@ import type { CameraMove, StudioScene, TransitionKind } from "./scenes";
 
 export type DirectorScene = {
   id: string; role?: string;
-  narration: { text: string; start_s?: number | null; end_s?: number | null };
+  narration: { text: string; start_s?: number | null; end_s?: number | null; words?: { w: string; start: number; end: number }[] | null };
   type: StudioScene["type"]; palette: Topic;
   camera_move: string; transition: string;
   on_screen_text?: string | null; illustrative?: boolean;
@@ -25,9 +25,16 @@ export const TRANSITION_MAP: Record<string, TransitionKind> = {
   push: "match_move", dip_to_black: "crossfade", pattern_interrupt: "cut",
 };
 
+// Premium style: the director's names map onto the premium set (a real push, a shared-element morph, a light-sweep wipe and a real pattern
+// interrupt) instead of collapsing into cut and match_move. Other styles keep TRANSITION_MAP above.
+export const PREMIUM_TRANSITION_MAP: Record<string, TransitionKind> = {
+  cut: "cut", crossfade: "crossfade", wipe: "sweep", match_cut: "morph",
+  push: "push_through", dip_to_black: "crossfade", pattern_interrupt: "interrupt",
+};
+
 export const isDirectorScene = (s: unknown): s is DirectorScene => !!s && typeof s === "object" && "narration" in (s as object);
 
-export const fromDirectorScenes = (scenes: DirectorScene[], fps = 30, fallbackSeconds = 3): StudioScene[] => {
+export const fromDirectorScenes = (scenes: DirectorScene[], fps = 30, fallbackSeconds = 3, itemStyle?: unknown): StudioScene[] => {
   let cursor = 0;
   return scenes.map((d) => {
     const a = d.narration.start_s, b = d.narration.end_s;
@@ -36,8 +43,11 @@ export const fromDirectorScenes = (scenes: DirectorScene[], fps = 30, fallbackSe
     cursor = end;
     const out: StudioScene = {
       id: d.id, type: d.type, start, end, palette: d.palette,
-      camera_move: CAMERA_MAP[d.camera_move] ?? "none", transition: TRANSITION_MAP[d.transition] ?? "cut",
+      camera_move: CAMERA_MAP[d.camera_move] ?? "none",
+      transition: ((isStyleId(d.style) ? d.style : itemStyle) === "premium" ? PREMIUM_TRANSITION_MAP : TRANSITION_MAP)[d.transition] ?? "cut",
     };
+    if (d.narration.words?.length) out.words = d.narration.words;
+    if (d.role) out.role = d.role;
     if (isStyleId(d.style)) out.style = d.style;
     if (d.on_screen_text) out.on_screen_text = d.on_screen_text;
     if (d.data_ref?.ref) out.data_ref = d.data_ref.ref;
@@ -49,5 +59,5 @@ export const fromDirectorScenes = (scenes: DirectorScene[], fps = 30, fallbackSe
 export const outputFor = (file: DirectorFile, aspect: "16:9" | "9:16", which?: string): DirectorOutput | undefined =>
   file.outputs.find((o) => o.aspect === aspect && (!which || o.output === which));
 
-export const normalizeScenes = (scenes: (StudioScene | DirectorScene)[], fps = 30): StudioScene[] =>
-  scenes.length && isDirectorScene(scenes[0]) ? fromDirectorScenes(scenes as DirectorScene[], fps) : (scenes as StudioScene[]);
+export const normalizeScenes = (scenes: (StudioScene | DirectorScene)[], fps = 30, itemStyle?: unknown): StudioScene[] =>
+  scenes.length && isDirectorScene(scenes[0]) ? fromDirectorScenes(scenes as DirectorScene[], fps, 3, itemStyle) : (scenes as StudioScene[]);

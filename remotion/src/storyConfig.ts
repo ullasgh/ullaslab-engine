@@ -7,7 +7,7 @@ export const STORY_MIN_S = 10;
 export const STORY_MAX_S = 15;
 
 export type StoryProps = {
-  lang: string; text: string; sub: string; source: string; edu: string; cta: string; aiVoice: string;
+  lang: string; text: string; sub: string; source: string; cta: string; aiVoice: string;
   durationS: number; audio: string; rtl: boolean; accent: string; audit?: boolean;
 };
 

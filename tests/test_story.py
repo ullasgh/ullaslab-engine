@@ -89,7 +89,7 @@ def el(role, x=60, y=400, w=900, h=120, px=60, fg="#F2F5F9", bg="#0E1726"):
     return {"role": role, "x": x, "y": y, "w": w, "h": h, "fontPx": px, "fg": fg, "bg": bg, "words": 3}
 
 
-PROPS = {"lang": "en", "text": "Yields moved. Here is the context", "sub": "", "source": "Source: FRED", "edu": "Education only",
+PROPS = {"lang": "en", "text": "Yields moved. Here is the context", "sub": "", "source": "Source: FRED",
          "cta": "New Reel on our profile", "aiVoice": "", "durationS": 12.0, "audio": "", "rtl": False, "accent": "#4FD1C5"}
 
 
@@ -129,18 +129,13 @@ def test_safe_zone_json_matches_remotion_config():
     assert "10;" in ts and "15;" in ts
 
 
-def test_edu_line_is_first_sentence():
-    assert ST.edu_line({"en": "Education only. Not investment advice.", "hi": "केवल शिक्षा। निवेश सलाह नहीं।"}, "hi") == "केवल शिक्षा"
-    assert ST.edu_line("Education only. Not advice.", "en") == "Education only"
-
-
 def test_story_langs_and_props(work):
     m = load_bundle(work / "bundle")
     assert ST.story_langs(m) == []
     m["story"] = {"text": {"en": "Rates moved, context inside"}, "sub": {"en": "A calm look at data"}}
     assert ST.story_langs(m) == ["en"]
     p = ST.make_props(m, "en", 12.0, "story_audio.wav")
-    assert p["cta"] == "New Reel on our profile" and p["edu"].startswith("Education only")
+    assert p["cta"] == "New Reel on our profile" and "edu" not in p
     assert p["aiVoice"] == "" or m["synthetic_voice"]
 
 
@@ -212,3 +207,8 @@ def test_source_stamp_has_no_double_prefix():
     assert ST.clean_source_name("Source: Source: FRED") == "FRED"
     m = {"scenes": [{"chart_data": {"source": {"name": "Source: FRED"}}}]}
     assert ST.source_stamp(m, "en") == "Source: FRED"
+
+
+def test_story_card_has_no_education_line_and_a_retired_edu_prop_fails():
+    assert ST.qa_story(PROPS, None, _layout([el("headline")]))["passed"]            # props without `edu` are fine
+    assert "no_retired_education_line" in failed(ST.qa_story({**PROPS, "edu": "Education only"}, None, _layout([el("body")])))

@@ -140,6 +140,7 @@ def canonical_for_wer(text: str, lang: str = "en") -> str:
     t = re.sub(r"\bper cent\b", "percent", t, flags=re.I)
     t = re.sub(r"\b(\d+(?:\.\d+)?)\s?(?:bps|bp)\b", r"\1 basis points", t, flags=re.I)
     t = re.sub(r"\b(?:bps|bp)\b", "basis points", t, flags=re.I)
+    t = re.sub(r"\bbasis point\b", "basis points", t, flags=re.I)     # "1 bp" is spoken singular, "25 bp" plural: one form
     t = t.replace("&", " and ")
     t = re.sub(r"(?<=\d)\s?([.,])\s?(?=\d)", r"\1", t)  # "5 .50" -> "5.50"
     t = _RE_TRAIL0.sub(_decimals, t)

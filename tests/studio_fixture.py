@@ -12,7 +12,7 @@ NARRATION = [
     "Why did a bond auction in Tokyo move rates in Texas?",
     "Japanese investors hold a large share of United States government debt, so a weak auction there can lift yields here.",
     "Look at the ten year yield over the last three years, it rose from two point five percent to four percent.",
-    "When borrowing costs rise, mortgages, car loans and company debt can all become more expensive. Follow UllasLab. Education only.",
+    "When borrowing costs rise, mortgages, car loans and company debt can all become more expensive. Follow UllasLab.",
 ]
 ROLES = ["hook", "setup", "evidence", "consequence"]
 TYPES = {"long": ["kinetic", "footage", "chart", "map"], "short": ["kinetic", "chart", "footage", "map"], "reel": ["kinetic", "footage", "chart", "kinetic"]}

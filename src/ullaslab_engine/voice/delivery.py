@@ -65,6 +65,42 @@ def default_profile(lang: str | None = None) -> str:
     return str(name)
 
 
+OPTIONS = "_options"
+OPTION_KEYS = {"takes": int, "t3_weights": str, "pause_floor": float}
+T3_WEIGHTS = ("v2", "v3")
+
+
+def load_options(name: str) -> dict:
+    """Whole-read options of a profile (the reserved `_options` entry of config/delivery.yaml): `takes` (best-of-N takes per
+    line, 1-8), `t3_weights` (Chatterbox T3 weights variant, v2 | v3) and `pause_floor` (the pacer's floor on punctuation
+    pauses, 0-1). Absent = the code defaults (1 take, v2, the pace setting's own floor): `baseline` has none, which is
+    today's behaviour exactly. ValueError on an unknown profile, key or out-of-range value."""
+    profiles = _load("delivery.yaml").get("profiles") or {}
+    if name not in profiles:
+        raise ValueError(f"unknown delivery profile {name!r} (have {sorted(profiles)})")
+    raw = dict((profiles[name] or {}).get(OPTIONS) or {})
+    bad = set(raw) - set(OPTION_KEYS)
+    if bad:
+        raise ValueError(f"delivery profile {name}.{OPTIONS}: unknown key(s) {sorted(bad)}")
+    out: dict = {}
+    for k, v in raw.items():
+        if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+            raise ValueError(f"delivery profile {name}.{OPTIONS}.{k}={v!r}")
+        if k == "takes":
+            if not isinstance(v, int) or not 1 <= v <= 8:
+                raise ValueError(f"delivery profile {name}.{OPTIONS}.takes={v!r} outside 1..8")
+            out[k] = v
+        elif k == "t3_weights":
+            if v not in T3_WEIGHTS:
+                raise ValueError(f"delivery profile {name}.{OPTIONS}.t3_weights={v!r} not one of {T3_WEIGHTS}")
+            out[k] = v
+        else:
+            if isinstance(v, str) or not 0.0 <= float(v) <= 1.0:
+                raise ValueError(f"delivery profile {name}.{OPTIONS}.pause_floor={v!r} outside 0..1")
+            out[k] = float(v)
+    return out
+
+
 def load_profile(name: str) -> dict[str, dict]:
     """tag -> validated settings for the profile; ValueError on an unknown profile, tag, field or an out-of-bounds value."""
     cfg = _load("delivery.yaml")
@@ -73,6 +109,8 @@ def load_profile(name: str) -> dict[str, dict]:
         raise ValueError(f"unknown delivery profile {name!r} (have {sorted(profiles)})")
     out: dict[str, dict] = {}
     for tag, st in (profiles[name] or {}).items():
+        if tag == OPTIONS:
+            continue
         if tag not in TAGS:
             raise ValueError(f"delivery profile {name}: unknown tag {tag!r}")
         st = dict(st or {})

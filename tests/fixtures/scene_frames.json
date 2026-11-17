@@ -316,6 +316,256 @@
      "until": 210
     }
    ]
+  },
+  {
+   "name": "premium style: every director transition maps to its premium kind",
+   "style": "premium",
+   "scenes": [
+    {
+     "id": "s01",
+     "narration": {
+      "text": "s1",
+      "start_s": 0,
+      "end_s": 2.4
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut"
+    },
+    {
+     "id": "s02",
+     "narration": {
+      "text": "s2",
+      "start_s": 2.4,
+      "end_s": 5.35
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "crossfade"
+    },
+    {
+     "id": "s03",
+     "narration": {
+      "text": "s3",
+      "start_s": 5.35,
+      "end_s": 8.85
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "wipe"
+    },
+    {
+     "id": "s04",
+     "narration": {
+      "text": "s4",
+      "start_s": 8.85,
+      "end_s": 11.25
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "match_cut"
+    },
+    {
+     "id": "s05",
+     "narration": {
+      "text": "s5",
+      "start_s": 11.25,
+      "end_s": 14.2
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "push"
+    },
+    {
+     "id": "s06",
+     "narration": {
+      "text": "s6",
+      "start_s": 14.2,
+      "end_s": 17.7
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "dip_to_black"
+    },
+    {
+     "id": "s07",
+     "narration": {
+      "text": "s7",
+      "start_s": 17.7,
+      "end_s": 20.1
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "pattern_interrupt"
+    },
+    {
+     "id": "s08",
+     "narration": {
+      "text": "s8",
+      "start_s": 20.1,
+      "end_s": 23.05
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "wipe"
+    },
+    {
+     "id": "s09",
+     "narration": {
+      "text": "s9",
+      "start_s": 23.05,
+      "end_s": 26.55
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "match_cut"
+    }
+   ],
+   "expected": [
+    {
+     "id": "s01",
+     "start": 0,
+     "end": 72,
+     "until": 84
+    },
+    {
+     "id": "s02",
+     "start": 72,
+     "end": 161,
+     "until": 177
+    },
+    {
+     "id": "s03",
+     "start": 161,
+     "end": 266,
+     "until": 286
+    },
+    {
+     "id": "s04",
+     "start": 266,
+     "end": 338,
+     "until": 358
+    },
+    {
+     "id": "s05",
+     "start": 338,
+     "end": 426,
+     "until": 438
+    },
+    {
+     "id": "s06",
+     "start": 426,
+     "end": 531,
+     "until": 539
+    },
+    {
+     "id": "s07",
+     "start": 531,
+     "end": 603,
+     "until": 619
+    },
+    {
+     "id": "s08",
+     "start": 603,
+     "end": 692,
+     "until": 712
+    },
+    {
+     "id": "s09",
+     "start": 692,
+     "end": 797,
+     "until": 797
+    }
+   ]
+  },
+  {
+   "name": "a scene's own premium style maps its own entering transition",
+   "scenes": [
+    {
+     "id": "s01",
+     "narration": {
+      "text": "s1",
+      "start_s": 0,
+      "end_s": 2.4
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "cut"
+    },
+    {
+     "id": "s02",
+     "narration": {
+      "text": "s2",
+      "start_s": 2.4,
+      "end_s": 5.35
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "crossfade"
+    },
+    {
+     "id": "s03",
+     "narration": {
+      "text": "s3",
+      "start_s": 5.35,
+      "end_s": 8.85
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "wipe",
+     "style": "premium"
+    },
+    {
+     "id": "s04",
+     "narration": {
+      "text": "s4",
+      "start_s": 8.85,
+      "end_s": 11.25
+     },
+     "type": "kinetic",
+     "palette": "policy",
+     "camera_move": "static",
+     "transition": "match_cut"
+    }
+   ],
+   "expected": [
+    {
+     "id": "s01",
+     "start": 0,
+     "end": 72,
+     "until": 84
+    },
+    {
+     "id": "s02",
+     "start": 72,
+     "end": 161,
+     "until": 177
+    },
+    {
+     "id": "s03",
+     "start": 161,
+     "end": 266,
+     "until": 282
+    },
+    {
+     "id": "s04",
+     "start": 266,
+     "end": 338,
+     "until": 338
+    }
+   ]
   }
  ]
 }

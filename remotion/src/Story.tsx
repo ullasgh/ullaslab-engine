@@ -12,7 +12,7 @@ const useFonts = (p: StoryProps) => {
     link.href = staticFile("fonts/fonts.css");
     link.onload = () => {
       const fam = fontFor(p.lang).split(",")[0].replace(/"/g, "").trim();
-      const sample = p.text + p.sub + p.cta + p.edu + p.aiVoice + p.source + "UllasLab";
+      const sample = p.text + p.sub + p.cta + (p.aiVoice ?? "") + p.source + "UllasLab";
       Promise.all([400, 700].flatMap((w) => [...new Set([fam, "Noto Sans"])].map((f) => document.fonts.load(`${w} 40px "${f}"`, sample))))
         .catch(() => undefined).finally(() => continueRender(handle));
     };
@@ -56,7 +56,7 @@ export const Story: React.FC<StoryProps> = (p) => {
         ) : null}
         <div style={{ position: "absolute", left: S.sides, width: S.w - 2 * S.sides, bottom: S.bottom, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 16, direction: dir }}>
           <div data-audit="body" style={{ alignSelf: "flex-start", background: p.accent, color: C.tagText, fontWeight: 700, fontSize: 48, padding: "10px 28px", borderRadius: 999, opacity: ctaIn, transform: `scale(${0.92 + 0.08 * ctaIn})` }}>{p.cta}</div>
-          <div data-audit="label" style={{ fontSize: 38, color: C.muted }}>{p.edu}{p.aiVoice ? ` · ${p.aiVoice}` : ""}</div>
+          {p.aiVoice ? <div data-audit="label" style={{ fontSize: 38, color: C.muted }}>{p.aiVoice}</div> : null}
           {p.source ? <div data-audit="stamp" style={{ fontSize: 36, color: C.muted }}>{p.source}</div> : null}
         </div>
       </div>

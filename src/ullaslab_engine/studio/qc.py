@@ -12,7 +12,7 @@ Checks per output
   captions   layout limits, no text-like content outside the safe box in sampled frames, SRT cues vs word timings (drift > 150 ms)
 Checks per item
   data       chart data_ref resolves, chart hash vs ledger, number tags, footage ledger entries, deny-listed names
-  platform   full disclaimer is the first line of the description / caption, in-video end line ("Follow UllasLab. Education only.")
+  platform   full disclaimer is the first line of the description / caption, in-video end line ("Follow UllasLab.")
              spoken last and on the end card, no freshness tag words or SEBI / delayed read-outs on screen or in captions,
              synthetic-voice flag, AI label recommendation
 The default thresholds live in DEFAULTS and can be overridden by a `QC:` block in config/quality.yaml."""
@@ -33,7 +33,7 @@ from ..config import ROOT, quality
 from ..qa import chart_hash
 from . import FPS
 from .assemble import AssembleError, load_assets, load_chart_specs, to_kit_chart
-from ..endline import END_LINES, ends_with_end_line
+from ..endline import END_LINES, ends_with_end_line, is_retired_end_line
 from .pack import DISCLAIMER
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
@@ -777,7 +777,8 @@ def check_end_line(item: Path, mode: str, doc: dict, lang: str = "en") -> Check:
         n = o["output"]
         last = o["scenes"][-1]["narration"]["text"]
         if not ends_with_end_line(last, lang):
-            bad.append(f"{n}: narration does not end with '{END_LINES.get(lang, END_LINES['en'])}'")
+            old = " (it still ends with the retired 'Education only' sign-off; regenerate the script and voice)" if is_retired_end_line(last) else ""
+            bad.append(f"{n}: narration does not end with '{END_LINES.get(lang, END_LINES['en'])}'{old}")
         p = item / "work" / mode / f"props.{n}.json"
         if p.is_file():
             pr = json.loads(p.read_text(encoding="utf-8"))

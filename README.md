@@ -38,7 +38,7 @@ range band, zero baseline) are in `Charts.tsx`.
 Only `chart`, `timeline`, `flow` and `kinetic` scenes are restyled; footage, map and globe render unchanged. Kinetic text markup:
 `*word*` emphasis (creator-motion), `|` separates chalk steps or clean-tech cards, a chalk step starting with `=` is the result and
 a card may be `Title: detail`. Numbers are never computed or rescaled by a style: counters end on the token as written, and charts
-draw only the data passed in. The end card ("Follow UllasLab. Education only."), the caption safe zones and the no-freshness-tag
+draw only the data passed in. The end card ("Follow UllasLab."), the caption safe zones and the no-freshness-tag
 rule are unchanged by every style.
 
 Check the styles without a full render: `make style-stills` renders one still per scene of each style demo in both aspect ratios

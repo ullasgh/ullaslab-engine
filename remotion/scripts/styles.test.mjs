@@ -13,8 +13,8 @@ import { niceExtent, domainCoversData, plotValues } from "../src/studio/chartMat
 
 const SRC = (f) => fs.readFileSync(new URL(`../src/studio/${f}`, import.meta.url), "utf8");
 
-test("four presets, ids match the scenes.json schema enum and the Python side", () => {
-  assert.deepEqual([...STYLE_IDS], ["data-story", "creator-motion", "chalk-talk", "clean-tech"]);
+test("five presets, ids match the scenes.json schema enum and the Python side", () => {
+  assert.deepEqual([...STYLE_IDS], ["data-story", "creator-motion", "chalk-talk", "clean-tech", "premium"]);
   for (const id of STYLE_IDS) assert.equal(PRESETS[id].id, id);
   const py = fs.readFileSync(new URL("../../src/ullaslab_engine/studio/assemble.py", import.meta.url), "utf8");
   const m = /^STYLES = \(([^)]*)\)/m.exec(py);

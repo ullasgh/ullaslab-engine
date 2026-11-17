@@ -50,10 +50,13 @@ def check_audit(audit: dict, orientation: str) -> dict:
     sx0, sy0, sx1, sy1 = b["safe"]
     cx0, cy0, cx1, cy1 = b["content"]
     floors = min_px()
-    outside = small = elements = low = 0
+    outside = small = elements = low = fonts = font_missing = 0
     min_cr, max_words = 99.0, 0
     for fr in audit.get("frames", []):
         words = 0
+        for f in fr.get("fonts", []):
+            fonts += 1
+            font_missing += not f.get("loaded")
         for e in fr.get("elements", []):
             role = e.get("role")
             if role not in CONTENT_ROLES + SAFE_ROLES:
@@ -74,7 +77,7 @@ def check_audit(audit: dict, orientation: str) -> dict:
         max_words = max(max_words, words)
     w, h = SIZES[orientation]
     return {"frames": len(audit.get("frames", [])), "elements": elements, "outside": outside, "small_text": small,
-            "low_contrast": low, "min_contrast": round(min_cr, 3), "max_words": max_words,
+            "fonts": fonts, "font_missing": font_missing, "low_contrast": low, "min_contrast": round(min_cr, 3), "max_words": max_words,
             "size_ok": (audit.get("width"), audit.get("height")) == (w, h)}
 
 

@@ -5,7 +5,7 @@
 // Absent style = today's look, byte for byte: every helper returns the neutral value for `undefined`.
 import { STUDIO_TYPE, type TypeScale } from "./palettes.ts";
 
-export const STYLE_IDS = ["data-story", "creator-motion", "chalk-talk", "clean-tech"] as const;
+export const STYLE_IDS = ["data-story", "creator-motion", "chalk-talk", "clean-tech", "premium"] as const;
 export type StyleId = (typeof STYLE_IDS)[number];
 export const isStyleId = (s: unknown): s is StyleId => typeof s === "string" && (STYLE_IDS as readonly string[]).includes(s);
 
@@ -67,6 +67,15 @@ export const PRESETS: Record<StyleId, StylePreset> = {
     layout: { radius: 28, border: 3, backdrop: "clean", align: "start" },
     captions: { emphasiseNumbers: false, mergeNotation: true },
     chart: { zeroBaseline: true, band: false, requireSource: true },
+  },
+  // premium: scene art, camera, transitions and end card are drawn by studio/premium/*; these tokens only feed the shared layout and captions.
+  premium: {
+    id: "premium",
+    type: { number: 1, display: 1, headline: 1 },
+    motion: { camera: 1, stagger: 6, enter: 18, overshoot: 0.1 },
+    layout: { radius: 26, border: 3, backdrop: "grid", align: "center" },
+    captions: { emphasiseNumbers: false, mergeNotation: true },
+    chart: { zeroBaseline: false, band: false, requireSource: true },
   },
 };
 
@@ -166,13 +175,17 @@ export const sketchLine = (w: number, seed: number, amp = 2.5): string => {
 };
 
 /* ----------------------------------------------------------------------------------------- text markup */
+/** `*word*` is emphasis markup for the kinetic styles only. Any other place (step lines, cards, chart and diagram headlines,
+ *  footage / map / globe titles) shows the plain words: literal asterisks never reach the screen. */
+export const stripEmphasis = (text: string): string => text.replace(/\*([^*]*)\*/g, "$1").replace(/\*/g, "");
+
 /** Chalk-talk steps: "|"-separated lines; a line starting with "=" is the highlighted result (the "=" itself is dropped). */
 export const parseSteps = (text: string): { text: string; result: boolean }[] =>
-  text.split("|").map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith("=") ? { text: l.replace(/^=+\s*/, ""), result: true } : { text: l, result: false }));
+  stripEmphasis(text).split("|").map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith("=") ? { text: l.replace(/^=+\s*/, ""), result: true } : { text: l, result: false }));
 
 /** Clean-tech cards: "|"-separated; "Title: detail" splits on the first colon. */
 export const parseCards = (text: string): { title: string; detail?: string }[] =>
-  text.split("|").map((l) => l.trim()).filter(Boolean).map((l) => {
+  stripEmphasis(text).split("|").map((l) => l.trim()).filter(Boolean).map((l) => {
     const i = l.indexOf(":");
     return i > 0 && i < l.length - 1 ? { title: l.slice(0, i).trim(), detail: l.slice(i + 1).trim() } : { title: l };
   });

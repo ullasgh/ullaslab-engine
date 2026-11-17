@@ -346,11 +346,12 @@ class Studio:
         """Everything besides the picture and the voice that shapes one output's mix: SFX cues (scene `sfx` fields) and the
         SFX definitions, the music track that would be picked (id and file sha) or the generated pad, mix and loudness
         settings, and the engine version. A change re-mixes that output."""
+        doc_style = self.timed().get("style")
         ledger = A.load_music_ledger()
         track = A.pick_track(ledger, mood=o["scenes"][0].get("palette"))
         tsig = {"id": track["id"], "sha": A._sha256_file(A.MUSIC_DIR / track["file"])} if track else \
                {"id": "generated-pad", "ledger": sorted(t.get("id", "") for t in ledger)}
-        blob = {"events": A.sfx_events(o["scenes"]), "track": tsig, "sfx": A.SFX, "lead": A.SFX_LEAD, "cfg": A.mix_cfg(),
+        blob = {"events": A.sfx_events(A.premium_defaults(o["scenes"], doc_style)), "track": tsig, "sfx": A.SFX, "lead": A.SFX_LEAD, "cfg": A.mix_cfg(),
                 "loudness": [A.TARGET_LUFS, A.TP_TARGET, A.TP_LIMIT], "engine": SC.engine_version()}
         return hashlib.sha256(json.dumps(blob, sort_keys=True, default=str).encode()).hexdigest()
 
@@ -394,7 +395,7 @@ class Studio:
                 st = self.wmode / "stems" / n
                 st.mkdir(parents=True, exist_ok=True)
                 A.run(A.narration_stem_cmd(self.voice_for(n), total, st / "narration.wav"), "narration stem")
-                events = A.sfx_events(o["scenes"])
+                events = A.sfx_events(A.premium_defaults(o["scenes"], doc.get("style")))
                 A.run(A.sfx_stem_cmd(events, lib, total, st / "sfx.wav"), "sfx stem")
                 track = A.pick_track(ledger, mood=o["scenes"][0].get("palette"))
                 if track:

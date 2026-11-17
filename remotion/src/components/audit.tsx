@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { continueRender, delayRender, useCurrentFrame } from "remotion";
 import { C } from "../brand";
+import { fontLoaded, fontsReady } from "../fonts";
 
 // Layout audit for QA A5. Only active when props.audit is true (still renders). Emits geometry,
 // font size and colours (never text) through console.log; scripts/render.mjs collects it.
@@ -31,8 +32,9 @@ export const Audit: React.FC<{ enabled: boolean; sceneId: string }> = ({ enabled
   const [handle] = useState(() => (enabled ? delayRender("layout audit", { timeoutInMilliseconds: 60000 }) : null));
   useEffect(() => {
     if (!enabled || handle === null) return;
-    (document.fonts?.ready ?? Promise.resolve()).then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+    fontsReady.then(() => document.fonts?.ready ?? Promise.resolve()).then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
       const els: unknown[] = [];
+      const fonts = new Map<string, { family: string; weight: number; loaded: boolean }>();
       document.querySelectorAll("[data-audit]").forEach((el) => {
         const role = el.getAttribute("data-audit")!;
         if (effOpacity(el) < 0.5) return;
@@ -40,10 +42,15 @@ export const Audit: React.FC<{ enabled: boolean; sceneId: string }> = ({ enabled
         if (r.width === 0 || r.height === 0) return;
         const cs = getComputedStyle(el);
         const text = (el.textContent ?? "").trim();
+        // Rendered-font check: the first family of every audited element must have a loaded @font-face at its weight.
+        const family = cs.fontFamily.split(",")[0].replace(/["']/g, "").trim();
+        const weight = Number(cs.fontWeight) || 400;
+        const fk = `${family}/${weight <= 500 ? 400 : 700}`;
+        if (text && !fonts.has(fk)) fonts.set(fk, { family, weight: weight <= 500 ? 400 : 700, loaded: fontLoaded(family, weight) });
         els.push({ role, x: r.x, y: r.y, w: r.width, h: r.height, fontPx: parseFloat(cs.fontSize), fg: hex(cs.color), bg: bgOf(el),
           words: text ? Math.max(text.split(/\s+/).length, Math.ceil((text.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) ?? []).length / 2)) : 0 });
       });
-      console.log("[[AUDIT]]" + JSON.stringify({ frame, scene: sceneId, elements: els }));
+      console.log("[[AUDIT]]" + JSON.stringify({ frame, scene: sceneId, elements: els, fonts: [...fonts.values()] }));
       continueRender(handle);
     })));
   }, []);

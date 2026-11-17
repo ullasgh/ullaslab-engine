@@ -11,20 +11,20 @@ const Card: React.FC<{ rtl?: boolean }> = ({ rtl }) => {
   const font = useFont();
   const f = useCurrentFrame();
   const k = interpolate(f, [0, 12], [0, 1], { extrapolateRight: "clamp" });
-  const [follow, edu] = endParts(lang);
+  const [follow, edu] = endParts(lang);   // one line since 2026-11-13; edu is undefined
   return (
     <AbsoluteFill style={{ opacity: k }}>
       <AbsoluteFill style={{ background: pal.bg, opacity: 0.92 }} />
       <div data-audit="endcard" style={{ position: "absolute", left: L.x0, top: L.y0, width: L.cw, height: L.ch, display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", textAlign: "center", gap: 20, fontFamily: font, color: pal.ink, direction: rtl ? "rtl" : "ltr" }}>
         <div data-audit="headline" style={{ fontSize: L.type.headline, fontWeight: 700, lineHeight: 1.15 }}>{follow}</div>
-        <div data-audit="body" style={{ fontSize: L.type.body, color: pal.muted, lineHeight: 1.25 }}>{edu}</div>
+        {edu && <div data-audit="body" style={{ fontSize: L.type.body, color: pal.muted, lineHeight: 1.25 }}>{edu}</div>}
       </div>
     </AbsoluteFill>
   );
 };
 
-// End card over the last seconds of every video: "Follow UllasLab" + "Education only" (owner decision 2026-11-09), inside the safe box
+// End card over the last seconds of every video: "Follow UllasLab." only (owner decision 2026-11-13), inside the safe box
 // above the caption band. The full disclaimer is in the description / caption, not in the video.
 export const EndCard: React.FC<{ orientation: Orientation; lang: string; rtl?: boolean; card: EndCardProps; reserveBottom: number; platform?: Platform }> = ({ orientation, lang, rtl, card, reserveBottom, platform }) => (
   <Sequence from={card.fromFrame} durationInFrames={Math.max(1, card.durationInFrames)} name="end-card">

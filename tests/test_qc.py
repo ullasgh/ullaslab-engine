@@ -311,6 +311,9 @@ def test_end_line_check(tmp_path):
     c = Q.check_end_line(item, "final", doc)
     assert c.status == Q.FAIL and "short" in c.detail
     doc["outputs"][1]["scenes"][-1]["narration"]["text"] = "Done. Follow UllasLab. Education only."
+    c = Q.check_end_line(item, "final", doc)
+    assert c.status == Q.FAIL and "retired" in c.detail                      # the old two-sentence line fails during the changeover
+    doc["outputs"][1]["scenes"][-1]["narration"]["text"] = "Done. Follow UllasLab."
     wm = item / "work" / "final"
     wm.mkdir(parents=True)
     (wm / "props.long.json").write_text(json.dumps({"durationInFrames": 600}))

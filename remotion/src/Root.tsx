@@ -16,7 +16,7 @@ const empty: Props = {
   timeline: { total_s: 2, scenes: [] }, cues: [], audio: "", numberLocale: "en-US", rtl: false,
 };
 
-const emptyStory: StoryProps = { lang: "en", text: "", sub: "", source: "", edu: "", cta: "", aiVoice: "", durationS: 12, audio: "", rtl: false, accent: "#4FD1C5" };
+const emptyStory: StoryProps = { lang: "en", text: "", sub: "", source: "", cta: "", aiVoice: "", durationS: 12, audio: "", rtl: false, accent: "#4FD1C5" };
 
 export const Root: React.FC = () => (
   <>

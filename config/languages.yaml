@@ -23,8 +23,9 @@ voice_defaults:
   # Narration pace (voice/narrate.py): words per minute including pauses. Met by shortening punctuation pauses (never
   # below pause_floor of their length; [[hook]] [[payoff]] [[pause]] markers are kept) and then a pitch-preserving
   # tempo change of at most max_speedup. target_wpm 0 turns it off. A language entry may carry its own `pace:` block.
-  # Per-line delivery (config/delivery.yaml, voice/delivery.py): baseline | mild | strong | tuned. baseline = one global setting for every
-  # line (the behaviour before delivery tags existed). Owner picks the profile after listening to the samples.
+  # Per-line delivery (config/delivery.yaml, voice/delivery.py): baseline | mild | strong | tuned | sample4. baseline = one global setting
+  # for every line, one take, V2 weights, the pace floor below (the behaviour before profiles existed). Languages without their own
+  # `delivery_profile` use this one; English uses sample4 (owner decision 2026-11-13). A language entry may override it.
   delivery_profile: baseline
   pace:
     target_wpm: 150
@@ -45,7 +46,8 @@ languages:
     dub: false          # master track
     priority: 1
     accent: mine
-    ref_clip: 1
+    ref_clip: 1         # the owner's new recording, clip 1 (content config/languages.yaml agrees; tests/test_voice.py sync test)
+    delivery_profile: sample4   # rollback: baseline (one value)
   - code: hi
     name: Hindi
     script: Devanagari

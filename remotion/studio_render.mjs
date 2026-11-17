@@ -35,9 +35,9 @@ if (auditFrames) {
   const frames = [];
   for (const f of auditFrames.split(",").map(Number)) {
     if (!(Number.isInteger(f) && f >= 0 && f < acomp.durationInFrames)) throw new Error(`bad audit frame ${f}`);
-    const rec = { frame: f, elements: [] };
+    const rec = { frame: f, elements: [], fonts: [] };
     await renderStill({ serveUrl, composition: acomp, frame: f, output: path.join(tmp, "a.png"), inputProps: aprops, ...quiet,
-      onBrowserLog: (l) => { if (l.text.startsWith("[[AUDIT]]")) rec.elements = JSON.parse(l.text.slice(9)).elements; } });
+      onBrowserLog: (l) => { if (l.text.startsWith("[[AUDIT]]")) { const a = JSON.parse(l.text.slice(9)); rec.elements = a.elements; rec.fonts = a.fonts ?? []; } } });
     frames.push(rec);
   }
   fs.rmSync(tmp, { recursive: true, force: true });
