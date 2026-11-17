@@ -13,7 +13,7 @@
   "dependencies": {
     "@remotion/bundler": "4.0.541",
     "@remotion/cli": "4.0.541",
-    "@remotion/noise": "4.0.541",
+    "@remotion/noise": "4.0.543",
     "@remotion/paths": "4.0.541",
     "@remotion/renderer": "4.0.541",
     "@types/d3-array": "3.2.2",
